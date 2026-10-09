@@ -1,0 +1,53 @@
+# encoding: UTF-8
+
+# Development and production share the blog's one live Atlas database with
+# the blog frontend, so there's a single source of truth and nothing to
+# sync. The frontend owns its collections' schema and indexes, so models for
+# them declare no `index`es and must not write where it alone should.
+#
+# Tests use a throwaway local mongod instead, since DatabaseCleaner wipes
+# every collection between examples.
+
+# Atlas users live in the admin database. Atlas publishes authSource=admin in
+# the cluster's DNS TXT record, but when that lookup fails the driver falls
+# back to authenticating against the `database` option and Atlas rejects it
+# ("bad auth"), so it's pinned here.
+_atlas_clients: &atlas_clients
+  default:
+    uri: <%= Rails.application.credentials.dig(:mongodb, :uri) %>
+    options:
+      database: <%= Rails.application.credentials.dig(:mongodb, :database) || "personal-blog" %>
+      auth_source: <%= Rails.application.credentials.dig(:mongodb, :auth_source) || "admin" %>
+      max_pool_size: <%= Rails.application.credentials.dig(:mongodb, :max_pool_size) || 10 %>
+
+development:
+  clients:
+    <<: *atlas_clients
+  options:
+    log_level: :info
+    raise_not_found_error: true
+    # Times come back in the app time zone (IST); MongoDB still stores UTC.
+    use_utc: false
+
+test:
+  clients:
+    default:
+      database: hl-personal-blog-test
+      hosts:
+        - localhost:27017
+      options:
+        read:
+          mode: :primary
+        max_pool_size: 1
+  options:
+    raise_not_found_error: true
+    # Times come back in the app time zone (IST); MongoDB still stores UTC.
+    use_utc: false
+
+production:
+  clients:
+    <<: *atlas_clients
+  options:
+    raise_not_found_error: true
+    # Times come back in the app time zone (IST); MongoDB still stores UTC.
+    use_utc: false
