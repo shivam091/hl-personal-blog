@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Runs bin/ci on every commit in a range, oldest first, in a throwaway worktree
+# so the working tree and uncommitted changes are never touched.
+#
+#   bin/ci-each-commit              # every commit on HEAD
+#   bin/ci-each-commit origin/main  # only commits not yet on origin/main
+#   bin/ci-each-commit --keep-going # don't stop at the first failing commit
+set -uo pipefail
+
+keep_going=0
+base=""
+for arg in "$@"; do
+  case "$arg" in
+    --keep-going) keep_going=1 ;;
+    *) base="$arg" ;;
+  esac
+done
+
+root=$(git rev-parse --show-toplevel)
+range=${base:+$base..}HEAD
+commits=$(git rev-list --reverse "$range")
+[ -n "$commits" ] || { echo "No commits in $range"; exit 0; }
+
+worktree=$(mktemp -d)
+trap 'git -C "$root" worktree remove --force "$worktree" >/dev/null 2>&1; rm -rf "$worktree"' EXIT
+git -C "$root" worktree add --detach "$worktree" HEAD >/dev/null || exit 1
+
+# Untracked local config (credentials, env) that CI needs but git doesn't hold.
+for f in .env .env.test config/master.key; do
+  [ -e "$root/$f" ] && mkdir -p "$worktree/$(dirname "$f")" && cp "$root/$f" "$worktree/$f"
+done
+
+failed=()
+cd "$worktree" || exit 1
+for sha in $commits; do
+  echo "=== $(git -C "$root" log -1 --format='%h %s' "$sha")"
+  git checkout --quiet --detach "$sha" || exit 1
+  if bin/ci; then
+    echo "--- PASS $sha"
+  else
+    echo "--- FAIL $sha"
+    failed+=("$sha")
+    [ "$keep_going" -eq 1 ] || break
+  fi
+done
+
+if [ ${#failed[@]} -gt 0 ]; then
+  echo
+  echo "Failing commits:"
+  for sha in "${failed[@]}"; do git -C "$root" log -1 --format='  %h %s' "$sha"; done
+  exit 1
+fi
+echo "All commits passed."
