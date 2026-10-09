@@ -1,0 +1,39 @@
+# encoding: UTF-8
+
+require "active_support/core_ext/integer/time"
+
+Rails.application.configure do
+  config.enable_reloading = false
+
+  # Eager load code on boot for better performance and memory savings (ignored by Rake tasks).
+  config.eager_load = true
+
+  config.consider_all_requests_local = false
+
+  config.action_controller.perform_caching = true
+
+  # Cache assets for far-future expiry since they are all digest stamped.
+  config.public_file_server.headers = {"cache-control" => "public, max-age=#{1.year.to_i}"}
+
+  # Tagged with the request id, so log lines match up with their request log.
+  config.log_tags = [:request_id]
+  config.logger   = ActiveSupport::TaggedLogging.logger(STDOUT)
+
+  # Not debug by default, since that logs personally identifiable information.
+  config.log_level = ENV.fetch("RAILS_LOG_LEVEL", "info")
+
+  # Prevent health checks from clogging up the logs.
+  config.silence_healthcheck_path = "/up"
+
+  config.active_support.report_deprecations = false
+
+  # In-process cache; nothing here needs to survive a restart.
+  config.cache_store = :memory_store
+
+  # Jobs run in-process (Active Job's :async adapter); there's no job queue.
+  config.active_job.queue_adapter = :async
+
+  config.action_mailer.default_url_options = {host: "example.com"}
+
+  config.i18n.fallbacks = true
+end
