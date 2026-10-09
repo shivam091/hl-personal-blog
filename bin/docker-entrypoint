@@ -1,0 +1,9 @@
+#!/bin/bash -e
+
+# Before the server starts, so an index a deploy adds is there before any
+# query relies on it.
+if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
+  ./bin/rails db:mongoid:create_indexes
+fi
+
+exec "${@}"
