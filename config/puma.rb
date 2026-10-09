@@ -1,0 +1,13 @@
+# encoding: UTF-8
+
+# Three threads trade throughput against latency under CRuby's GVL. Each
+# needs its own database connection, so Mongoid's max_pool_size
+# (config/mongoid.yml) covers at least this many.
+threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
+threads threads_count, threads_count
+
+port ENV.fetch("PORT", 3000)
+
+plugin :tmp_restart
+
+pidfile ENV["PIDFILE"] if ENV["PIDFILE"]
