@@ -1,0 +1,32 @@
+!!!
+-# Scroll padding matches the sticky header, so focused fields and anchors
+-# aren't hidden under it.
+%html{lang: "en", class: "h-full scroll-pt-16"}
+  %head
+    %title= content_for(:title) || "Personal Blog"
+    %meta{name: "viewport", content: "width=device-width,initial-scale=1"}
+    %meta{name: "apple-mobile-web-app-capable", content: "yes"}
+    %meta{name: "application-name", content: "Personal Blog"}
+    %meta{name: "mobile-web-app-capable", content: "yes"}
+    %meta{name: "theme-color", content: "#ffffff"}
+    %link{rel: "manifest", href: pwa_manifest_path(format: :json)}
+    = csrf_meta_tags
+    = csp_meta_tag
+    -# List links run counts against the live database; hovering shouldn't.
+    %meta{name: "turbo-prefetch", content: "false"}
+
+    %link{rel: "preconnect", href: "https://fonts.googleapis.com"}
+    %link{rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: ""}
+    %link{rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Alan+Sans:wght@300..900&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&family=Source+Code+Pro:wght@200..900&display=swap"}
+
+    = yield :head
+
+    %link{rel: "icon", href: "/icon.png", type: "image/png"}
+    %link{rel: "apple-touch-icon", href: "/icon-192.png"}
+
+    = stylesheet_link_tag :app, "data-turbo-track": "reload"
+    = javascript_importmap_tags
+
+  %body{class: "flex min-h-full flex-col bg-slate-50 font-sans text-slate-900 antialiased"}
+    %main{class: "mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6"}
+      = yield
