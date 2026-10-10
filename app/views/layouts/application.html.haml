@@ -1,7 +1,7 @@
 !!!
--# Scroll padding matches the sticky header (taller on small screens, where
--# it has a second nav row), so focused fields and anchors aren't hidden under it.
-%html{lang: "en", class: "h-full scroll-pt-28 md:scroll-pt-16"}
+-# Scroll padding matches the sticky header, so focused fields and anchors
+-# aren't hidden under it.
+%html{lang: "en", class: "h-full scroll-pt-16"}
   %head
     %title= content_for(:title) || "Personal Blog"
     %meta{name: "viewport", content: "width=device-width,initial-scale=1"}
@@ -28,6 +28,27 @@
     = stylesheet_link_tag :app, "data-turbo-track": "reload"
     = javascript_importmap_tags
 
+  -# So the footer stays at the bottom even on pages too short to push it there.
   %body{class: "flex min-h-full flex-col bg-slate-50 font-sans text-slate-900 antialiased"}
+    = render "layouts/header"
+
     %main{class: "mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6"}
+      = render "layouts/breadcrumbs"
+      - if notice
+        %div{class: "mb-6 flex gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800", role: "status"}
+          = icon("check-circle", size: 18, class: "text-emerald-600")
+          %p= notice
+      - if alert || flash[:import_errors].present?
+        %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+          = icon("alert-circle", size: 18, class: "text-red-500")
+          %div
+            - if alert
+              %p= alert
+            - if flash[:import_errors].present?
+              %p{class: "font-medium"} Some rows were skipped:
+              %ul{class: "mt-1 list-disc pl-5"}
+                - flash[:import_errors].each do |error|
+                  %li= error
       = yield
+
+    = render "layouts/footer"
