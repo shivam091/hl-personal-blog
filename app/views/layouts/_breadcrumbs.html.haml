@@ -1,0 +1,22 @@
+-# Desktop only, as the phone header already names where you are. Menus are
+-# plain text since they aren't pages.
+- trail = authenticated? && request.path != root_path ? nav_trail(navigation) : []
+- if trail.any?
+  - list_path = trail.last.last
+  - crumbs = trail + page_breadcrumbs
+  - if page_breadcrumbs.empty? && list_path && request.path != list_path && content_for?(:title)
+    - title = content_for(:title).to_str
+    - crumbs += [[title.include?(" – ") ? title.rpartition(" – ").first : title, nil]]
+  %nav{aria: {label: "Breadcrumb"}, class: "mb-4 hidden md:block"}
+    %ol{class: "flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-slate-500"}
+      %li
+        = link_to "Dashboard", root_path, class: "hover:text-slate-900 hover:underline"
+      - crumbs.each_with_index do |(label, path), index|
+        %li{class: "flex min-w-0 items-center gap-1.5"}
+          = icon("chevron-right", size: 14, class: "text-slate-300")
+          - if index == crumbs.size - 1
+            %span{class: "truncate font-medium text-slate-900", aria: {current: "page"}}= label
+          - elsif path
+            = link_to label, path, class: "hover:text-slate-900 hover:underline"
+          - else
+            %span= label
