@@ -1,0 +1,9 @@
+-# Rows a thumb can hit, with the current page filled so it's found at a
+-# glance in a long list.
+%li
+  = link_to link.path,
+    class: ["flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500",
+      link.current ? "bg-slate-900 font-medium text-white" : "text-slate-700 hover:bg-slate-100 active:bg-slate-200"],
+    aria: {current: (link.current ? "page" : nil)} do
+    = icon(link.icon, class: link.current ? "text-slate-300" : "text-slate-400") if link.icon
+    = link.label
