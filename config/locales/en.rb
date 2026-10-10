@@ -19,6 +19,13 @@
         short: "%-d %b, %Y %H:%M %Z",
         long: "%-d %b, %Y %H:%M %Z"
       }
+    },
+    sessions: {
+      new: {
+        notice: "This application is for authorised users only. If you are not an authorised user, " \
+          "end this session now by closing your browser. By accessing this system, you agree that " \
+          "your activity may be monitored if unauthorised use is suspected."
+      }
     }
   }
 }
