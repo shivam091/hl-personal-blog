@@ -101,6 +101,15 @@ bundle exec rspec
 ## Conventions
 
 - Every `.rb` file starts with `# encoding: UTF-8`.
+- Collections come in two kinds, both in the one live database:
+  - **Frontend-shared** (ones the blog frontend also reads or writes, e.g.
+    `page_views`): the frontend owns their schema, so models alias its
+    camelCase field names and declare **no indexes** (each model's spec
+    checks this). A model the backend never writes to is read-only
+    (`include ReadOnly`).
+  - **Backend-owned** (anything new that only the backend reads and writes):
+    ordinary Mongoid models with snake_case fields, `Mongoid::Timestamps`,
+    and whatever `index`es they need.
 - Models are Mongoid documents (`include Mongoid::Document`). Active Record
   isn't loaded at all — there's no `ApplicationRecord`, `database.yml`, or
   migrations.
