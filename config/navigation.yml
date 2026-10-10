@@ -1,0 +1,5 @@
+shared:
+  links:
+    - label: Dashboard
+      icon: home
+      route: root
