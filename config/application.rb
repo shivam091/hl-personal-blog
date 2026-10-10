@@ -25,6 +25,10 @@ module HLPersonalBlog
     # filters are counted, in IST. MongoDB still stores UTC.
     config.time_zone = "Asia/Kolkata"
 
+    # Objects name their own shared partials, which must resolve the same
+    # from a namespaced controller as from any other.
+    config.action_view.prefix_partial_path_with_controller_namespace = false
+
     config.generators do |g|
       g.test_framework :rspec,
                        fixtures: false,
