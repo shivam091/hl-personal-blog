@@ -50,12 +50,26 @@ Mongo collections are schemaless and created lazily on first write, so
 there are no migrations. `bin/rails db:mongoid:create_indexes` creates the
 indexes models declare; the Docker entrypoint runs it on every deploy.
 
+## Login
+
+Every page except `/up` requires signing in at `/session/new` with the
+`admin.username` and `admin.password` from the Rails credentials (nobody can
+sign in while either is blank). Sessions last 12 hours, changing either one signs
+everyone out, and login attempts are limited to 10 per 3 minutes. See
+[app/controllers/concerns/authentication.rb](app/controllers/concerns/authentication.rb).
+
 ## Dates and times
 
 Shown as `12 Mar, 2026`, and times as `12 Mar, 2026 12:00 IST`
 ([config/locales/en.rb](config/locales/en.rb)). The app's time zone is IST
 (`config.time_zone`), so anything picked or grouped by day counts IST
 days; MongoDB still stores UTC.
+
+## Navigation
+
+The top nav is defined in [config/navigation.yml](config/navigation.yml):
+plain links, or dropdowns grouped by where the data comes from. Adding a
+page means adding its named route there.
 
 ## Configuration
 
@@ -78,6 +92,10 @@ mongodb:
   # auth_source: admin       # optional, defaults shown
   # max_pool_size: 10
 
+admin:
+  username: ...
+  password: ...
+
 cors:
   origins:
     - http://localhost:3000
@@ -85,7 +103,7 @@ cors:
 
 On Render, set the `RAILS_MASTER_KEY` environment variable to the contents of
 `config/credentials/production.key`; no other secret env vars are needed.
-Tests don't need a key: they use a local mongod.
+Tests don't need a key: they use a local mongod and stub the admin login.
 
 | Concern | Where it's configured |
 |---|---|
@@ -113,3 +131,11 @@ bundle exec rspec
 - Models are Mongoid documents (`include Mongoid::Document`). Active Record
   isn't loaded at all — there's no `ApplicationRecord`, `database.yml`, or
   migrations.
+- Icons come from one sprite, [app/assets/images/icons.svg](app/assets/images/icons.svg),
+  drawn with `icon("name")` ([IconHelper](app/helpers/icon_helper.rb)); no
+  inline SVGs. To add one, add a `<symbol id="name" viewBox="0 0 24 24">`
+  with just its paths (the helper sets the stroke). Buttons and links
+  elsewhere pair an icon with text; inside tables, controls and yes/no
+  indicators are icon-only and get `label:` (or an `aria-label` on the
+  link) so screen readers still name them. `spec/requests/icons_spec.rb`
+  fails if a page uses an icon the sprite lacks.
