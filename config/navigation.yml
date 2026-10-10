@@ -1,0 +1,10 @@
+# Kept as data so a new page or category is a one-line change rather than a
+# layout edit. Grouped by the system the data comes from, since that's how
+# the admin thinks about it. Submenus keep a long category short; a link's
+# `full_label` is for where the page is already known by another name than
+# its submenu and label make.
+shared:
+  links:
+    - label: Dashboard
+      icon: home
+      route: root

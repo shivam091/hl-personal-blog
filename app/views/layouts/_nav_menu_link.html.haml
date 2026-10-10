@@ -1,0 +1,6 @@
+%li
+  = link_to link.path,
+    class: ["flex items-center gap-2.5 rounded-md px-3 py-2 text-sm whitespace-nowrap hover:bg-slate-100 hover:text-slate-900", link.current ? "bg-slate-50 font-medium text-slate-900" : "text-slate-600"],
+    aria: {current: (link.current ? "page" : nil)} do
+    = icon(link.icon, class: "text-slate-400") if link.icon
+    = link.label
