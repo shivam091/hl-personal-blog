@@ -1,0 +1,111 @@
+- focus_ring = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+- entries = authenticated? ? navigation : []
+
+-# Sticky, so navigation and sign out stay in reach on long lists; above
+-# the lists' own stacked controls (pagination uses z-10/z-20).
+%header{class: "sticky top-0 z-30 border-b border-slate-200 bg-white"}
+  %nav{aria: {label: "Main"}, data: {controller: "mobile-nav",
+    action: "keydown->mobile-nav#closeWithKeyboard turbo:before-cache@document->mobile-nav#close"}}
+    %div{class: "mx-auto flex max-w-5xl items-center gap-x-6 px-4 py-3 sm:px-6"}
+      = link_to root_path, class: "shrink-0 rounded-md #{focus_ring}" do
+        -# The alt text is the link's only accessible name.
+        = image_tag "/icon.png", alt: "Personal Blog", width: 32, height: 32, class: "size-8 rounded-md"
+
+      - if authenticated?
+        - if (place = current_nav_place(entries))
+          - sections, page_label = place
+          %p{class: "-ml-3 min-w-0 flex-1 truncate text-sm md:hidden"}
+            - sections.each do |section|
+              %span{class: "text-slate-400"} #{section} ›
+            %span{class: "font-medium text-slate-900"}= page_label
+
+        %div{class: "hidden md:flex md:items-center md:gap-x-6"}
+          - entries.each do |entry|
+            - if entry.is_a?(NavigationHelper::NavMenu)
+              - menu_id = "nav-#{entry.label.parameterize}"
+              -# Flex, because a text line would sit the button above the bar's centre.
+              %div{class: "relative flex", data: {controller: "dropdown", action: "keydown->dropdown#closeWithKeyboard turbo:before-cache@document->dropdown#close"}}
+                %button{type: "button",
+                  class: ["group inline-flex items-center gap-1.5 rounded-md text-sm hover:text-slate-900 #{focus_ring}",
+                    entry.current ? "font-medium text-slate-900" : "text-slate-600"],
+                  aria: {expanded: "false", controls: menu_id, haspopup: "true"},
+                  data: {action: "dropdown#toggle", dropdown_target: "button"}}
+                  = icon(entry.icon, class: "text-slate-400") if entry.icon
+                  = entry.label
+                  = icon("chevron-down", size: 14, class: "text-slate-400 transition-transform duration-150 group-aria-expanded:rotate-180")
+                %ul{id: menu_id, hidden: true, data: {dropdown_target: "menu"},
+                  class: "absolute top-full z-10 mt-2 w-max min-w-48 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg"}
+                  - entry.links.each do |link|
+                    - if link.is_a?(NavigationHelper::NavMenu)
+                      - submenu_id = "#{menu_id}-#{link.label.parameterize}"
+                      %li{class: "relative", data: {controller: "dropdown", dropdown_side_value: true,
+                        action: "keydown->dropdown#closeWithKeyboard turbo:before-cache@document->dropdown#close"}}
+                        %button{type: "button",
+                          class: ["flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm whitespace-nowrap hover:bg-slate-100 hover:text-slate-900 aria-expanded:bg-slate-100 #{focus_ring}",
+                            link.current ? "bg-slate-50 font-medium text-slate-900" : "text-slate-600"],
+                          aria: {expanded: "false", controls: submenu_id, haspopup: "true"},
+                          data: {action: "dropdown#toggle", dropdown_target: "button"}}
+                          = icon(link.icon, class: "text-slate-400") if link.icon
+                          = link.label
+                          = icon("chevron-right", size: 14, class: "ml-auto text-slate-400")
+                        %ul{id: submenu_id, hidden: true, data: {dropdown_target: "menu"},
+                          class: "absolute z-10 w-max min-w-44 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg"}
+                          - link.links.each do |sub|
+                            = render "layouts/nav_menu_link", link: sub
+                    - else
+                      = render "layouts/nav_menu_link", link: link
+            - else
+              = link_to entry.path,
+                class: ["inline-flex items-center gap-1.5 text-sm hover:text-slate-900", entry.current ? "font-medium text-slate-900" : "text-slate-600"],
+                aria: {current: (entry.current ? "page" : nil)} do
+                = icon(entry.icon, class: "text-slate-400") if entry.icon
+                = entry.label
+
+        = button_to session_path, method: :delete, form_class: "ml-auto hidden md:block",
+          class: "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900" do
+          = icon("log-out")
+          Sign out
+
+        %button{type: "button",
+          class: ["group ml-auto inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-700 shadow-sm",
+            "hover:bg-slate-100 aria-expanded:border-slate-900 aria-expanded:bg-slate-900 aria-expanded:text-white md:hidden", focus_ring],
+          aria: {expanded: "false", controls: "mobile-nav", label: "Menu"},
+          data: {action: "mobile-nav#toggle", mobile_nav_target: "button"}}
+          = icon("menu", size: 20, class: "group-aria-expanded:hidden")
+          = icon("x", size: 20, class: "hidden group-aria-expanded:block")
+
+    - if authenticated?
+      %div{id: "mobile-nav", hidden: true, data: {mobile_nav_target: "panel"},
+        class: "max-h-[calc(100dvh-3.5rem)] overflow-y-auto overscroll-contain border-t border-slate-200 bg-white shadow-lg md:hidden"}
+        %ul{class: "space-y-1 px-4 py-3 sm:px-6"}
+          - entries.each do |entry|
+            - if entry.is_a?(NavigationHelper::NavMenu)
+              %li
+                %details{class: "group", open: entry.current, name: "mobile-nav-section",
+                  data: {mobile_nav_target: "section", action: "toggle->mobile-nav#closeOtherSections"}}
+                  -# So only the section you're in stands out.
+                  %summary{class: ["flex cursor-pointer list-none items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm",
+                    entry.current ? "font-medium text-slate-900" : "text-slate-700",
+                    "hover:bg-slate-100 [&::-webkit-details-marker]:hidden", focus_ring]}
+                    = icon(entry.icon, class: "text-slate-400") if entry.icon
+                    = entry.label
+                    - if entry.current
+                      %span{class: "size-1.5 rounded-full bg-slate-900", aria: {hidden: "true"}}
+                    = icon("chevron-down", size: 16, class: "ml-auto text-slate-400 transition-transform duration-150 group-open:rotate-180")
+                  %ul{class: "mt-1 mb-2 ml-5 space-y-0.5 border-l border-slate-200 pl-3"}
+                    - entry.links.each do |link|
+                      - if link.is_a?(NavigationHelper::NavMenu)
+                        %li{class: "pt-2"}
+                          %p{class: "px-3 pb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase"}= link.label
+                          %ul{class: "mb-2 ml-3 space-y-0.5 border-l border-slate-200 pl-2", aria: {label: link.label}}
+                            - link.links.each do |sub|
+                              = render "layouts/mobile_nav_link", link: sub
+                      - else
+                        = render "layouts/mobile_nav_link", link: link
+            - else
+              = render "layouts/mobile_nav_link", link: entry
+        %div{class: "border-t border-slate-100 px-4 py-3 sm:px-6"}
+          = button_to session_path, method: :delete, form_class: "block",
+            class: "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 #{focus_ring}" do
+            = icon("log-out", class: "text-slate-400")
+            Sign out
