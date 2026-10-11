@@ -1,12 +1,14 @@
 # encoding: UTF-8
 
-# Development and production share the blog's one live Atlas database with
-# the blog frontend, so there's a single source of truth and nothing to
-# sync. The frontend owns its collections' schema and indexes, so models for
-# them declare no `index`es and must not write where it alone should.
+# Production shares the blog's one live Atlas database with the blog
+# frontend, so there's a single source of truth and nothing to sync. The
+# frontend owns its collections' schema and indexes, so models for them
+# declare no `index`es and must not write where it alone should.
 #
-# Tests use a throwaway local mongod instead, since DatabaseCleaner wipes
-# every collection between examples.
+# Development uses a local mongod filled by bin/copy-db-to-dev, so changes
+# can be tried against real data without touching what the frontend serves.
+# Tests use a throwaway local mongod too, since DatabaseCleaner wipes every
+# collection between examples.
 
 # Atlas users live in the admin database. Atlas publishes authSource=admin in
 # the cluster's DNS TXT record, but when that lookup fails the driver falls
@@ -22,7 +24,11 @@ _atlas_clients: &atlas_clients
 
 development:
   clients:
-    <<: *atlas_clients
+    default:
+      uri: <%= Rails.application.credentials.dig(:mongodb, :uri) || "mongodb://localhost:27017" %>
+      options:
+        database: <%= Rails.application.credentials.dig(:mongodb, :database) || "personal-blog-dev" %>
+        max_pool_size: <%= Rails.application.credentials.dig(:mongodb, :max_pool_size) || 10 %>
   options:
     log_level: :info
     raise_not_found_error: true
