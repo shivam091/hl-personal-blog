@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Exists so changes can be tried against real data without touching what the
+# frontend serves.
+set -euo pipefail
+
+SOURCE_DB="${SOURCE_DB:-personal-blog}"
+TARGET_DB="${TARGET_DB:-personal-blog-dev}"
+
+# A slip in either name would wipe the live database.
+if [[ "$TARGET_DB" == "$SOURCE_DB" || "$TARGET_DB" == "personal-blog" ]]; then
+  echo "Refusing to replace '$TARGET_DB': it is the live database." >&2
+  exit 1
+fi
+
+for tool in mongodump mongorestore mongosh; do
+  command -v "$tool" >/dev/null || { echo "$tool is not installed (MongoDB Database Tools / mongosh)." >&2; exit 1; }
+done
+
+cd "$(dirname "$0")/.."
+
+# From the app's credentials unless given, so the password stays out of this
+# file and the shell history.
+uri="${MONGODB_URI:-$(bin/rails runner 'print Rails.application.credentials.dig(:mongodb, :uri)')}"
+if [[ -z "$uri" ]]; then
+  echo "No MongoDB URI: set MONGODB_URI or credentials mongodb.uri." >&2
+  exit 1
+fi
+# Atlas users authenticate against admin; see config/mongoid.yml for why the
+# DNS default can't be relied on.
+if [[ "$uri" != *authSource=* ]]; then
+  [[ "$uri" == *\?* ]] && uri="$uri&authSource=admin" || uri="$uri?authSource=admin"
+fi
+
+if [[ "${1:-}" != "-y" ]]; then
+  read -r -p "Replace every collection in '$TARGET_DB' with a copy of '$SOURCE_DB'? [y/N] " answer
+  [[ "$answer" =~ ^[Yy]$ ]] || { echo "Nothing copied."; exit 0; }
+fi
+
+# Dropped first, so collections that exist only in dev don't survive and the
+# copy is exact.
+echo "== Dropping $TARGET_DB =="
+mongosh "$uri" --quiet --eval "db.getSiblingDB('$TARGET_DB').dropDatabase()" >/dev/null
+
+# Streamed from one tool to the other, so no dump is left on disk; read from
+# a secondary where possible, so the copy doesn't load the live primary.
+echo "== Copying $SOURCE_DB to $TARGET_DB =="
+mongodump --uri="$uri" --db="$SOURCE_DB" --readPreference=secondaryPreferred --archive --gzip --quiet |
+  mongorestore --uri="$uri" --archive --gzip --nsInclude="$SOURCE_DB.*" --nsFrom="$SOURCE_DB.*" --nsTo="$TARGET_DB.*" --quiet
+
+echo "== Collections in $TARGET_DB =="
+mongosh "$uri" --quiet --eval "
+  const target = db.getSiblingDB('$TARGET_DB');
+  target.getCollectionNames().sort().forEach(name => print(name.padEnd(48), target.getCollection(name).estimatedDocumentCount()));
+"
