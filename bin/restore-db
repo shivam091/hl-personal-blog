@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Exists so a dump from bin/dump-db can be put back without hand-typing
+# mongorestore flags against the live database.
+set -euo pipefail
+
+SOURCE_DB="${SOURCE_DB:-personal-blog}"
+LIVE_DB="personal-blog"
+target_db="${TARGET_DB:-personal-blog-dev}"
+archive="" live="" yes="" dry_run=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --live) live=1 ;;
+    -y) yes=1 ;;
+    --dry-run) dry_run=1 ;;
+    -*) echo "Unknown option: $arg" >&2; exit 1 ;;
+    *) archive="$arg" ;;
+  esac
+done
+
+# The live database only on an explicit flag, so a stray TARGET_DB can't
+# overwrite what the frontend serves.
+if [[ -n "$live" ]]; then
+  target_db="$LIVE_DB"
+elif [[ "$target_db" == "$LIVE_DB" ]]; then
+  echo "Refusing to restore into '$LIVE_DB' without --live." >&2
+  exit 1
+fi
+
+command -v mongorestore >/dev/null || { echo "mongorestore is not installed (MongoDB Database Tools)." >&2; exit 1; }
+
+cd "$(dirname "$0")/.."
+
+if [[ -z "$archive" ]]; then
+  archive="$(ls -t tmp/dumps/*.archive.gz 2>/dev/null | head -n 1 || true)"
+  [[ -n "$archive" ]] || { echo "No dumps in tmp/dumps/; run bin/dump-db or pass an archive." >&2; exit 1; }
+fi
+[[ -f "$archive" ]] || { echo "No such archive: $archive" >&2; exit 1; }
+
+# From the app's credentials unless given, so the password stays out of this
+# file and the shell history.
+uri="${MONGODB_URI:-$(bin/rails runner 'print Rails.application.credentials.dig(:mongodb, :uri)')}"
+if [[ -z "$uri" ]]; then
+  echo "No MongoDB URI: set MONGODB_URI or credentials mongodb.uri." >&2
+  exit 1
+fi
+# Atlas users authenticate against admin; see config/mongoid.yml for why the
+# DNS default can't be relied on.
+if [[ "$uri" != *authSource=* ]]; then
+  [[ "$uri" == *\?* ]] && uri="$uri&authSource=admin" || uri="$uri?authSource=admin"
+fi
+
+if [[ -z "$dry_run" ]]; then
+  if [[ -n "$live" ]]; then
+    # Typing the name, not just y, so muscle memory can't overwrite live data.
+    read -r -p "Replace collections in the LIVE database '$LIVE_DB' with $archive? Type '$LIVE_DB' to confirm: " answer
+    [[ "$answer" == "$LIVE_DB" ]] || { echo "Nothing restored."; exit 0; }
+  elif [[ -z "$yes" ]]; then
+    read -r -p "Replace collections in '$target_db' with $archive? [y/N] " answer
+    [[ "$answer" =~ ^[Yy]$ ]] || { echo "Nothing restored."; exit 0; }
+  fi
+fi
+
+# --drop replaces only the collections in the dump, so a restore never wipes
+# collections the dump doesn't know about.
+echo "== Restoring $archive into $target_db${dry_run:+ (dry run)} =="
+mongorestore --uri="$uri" --archive="$archive" --gzip --drop \
+  --nsInclude="$SOURCE_DB.*" --nsFrom="$SOURCE_DB.*" --nsTo="$target_db.*" \
+  ${dry_run:+--dryRun} --quiet
+
+echo "== Done =="
