@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Exists so there is a copy of the live data to fall back on before risky
+# changes.
+set -euo pipefail
+
+SOURCE_DB="${SOURCE_DB:-personal-blog}"
+
+command -v mongodump >/dev/null || { echo "mongodump is not installed (MongoDB Database Tools)." >&2; exit 1; }
+
+cd "$(dirname "$0")/.."
+
+# Under tmp/, so dumps of real data are gitignored and never committed.
+out="${1:-tmp/dumps/$SOURCE_DB-$(date +%Y%m%d-%H%M%S).archive.gz}"
+mkdir -p "$(dirname "$out")"
+
+# From the app's credentials unless given, so the password stays out of this
+# file and the shell history.
+uri="${MONGODB_URI:-$(bin/rails runner 'print Rails.application.credentials.dig(:mongodb, :uri)')}"
+if [[ -z "$uri" ]]; then
+  echo "No MongoDB URI: set MONGODB_URI or credentials mongodb.uri." >&2
+  exit 1
+fi
+# mongodump rejects a query string without a "/" after the hosts, which a
+# bare "mongodb://host:port" would get below.
+if [[ ! "$uri" =~ ^[^:]+://[^/?]*/ ]]; then
+  base="${uri%%\?*}"
+  uri="$base/${uri#"$base"}"
+fi
+# Atlas users authenticate against admin; see config/mongoid.yml for why the
+# DNS default can't be relied on. Only with credentials: mongodump attempts
+# auth whenever authSource is set, which fails against a local mongod.
+if [[ "$uri" == *@* && "$uri" != *authSource=* ]]; then
+  [[ "$uri" == *\?* ]] && uri="$uri&authSource=admin" || uri="$uri?authSource=admin"
+fi
+
+# Read from a secondary where possible, so the dump doesn't load the live
+# primary.
+echo "== Dumping $SOURCE_DB to $out =="
+mongodump --uri="$uri" --db="$SOURCE_DB" --readPreference=secondaryPreferred --archive="$out" --gzip
+
+echo "== Done: $(du -h "$out" | cut -f1) =="
+echo "Restore with: mongorestore --uri=\"\$MONGODB_URI\" --archive=$out --gzip --nsInclude='$SOURCE_DB.*'"
