@@ -103,7 +103,8 @@ cors:
 
 On Render, set the `RAILS_MASTER_KEY` environment variable to the contents of
 `config/credentials/production.key`; no other secret env vars are needed.
-Tests don't need a key: they use a local mongod and stub the admin login.
+Tests don't need a key: they use a local mongod and stub the admin login
+and the blog's address.
 
 | Concern | Where it's configured |
 |---|---|
