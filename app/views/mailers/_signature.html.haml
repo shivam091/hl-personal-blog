@@ -1,0 +1,8 @@
+%table{role: "presentation", cellpadding: 0, cellspacing: 0, style: "margin:36px 0 0;"}
+  %tr
+    - if logo_url
+      %td{style: "padding:0 14px 0 0;vertical-align:middle;"}
+        %img{src: logo_url, width: 48, height: 48, alt: "", style: "display:block;width:48px;height:48px;border:0;border-radius:50%;background:#eef2ff;"}
+    %td{style: "vertical-align:middle;"}
+      %p{style: "margin:0;font-size:14px;color:#64748b;"}= sign_off
+      %p{style: "margin:2px 0 0;font-size:16px;font-weight:700;color:#0f172a;"}= blog_name

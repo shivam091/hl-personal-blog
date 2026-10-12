@@ -1,1 +1,7 @@
 <%= yield %>
+
+--
+<%= blog_name %>
+<%= @home_url || blog_url %>
+<% if @unsubscribe_url %>Don't want these any more? Unsubscribe: <%= @unsubscribe_url %>
+<% end %>
