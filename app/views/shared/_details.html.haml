@@ -1,0 +1,9 @@
+= render layout: "shared/card", locals: {id: id, title: title, icon: local_assigns[:icon]} do
+  - if rows.empty?
+    %p{class: "px-4 py-3 text-sm text-slate-500"}= local_assigns.fetch(:empty, "None.")
+  - else
+    %dl{class: "divide-y divide-slate-100 text-sm"}
+      - rows.each do |label, value|
+        %div{class: "grid gap-1 px-4 py-2.5 sm:grid-cols-3 sm:gap-4"}
+          %dt{class: "font-medium break-all text-slate-500"}= label
+          %dd{class: "break-all text-slate-900 sm:col-span-2"}= log_value(value)

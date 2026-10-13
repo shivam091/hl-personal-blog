@@ -1,0 +1,10 @@
+-# A button rather than a bare icon, so the help also opens on keyboard focus
+-# and on a tap where there's no hover. Placed against the whole tile rather
+-# than the icon, so it can't run off the edge of a narrow screen.
+- hint_id = "hint-#{label.parameterize}"
+%button{type: "button", aria: {label: "About #{label}", describedby: hint_id},
+  class: ["peer/hint rounded-full text-slate-400 hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-slate-500", local_assigns[:class]]}
+  = icon("info", size: 13)
+%span{id: hint_id, role: "tooltip",
+  class: "pointer-events-none invisible absolute inset-x-0 top-full z-20 mt-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs leading-snug font-normal text-white opacity-0 shadow-lg transition-opacity duration-100 peer-hover/hint:visible peer-hover/hint:opacity-100 peer-focus/hint:visible peer-focus/hint:opacity-100"}
+  = text

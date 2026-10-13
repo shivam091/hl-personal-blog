@@ -1,0 +1,12 @@
+-# Period, comparison and country in one bar, so every figure below is
+-# known to answer the same selection.
+= render "shared/period_bar", period: period, keep: keep, filtering: filtering, compare: local_assigns.fetch(:compare, true)
+
+- notes = []
+- notes << counted_since_note(stats.period, views: stats.views_counted_since,
+  likes: (stats.likes_counted_since if local_assigns.fetch(:likes_note, true)))
+- if stats.country_gap?
+  - notes << "Country tracking began on #{l(stats.country_tracking_since)}; views before then have no country, so a single country's figures start that day."
+- if stats.undated_likes.positive? && local_assigns.fetch(:likes_note, true)
+  - notes << "#{pluralize(number_with_delimiter(stats.undated_likes), "like")} came before likes were dated, so they're in no period's figures."
+= render "shared/period_notes", notes: notes + local_assigns.fetch(:notes, [])

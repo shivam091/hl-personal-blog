@@ -1,0 +1,34 @@
+-# Collapsible so the search stays out of the way, yet active searches stay
+-# visible so a narrowed list is never mistaken for the whole one.
+- label_class = "mb-1.5 block text-xs font-medium text-slate-600"
+- control_class = "h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+- tab_query = filtering.tabs ? {filtering.tabs.name => filtering.tab}.compact : {}
+
+%details{class: "group mb-4 rounded-lg border border-slate-200 bg-white shadow-sm", open: filtering.searching?}
+  %summary{class: "flex list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-lg px-4 py-3 text-sm hover:bg-slate-50 group-open:rounded-b-none"}
+    %span{class: "inline-flex items-center gap-2 font-medium text-slate-700"}
+      = icon("search", class: "text-slate-400")
+      Search
+    - filtering.chips.each do |label, param|
+      %span{class: "inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pr-1 pl-2.5 text-xs font-medium text-slate-700"}
+        = label
+        = link_to list_url(filtering, *keep, param => nil), aria: {label: "Remove #{label}"},
+          class: "rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-900" do
+          = icon("x", size: 12)
+    = icon("chevron-down", class: "ml-auto text-slate-400 transition-transform duration-150 group-open:rotate-180")
+
+  = form_with url: request.path, method: :get, class: "border-t border-slate-200 px-4 pt-4 pb-3" do
+    - keep.compact.map(&:query).reduce(tab_query, :merge).each do |name, value|
+      = hidden_field_tag name, value, id: nil
+    %div{class: "grid gap-4 sm:grid-cols-2 lg:grid-cols-5"}
+      - filtering.fields.each do |field|
+        = render field, filtering: filtering, label_class: label_class, control_class: control_class
+    %div{class: "mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3"}
+      - if filtering.searching?
+        = link_to list_url(*keep, **tab_query),
+          class: "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900" do
+          = icon("rotate-ccw", size: 14)
+          Reset
+      %button{type: "submit", class: "inline-flex h-9 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white shadow-sm hover:bg-slate-700"}
+        = icon("search", size: 14)
+        Search

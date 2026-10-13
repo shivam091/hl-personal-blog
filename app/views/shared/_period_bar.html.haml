@@ -1,0 +1,29 @@
+-# The period, what it's judged against and the country in one row, with
+-# the dates each covers spelled out beside them, since a preset names a
+-# span rather than its days. The rest of the list's state rides along so
+-# changing any of them keeps it.
+- filtering = local_assigns[:filtering]
+- compare = local_assigns.fetch(:compare, true)
+
+%div{class: "mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"}
+  %div{class: "flex flex-wrap items-center gap-2"}
+    = render "shared/period_presets", period: period, keep: [filtering, *keep]
+    -# Left off where nothing on the page is compared, rather than offered and ignored.
+    - if compare || filtering
+      = render "shared/period_compare", period: period, keep: keep, filtering: filtering, compare: compare
+
+  -# Stacked beside the buttons on wider screens. On a phone the bar has
+  -# already wrapped under them, so both ranges share one line there, each
+  -# writing its year once to fit; neither breaks in the middle. Kept to the
+  -# right edge even when wrapped under the buttons.
+  - previous = period.previous if compare && period.compare? && !period.compare_countries?
+  %p{class: "text-xs tabular-nums text-slate-500 sm:ml-auto sm:text-right"}
+    %span{class: "whitespace-nowrap sm:hidden"}= period_dates(period, compact: true)
+    %span{class: "hidden sm:block"}= period_dates(period)
+    - if previous
+      %span{class: "whitespace-nowrap text-slate-400 sm:hidden"}
+        vs
+        = period_dates(previous, compact: true)
+      %span{class: "hidden text-slate-400 sm:block"}
+        vs
+        = period_dates(previous)
