@@ -1,0 +1,36 @@
+- log = @request_log
+- content_for :title, "#{log} – Request log"
+
+= link_to request_logs_path, class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
+  = icon("arrow-left")
+  Request logs
+
+%div{class: "mb-6"}
+  %div{class: "flex flex-wrap items-center gap-3"}
+    = http_method_badge(log.request_method)
+    = status_badge(log.status)
+  %h1{class: "mt-2 text-xl font-semibold tracking-tight break-all"}= log.path
+  %p{class: subtitle_class}
+    - if log.created_at
+      %time{datetime: log.created_at.iso8601}= l(log.created_at)
+      ·
+    %span{class: "font-mono"}= log.uuid
+
+= render "shared/stats", stats: request_log_stats(log)
+
+- if log.error?
+  %section{class: "mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3", aria: {labelledby: "exception"}}
+    %h2{id: "exception", class: "flex items-center gap-2 text-sm font-semibold text-red-800"}
+      = icon("alert-circle", class: "text-red-500")
+      = log.exception["class"]
+    %p{class: "mt-1 text-sm break-all text-red-800"}= log.exception["message"]
+    - if log.exception["backtrace"].present?
+      %pre{class: "mt-3 overflow-x-auto rounded-md bg-white/60 p-3 font-mono text-xs text-red-900"}= log.exception["backtrace"].join("\n")
+
+%div{class: "grid gap-6 lg:grid-cols-2"}
+  = render "shared/details", id: "request", title: "Request", icon: "send", rows: request_log_request_rows(log)
+  = render "shared/details", id: "client", title: "Client", icon: "map-pin", rows: request_log_client_rows(log)
+  = render "shared/details", id: "parameters", title: "Parameters", icon: "sliders", rows: log.query_params.to_a, empty: "No parameters."
+  = render "shared/details", id: "response-headers", title: "Response headers", icon: "server", rows: log.response_headers.sort, empty: "No headers recorded."
+  %div{class: "lg:col-span-2"}
+    = render "shared/details", id: "request-headers", title: "Request headers", icon: "list", rows: log.request_headers.sort, empty: "No headers recorded."
