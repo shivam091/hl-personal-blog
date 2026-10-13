@@ -1,0 +1,36 @@
+-# Shares are of the full total even when only the top rows are shown, so a
+-# shortened list doesn't overstate the leaders. Given the counts compared
+-# with, and the metric they count, each count shows its change.
+- rows = ranked_counts(counts)
+- previous = local_assigns[:previous]
+- metric = local_assigns.fetch(:metric, DashboardHelper::HIGHER_IS_BETTER)
+- if rows.empty?
+  %p{class: "text-sm text-slate-500"}= empty
+- else
+  - total = rows.sum(&:last)
+  - shown = local_assigns[:limit] ? rows.first(limit) : rows
+  %div{class: "overflow-x-auto"}
+    %table{class: "w-full border-collapse text-sm"}
+      %thead{class: "text-slate-500"}
+        %tr
+          %th{scope: "col", class: "w-1/4 py-1.5 pr-3 text-left font-medium"}= heading
+          %th{scope: "col", class: "w-1/4 py-1.5 px-3 text-right font-medium"}= count_heading
+          %th{scope: "col", class: "w-1/2 py-1.5 pl-3 text-right font-medium"} Share
+      %tbody
+        - shown.each do |key, count|
+          - share = total.zero? ? 0 : count.to_f * 100 / total
+          %tr{class: "border-t border-slate-200"}
+            %td{class: "py-1.5 pr-3 font-medium"}= key
+            - if previous
+              %td{class: "py-1.5 px-3 text-right tabular-nums whitespace-nowrap"}
+                = number_with_delimiter(count)
+                %div= row_change(count, previous[key], metric)
+            - else
+              %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(count)
+            %td{class: "py-1.5 pl-3"}
+              %div{class: "flex items-center gap-3"}
+                %div{class: "h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200", aria: {hidden: "true"}}
+                  %div{class: "bg-progress-striped h-full rounded-full", style: "width: #{share.round(1)}%"}
+                %span{class: "w-14 shrink-0 text-right tabular-nums"}= number_to_percentage(share, precision: 1)
+  - if shown.size < rows.size
+    %p{class: "mt-2 text-xs text-slate-500"} +#{rows.size - shown.size} more

@@ -1,0 +1,14 @@
+-# One figure beside its change from the period before and its daily shape,
+-# so a number can be judged rather than just read.
+%div{class: "relative rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"}
+  %dt{class: "flex items-center gap-1.5 text-xs font-medium text-slate-500"}
+    = icon(tile_icon, size: 14, class: "text-slate-400")
+    = label
+    = render("shared/hint", label: label, text: hint) if local_assigns[:hint]
+  %dd{class: "mt-1 flex items-end justify-between gap-2"}
+    %span{class: "text-lg font-semibold tabular-nums text-slate-900"}= value
+    = sparkline(spark, label: "#{label} by day") if local_assigns[:spark]
+  -# A note on how a figure was counted shows either way; only a change
+  -# says what it's compared with.
+  - if change.present?
+    %dd{class: "mt-0.5 text-xs", title: (comparing? && local_assigns[:compared_with]) && "Compared with #{compared_with}"}= change

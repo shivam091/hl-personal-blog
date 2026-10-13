@@ -1,0 +1,7 @@
+-# The search icon signals free-text matching, unlike the other fields.
+%div{class: "sm:col-span-2 lg:col-span-3"}
+  = label_tag contains.name, contains.label, class: label_class
+  %div{class: "relative"}
+    = icon("search", class: "pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400")
+    = search_field_tag contains.name, filtering.values[contains.name], placeholder: contains.placeholder,
+      class: "#{control_class} pl-9"
