@@ -10,7 +10,10 @@
       formats: {
         default: "%-d %b, %Y",
         short: "%-d %b, %Y",
-        long: "%-d %b, %Y"
+        long: "%-d %b, %Y",
+        # For a phone's narrow period bar, where a range writes its year once.
+        compact: "%-d %b %Y",
+        day_month: "%-d %b"
       }
     },
     time: {

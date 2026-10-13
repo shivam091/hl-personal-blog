@@ -1,4 +1,4 @@
-import { Controller } from "@hotwired/stimulus"
+import TooltipBase from "controllers/tooltip_base"
 
 /*
   A title only shows on hover, and a touch screen has none, so a change's
@@ -6,20 +6,16 @@ import { Controller } from "@hotwired/stimulus"
   on a plain element with a title shows it instead; links and buttons keep
   their own taps.
 */
-export default class extends Controller {
+export default class extends TooltipBase {
   static interactive = "a, button, input, select, textarea, label, summary"
 
   connect() {
+    super.connect()
     this.touch = window.matchMedia("(hover: none)")
-    this.close = () => this.hide()
-    document.addEventListener("scroll", this.close, { capture: true, passive: true })
-    document.addEventListener("turbo:before-cache", this.close)
   }
 
-  disconnect() {
-    document.removeEventListener("scroll", this.close, { capture: true })
-    document.removeEventListener("turbo:before-cache", this.close)
-    this.hide()
+  get open() {
+    return !!this.tip
   }
 
   /*
@@ -53,10 +49,7 @@ export default class extends Controller {
     document.body.append(tip)
 
     const box = target.getBoundingClientRect()
-    const { width, height } = tip.getBoundingClientRect()
-    const left = Math.min(Math.max(box.left + box.width / 2 - width / 2, 8), window.innerWidth - width - 8)
-    const above = box.top - height - 8
-    Object.assign(tip.style, { left: `${left}px`, top: `${above < 8 ? box.bottom + 8 : above}px` })
+    this.placeNear(tip, { x: box.left + box.width / 2, top: box.top, bottom: box.bottom, above: 8, below: 8 })
     this.tip = tip
   }
 
