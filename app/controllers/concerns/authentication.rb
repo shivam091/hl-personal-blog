@@ -31,7 +31,13 @@ module Authentication
     @authenticated = AdminCredentials.configured? && fingerprint.is_a?(String) &&
       ActiveSupport::SecurityUtils.secure_compare(fingerprint, AdminCredentials.fingerprint) &&
       session[:signed_in_at].to_i > SESSION_TTL.ago.to_i
+    record_admin_on_request_log if @authenticated
     @authenticated
+  end
+
+  # So request logs can say which admin made each request.
+  def record_admin_on_request_log
+    request.env[RequestLogger::USER_ENV_KEY] = AdminCredentials.username
   end
 
   def require_authentication
@@ -50,6 +56,7 @@ module Authentication
     reset_session
     session[:admin_fingerprint] = AdminCredentials.fingerprint
     session[:signed_in_at] = Time.current.to_i
+    record_admin_on_request_log
     # Local paths only, so login can't become an open redirect.
     return_to if return_to.is_a?(String) && return_to.start_with?("/") && !return_to.start_with?("//")
   end

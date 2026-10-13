@@ -1,0 +1,28 @@
+-# The last sync that brought data in, rather than the last attempt, since
+-# that's what the page's figures date from; a newer attempt still running,
+-# stalled or failed is flagged beside it.
+%p{class: "mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500", id: "last-sync"}
+  = icon("clock", size: 12, class: "text-slate-400")
+  - if completed
+    %span
+      Last synced
+      %time{datetime: completed.finished_at.iso8601, class: "font-medium text-slate-700"}
+        = l(completed.finished_at)
+      (#{time_ago_in_words(completed.finished_at)} ago)
+    - if completed.status == "partial"
+      %span{class: "font-medium text-amber-700"} with #{pluralize(completed.error_count, "error")}
+  - else
+    %span No sync recorded yet
+  - if latest&.in_progress?
+    %span{class: "inline-flex items-center gap-1 font-medium text-sky-700"}
+      = icon("refresh", size: 12)
+      Sync in progress
+  - elsif latest && latest != completed && latest.status == "failed"
+    %span{class: "inline-flex items-center gap-1 font-medium text-red-700"}
+      = icon("alert-circle", size: 12)
+      Last sync failed
+  - elsif latest&.stalled?
+    %span{class: "inline-flex items-center gap-1 font-medium text-orange-700"}
+      = icon("alert-circle", size: 12)
+      Last sync stalled
+  = link_to "Sync history", sync_requests_path(section: kind), class: "underline hover:text-slate-900"
