@@ -1,0 +1,89 @@
+- content_for :title, "Export requests"
+
+%div{class: "mb-6"}
+  %h1{class: page_title_class} Export requests
+  %p{class: subtitle_class}
+    Every CSV taken from the admin or a rake task. Re-export downloads the same export again, with today's data.
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", message: (@filtering.filtered? ? "No export requests match." : "No exports recorded yet."),
+    icon: (@filtering.filtered? ? "search" : "inbox")
+- else
+  -# The row checkboxes join this form through their form attribute, since
+  -# each row's own delete button is a form and forms can't nest.
+  %div{data: {controller: "bulk-select", bulk_select_one_value: "export request", bulk_select_many_value: "export requests",
+    bulk_select_confirm_value: "Delete {items}? This can't be undone."}}
+    = form_with url: destroy_selected_export_requests_path, method: :delete, id: "bulk-delete",
+      class: "mb-3 flex items-center justify-between gap-3", data: {bulk_select_target: "form", turbo_confirm: "Delete the selected export requests? This can't be undone."} do
+      %p{class: "text-sm text-slate-600", aria: {live: "polite"}, data: {bulk_select_target: "count"}} No export requests selected
+      %button{type: "submit", disabled: true, data: {bulk_select_target: "submit"},
+        class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:bg-white"}
+        = icon("trash", size: 14)
+        Delete selected
+
+    %div{class: table_card_class}
+      %table{class: "w-full border-collapse text-left text-sm"}
+        %thead{class: table_head_class}
+          %tr
+            %th{scope: "col", class: "w-0 py-2.5 pr-1 pl-3"}
+              %input{type: "checkbox", class: "block size-4 rounded border-slate-300 accent-slate-900",
+                aria: {label: "Select all export requests on this page"},
+                data: {bulk_select_target: "all", action: "bulk-select#toggleAll"}}
+            %th{scope: "col", class: list_heading_right_class, aria: {label: "Row number"}} #
+            - sort_keep = [@filtering, @pagination]
+            = sort_header @sorting, "Exported", "created_at", keep: sort_keep, class: list_heading_class
+            = sort_header @sorting, "Section", "section", keep: sort_keep, class: list_heading_class
+            %th{scope: "col", class: list_heading_class} Filters
+            = sort_header @sorting, "File", "filename", keep: sort_keep, class: list_heading_class
+            = sort_header @sorting, "Rows", "row_count", keep: sort_keep, class: list_heading_right_class
+            = sort_header @sorting, "Size", "byte_size", keep: sort_keep, class: list_heading_right_class
+            %th{scope: "col", class: "px-3 py-2.5"}
+              %span{class: "sr-only"} Actions
+        %tbody
+          - @export_requests.each.with_index(@pagination.first_item) do |export_request, number|
+            - filters = export_request.filters
+            %tr{class: "border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50 has-checked:bg-slate-100"}
+              %td{class: "py-2 pr-1 pl-3"}
+                %input{type: "checkbox", name: "ids[]", value: export_request.id, form: "bulk-delete",
+                  class: "block size-4 rounded border-slate-300 accent-slate-900",
+                  aria: {label: "Select the #{export_request} from #{l(export_request.created_at)}"},
+                  data: {bulk_select_target: "item", action: "bulk-select#update"}}
+              %td{class: muted_number_cell_class}= number_with_delimiter(number)
+              %td{class: muted_cell_class}
+                %time{datetime: export_request.created_at.iso8601}= l(export_request.created_at)
+                %div{class: "text-xs text-slate-400"}= export_request.trigger_label
+              %td{class: "px-3 py-2"}
+                %div{class: "font-medium whitespace-nowrap text-slate-900"}= export_request.section
+                - if export_request.detail
+                  %div{class: "text-xs text-slate-500"}= export_request.detail
+              %td{class: "px-3 py-2"}
+                - if filters.empty?
+                  %span{class: "text-slate-400"} None
+                - else
+                  %div{class: "flex max-w-xs flex-wrap gap-1"}
+                    - filters.each do |name, value|
+                      %span{class: "rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 break-all"}
+                        %span{class: "font-medium"} #{name}:
+                        = Array.wrap(value).join(", ")
+              %td{class: "px-3 py-2 font-mono text-xs text-slate-700"}= export_request.filename
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums text-slate-600"}
+                = export_request.row_count ? number_with_delimiter(export_request.row_count) : "—"
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums text-slate-600"}
+                = export_request.byte_size ? number_to_human_size(export_request.byte_size) : "—"
+              %td{class: "px-3 py-2"}
+                %div{class: "flex items-center justify-end gap-1"}
+                  - if export_request.reexport_path
+                    = link_to export_request.reexport_path, title: "Re-export",
+                      class: "inline-flex rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                      aria: {label: "Re-export the #{export_request} from #{l(export_request.created_at)}"} do
+                      = icon("download")
+                  = button_to export_request_path(export_request), method: :delete, title: "Delete",
+                    form: {data: {turbo_confirm: "Delete the #{export_request} from #{l(export_request.created_at)}? This can't be undone."}},
+                    class: "inline-flex rounded-md p-1.5 text-red-600 hover:bg-red-50 hover:text-red-700",
+                    aria: {label: "Delete the #{export_request} from #{l(export_request.created_at)}"} do
+                    = icon("trash")
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]
