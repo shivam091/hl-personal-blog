@@ -1,0 +1,87 @@
+- content_for :title, "External calls"
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} External calls
+  %p{class: "mt-1 text-sm text-slate-500"}
+    Every request the app made to another service: Google's APIs, the blog's feed and sitemap, and IP lookups.
+    Keys and tokens in URLs are filtered out.
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", message: (@filtering.filtered? ? "No external calls match." : "No external calls recorded yet."),
+    icon: (@filtering.filtered? ? "search" : "inbox")
+- else
+  -# The row checkboxes join this form through their form attribute, since
+  -# each row's own buttons are forms and forms can't nest.
+  %div{data: {controller: "bulk-select", bulk_select_one_value: "external call", bulk_select_many_value: "external calls",
+    bulk_select_confirm_value: "Delete {items}? This can't be undone."}}
+    = form_with url: destroy_selected_external_calls_path, method: :delete, id: "bulk-delete",
+      class: "mb-3 flex items-center justify-between gap-3", data: {bulk_select_target: "form", turbo_confirm: "Delete the selected external calls? This can't be undone."} do
+      %p{class: "text-sm text-slate-600", aria: {live: "polite"}, data: {bulk_select_target: "count"}} No external calls selected
+      %button{type: "submit", disabled: true, data: {bulk_select_target: "submit"},
+        class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:bg-white"}
+        = icon("trash", size: 14)
+        Delete selected
+
+    %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"}
+      %table{class: "w-full border-collapse text-left text-sm"}
+        %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+          %tr
+            %th{scope: "col", class: "w-0 py-2.5 pr-1 pl-3"}
+              %input{type: "checkbox", class: "block size-4 rounded border-slate-300 accent-slate-900",
+                aria: {label: "Select all external calls on this page"},
+                data: {bulk_select_target: "all", action: "bulk-select#toggleAll"}}
+            %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", aria: {label: "Row number"}} #
+            - sort_keep = [@filtering, @pagination]
+            = sort_header @sorting, "Time", "created_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+            = sort_header @sorting, "Service", "service", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+            %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Request
+            = sort_header @sorting, "Status", "status", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+            = sort_header @sorting, "Duration", "duration_ms", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+            %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold"} Size
+            %th{scope: "col", class: "px-3 py-2.5"}
+              %span{class: "sr-only"} Actions
+        %tbody
+          - @external_calls.each.with_index(@pagination.first_item) do |call, number|
+            %tr{class: "border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50 has-checked:bg-slate-100"}
+              %td{class: "py-2 pr-1 pl-3"}
+                -# Nudged down to sit on the 20px text line beside it.
+                %input{type: "checkbox", name: "ids[]", value: call.id, form: "bulk-delete",
+                  class: "mt-0.5 block size-4 rounded border-slate-300 accent-slate-900",
+                  aria: {label: "Select the #{call} call from #{l(call.created_at)}"},
+                  data: {bulk_select_target: "item", action: "bulk-select#update"}}
+              %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= number_with_delimiter(number)
+              %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}
+                %time{datetime: call.created_at.iso8601}= l(call.created_at)
+              %td{class: "px-3 py-2 font-medium whitespace-nowrap text-slate-900"}= call.service
+              %td{class: "px-3 py-2"}
+                -# A 20px line like the other cells', so the small text shares
+                -# their baseline.
+                %div{class: "flex items-baseline gap-2 leading-5"}
+                  = http_method_badge(call.http_method)
+                  -# Cut off, with the whole URL on hover, since Google's URLs
+                  -# run long and would push the figures off screen.
+                  %span{class: "block max-w-xl min-w-80 truncate text-xs text-slate-700", title: call.url}= call.url
+                - if call.error.present?
+                  -# Collapsed, since Google's explanation can run to a few lines.
+                  %details{class: "mt-1 max-w-xl text-xs whitespace-normal text-red-700"}
+                    %summary{class: "cursor-pointer"}
+                      = icon("alert-circle", size: 12, class: "inline")
+                      = call.error
+                    - if call.error_body.present?
+                      %pre{class: "mt-1 overflow-x-auto rounded bg-red-50 p-2 whitespace-pre-wrap break-all"}= call.error_body
+              %td{class: "px-3 py-2"}= status_badge(call.status)
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums #{call_duration_class(call)}"}= call_duration(call)
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums text-slate-600"}
+                = call.response_size ? number_to_human_size(call.response_size) : "—"
+              %td{class: "px-3 py-2"}
+                %div{class: "flex items-center justify-end gap-1"}
+                  = button_to external_call_path(call), method: :delete, title: "Delete",
+                    form: {data: {turbo_confirm: "Delete the #{call} call from #{l(call.created_at)}? This can't be undone."}},
+                    class: "inline-flex rounded-md p-1.5 text-red-600 hover:bg-red-50 hover:text-red-700",
+                    aria: {label: "Delete the #{call} call from #{l(call.created_at)}"} do
+                    = icon("trash")
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]
