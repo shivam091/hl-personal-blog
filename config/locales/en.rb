@@ -20,6 +20,15 @@
         long: "%-d %b, %Y %H:%M %Z"
       }
     },
+    activemodel: {
+      attributes: {
+        request_log_clearance: {
+          from: "Start date",
+          to: "End date",
+          local_only: "Only local request logs"
+        }
+      }
+    },
     sessions: {
       new: {
         notice: "This application is for authorised users only. If you are not an authorised user, " \
