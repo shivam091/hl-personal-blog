@@ -1,0 +1,19 @@
+-# Errors about the record as a whole (:base) have no field to sit under,
+-# and a count up front tells the admin the save failed before they scan
+-# for highlighted fields.
+- field_errors = record.errors.attribute_names - [:base]
+- base_messages = record.errors.full_messages_for(:base)
+
+%div{class: "rounded-lg border border-red-200 bg-red-50 p-4", role: "alert"}
+  %div{class: "flex gap-3"}
+    = icon("alert-circle", size: 20, class: "text-red-500")
+    %div{class: "min-w-0"}
+      %h2{class: "text-sm font-semibold text-red-800"}
+        -# Overridable, since "saved" would mislead on a form that doesn't save a record.
+        = local_assigns[:title] || "#{pluralize(record.errors.count, "problem")} kept this #{record.model_name.human.downcase} from being saved"
+      - if base_messages.any?
+        %ul{class: "mt-2 list-disc space-y-1 pl-5 text-sm text-red-700"}
+          - base_messages.each do |message|
+            %li= message
+      - if field_errors.any?
+        %p{class: "mt-1 text-sm text-red-700"} Fix the highlighted fields below.
