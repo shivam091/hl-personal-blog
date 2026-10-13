@@ -4,7 +4,7 @@ require "rails_helper"
 
 RSpec.describe "Sessions", type: :request, signed_out: true do
   it "sends signed-out requests to the login page, with no nav" do
-    [root_path].each do |path|
+    [root_path, sync_requests_path].each do |path|
       get path
       expect(response).to redirect_to(new_session_path), path
     end
