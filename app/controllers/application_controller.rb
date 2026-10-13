@@ -3,6 +3,7 @@
 class ApplicationController < ActionController::Base
   # The admin exposes shared blog data, so no page may be public by default.
   include Authentication
+  include CsvExport
 
   allow_browser versions: :modern
 
