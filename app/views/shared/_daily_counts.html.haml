@@ -1,0 +1,31 @@
+-# Newest first, since recent days are what's usually being checked. Days
+-# from before countriesByDay existed have a total but no countries.
+- days = by_day.sort_by { |day, _| day }.reverse
+- if days.empty?
+  %p{class: "text-sm text-slate-500"}= empty
+- else
+  - shown = local_assigns[:limit] ? days.first(limit) : days
+  %div{class: "overflow-x-auto"}
+    %table{class: "w-full border-collapse text-sm"}
+      %thead{class: "text-slate-500"}
+        %tr
+          %th{scope: "col", class: "py-1.5 pr-3 text-left font-medium"} Date
+          %th{scope: "col", class: "py-1.5 px-3 text-right font-medium"}= count_heading
+          %th{scope: "col", class: "py-1.5 pl-3 text-left font-medium"} Countries
+      %tbody
+        - shown.each do |day, count|
+          %tr{class: "border-t border-slate-200"}
+            %td{class: "py-1.5 pr-3 whitespace-nowrap"}= day_label(day)
+            %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(count)
+            %td{class: "py-1.5 pl-3"}
+              - countries = ranked_counts(countries_by_day.fetch(day, {}))
+              - if countries.empty?
+                %span{class: "text-slate-400"} —
+              - else
+                %ul{class: "flex flex-wrap gap-1.5"}
+                  - countries.each do |code, country_count|
+                    %li{class: "rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"}
+                      %span{class: "font-medium"}= code
+                      %span{class: "tabular-nums"}= number_with_delimiter(country_count)
+  - if shown.size < days.size
+    %p{class: "mt-2 text-xs text-slate-500"} +#{pluralize(days.size - shown.size, "earlier day")}

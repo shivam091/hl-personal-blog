@@ -1,0 +1,9 @@
+-# The headline numbers, so a record can be judged before reading the detail.
+%dl{class: "mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"}
+  - stats.each do |label, value, value_class, stat_icon, hint|
+    %div{class: "relative rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"}
+      %dt{class: "flex items-center gap-1.5 text-xs font-medium text-slate-500"}
+        = icon(stat_icon, size: 14, class: "text-slate-400")
+        = label
+        = render("shared/hint", label: label, text: hint) if hint
+      %dd{class: "mt-1 text-lg font-semibold tabular-nums #{value_class}"}= value

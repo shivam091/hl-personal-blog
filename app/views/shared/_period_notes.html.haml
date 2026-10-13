@@ -1,0 +1,9 @@
+-# One box for every note on what a period's figures leave out, so they
+-# read alike on every page and several stack rather than repeat the box.
+- notes = notes.compact
+- if notes.any?
+  %div{class: "mb-4 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "note"}
+    = icon("info", size: 18, class: "text-amber-600")
+    %ul{class: "space-y-1"}
+      - notes.each do |note|
+        %li= note
