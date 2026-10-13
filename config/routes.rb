@@ -11,5 +11,27 @@ Rails.application.routes.draw do
 
   resource :session, only: %i[new create destroy]
 
+  resources :request_logs, only: %i[index show destroy], path: "request-logs" do
+    collection do
+      post :clear
+      delete :destroy_selected, path: "selected"
+    end
+  end
+
+  resources :sync_requests, only: %i[index destroy], path: "sync-requests" do
+    post :resync, on: :member
+    delete :destroy_selected, on: :collection, path: "selected"
+  end
+
+  resources :external_calls, only: %i[index destroy], path: "external-calls" do
+    delete :destroy_selected, on: :collection, path: "selected"
+  end
+
+  # Re-exporting is following the stored export URL, so there's no action
+  # for it here.
+  resources :export_requests, only: %i[index destroy], path: "export-requests" do
+    delete :destroy_selected, on: :collection, path: "selected"
+  end
+
   root "dashboard#show"
 end
