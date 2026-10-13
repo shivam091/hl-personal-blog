@@ -1,0 +1,68 @@
+-# Shared so every list pages the same way and the reader always knows where
+-# they are in the results.
+- item = "inline-flex h-9 min-w-9 items-center justify-center border border-slate-300 text-sm tabular-nums"
+- link = "#{item} bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+- disabled = "#{item} cursor-not-allowed bg-slate-50 text-slate-300"
+
+%nav{class: "mt-4 flex flex-col-reverse items-center justify-between gap-3 sm:flex-row", aria: {label: "Pagination"}}
+  %div{class: "flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500"}
+    %p
+      - if pagination.total_count.zero?
+        No results
+      - else
+        Showing
+        %span{class: "font-medium text-slate-900 tabular-nums"}
+          #{number_with_delimiter(pagination.first_item)}–#{number_with_delimiter(pagination.last_item)}
+        of
+        %span{class: "font-medium text-slate-900 tabular-nums"}
+          = number_with_delimiter(pagination.total_count)
+    - if pagination.per_page_options.size > 1
+      %div{class: "inline-flex items-center gap-1"}
+        %span Per page
+        - pagination.per_page_options.each do |size|
+          - if size == pagination.per_page
+            %span{class: "rounded px-1.5 py-0.5 font-medium text-slate-900 tabular-nums ring-1 ring-slate-300", aria: {current: "true"}}
+              = size
+          - else
+            = link_to size, list_url(*keep, **pagination.per_page_query(size)), aria: {label: "#{size} per page"},
+              class: "rounded px-1.5 py-0.5 tabular-nums hover:bg-slate-100 hover:text-slate-900"
+
+  - if pagination.total_pages > 1
+    %ul{class: "isolate inline-flex -space-x-px rounded-md shadow-sm"}
+      %li
+        - if pagination.previous_page
+          = link_to list_url(*keep, **pagination.page_query(pagination.previous_page)), rel: "prev", class: "#{link} rounded-l-md px-2" do
+            %span{class: "sr-only"} Previous
+            = icon("chevron-left")
+        - else
+          %span{class: "#{disabled} rounded-l-md px-2", aria: {disabled: "true"}}
+            %span{class: "sr-only"} Previous
+            = icon("chevron-left")
+
+      -# Narrow screens have no room for page numbers.
+      %li{class: "sm:hidden"}
+        %span{class: "#{item} bg-white px-3 text-slate-700"}
+          Page
+          %span{class: "mx-1 font-medium text-slate-900"}= pagination.page
+          of
+          %span{class: "ml-1 font-medium text-slate-900"}= pagination.total_pages
+
+      - pagination.window.each do |number|
+        %li{class: "hidden sm:block"}
+          - if number.nil?
+            %span{class: "#{item} bg-white px-2 text-slate-400", aria: {hidden: "true"}} …
+          - elsif number == pagination.page
+            %span{class: "#{item} relative z-10 px-3 border-slate-900 bg-slate-900 font-semibold text-white", aria: {current: "page"}}
+              = number
+          - else
+            = link_to number, list_url(*keep, **pagination.page_query(number)), class: "#{link} px-3", aria: {label: "Page #{number}"}
+
+      %li
+        - if pagination.next_page
+          = link_to list_url(*keep, **pagination.page_query(pagination.next_page)), rel: "next", class: "#{link} rounded-r-md px-2" do
+            %span{class: "sr-only"} Next
+            = icon("chevron-right")
+        - else
+          %span{class: "#{disabled} rounded-r-md px-2", aria: {disabled: "true"}}
+            %span{class: "sr-only"} Next
+            = icon("chevron-right")
