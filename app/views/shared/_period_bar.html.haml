@@ -1,0 +1,25 @@
+-# The period, what it's judged against and the country in one row, with
+-# the dates each covers spelled out beside them, since a preset names a
+-# span rather than its days. The rest of the list's state rides along so
+-# changing any of them keeps it.
+- filtering = local_assigns[:filtering]
+- compare = local_assigns.fetch(:compare, true)
+
+%div{class: "mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"}
+  %div{class: "flex flex-wrap items-center gap-2"}
+    = render "shared/period_presets", period: period, keep: [filtering, *keep]
+    -# Left off where nothing on the page is compared, rather than offered and ignored.
+    - if compare
+      = render "shared/period_compare", period: period, keep: keep, filtering: filtering
+
+  %p{class: "text-xs tabular-nums text-slate-500 sm:text-right"}
+    %span{class: "block"}
+      = time_tag period.from, l(period.from)
+      - if period.days > 1
+        %span{aria: {hidden: "true"}} –
+        %span{class: "sr-only"} to
+        = time_tag period.to, l(period.to)
+    - if compare && period.compare? && !period.compare_countries?
+      %span{class: "block text-slate-400"}
+        vs
+        = period.previous.to_s

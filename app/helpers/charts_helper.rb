@@ -1,0 +1,963 @@
+# encoding: UTF-8
+
+# Inline SVG drawn on the server, so charts need no chart library, no
+# third-party script in the CSP, and render in specs like any other markup.
+module ChartsHelper
+  CHART_HEIGHT = 120
+  CHART_WIDTH = 600
+  COMPACT_UNITS = {thousand: "K", million: "M", billion: "B"}.freeze
+  # Enough dates to place any day without the labels crowding each other in
+  # a narrow card.
+  MAX_TICKS = 6
+  # Fewer than this leaves too few dates to place a point by, so an axis
+  # whose ends can't both be labelled at an even step drops the first end.
+  MIN_TICKS = 4
+  # About half a date label's width, so a label nearer the edge than this is
+  # pinned inside rather than centred and cut off.
+  EDGE_LABEL_ROOM = 7
+
+  # A single hue so darker plainly reads as more; written out in full so
+  # Tailwind's scan finds them.
+  HEAT_CLASSES = [
+    "bg-slate-100 text-slate-700", "bg-slate-200 text-slate-800", "bg-slate-300 text-slate-900",
+    "bg-slate-500 text-white", "bg-slate-700 text-white", "bg-slate-900 text-white"
+  ].freeze
+
+  # A single hue so darker plainly reads as more. Zero gets a neutral grey
+  # rather than the lightest step, so "none" never reads as "a little".
+  MAP_FILLS = %w[fill-[#cde2fb] fill-[#9ec5f4] fill-[#6da7ec] fill-[#3987e5] fill-[#256abf] fill-[#184f95] fill-[#0d366b]].freeze
+  MAP_SWATCHES = %w[bg-[#cde2fb] bg-[#9ec5f4] bg-[#6da7ec] bg-[#3987e5] bg-[#256abf] bg-[#184f95] bg-[#0d366b]].freeze
+  MAP_EMPTY_FILL = "fill-[#f0efec]"
+
+  # In the order validated for touching segments; Other is a neutral at the
+  # base so it never sits against the last hue.
+  SHARE_COLORS = %w[#2a78d6 #eb6834 #1baf7a #eda100 #e87ba4].freeze
+  SHARE_FILLS = %w[fill-[#2a78d6] fill-[#eb6834] fill-[#1baf7a] fill-[#eda100] fill-[#e87ba4]].freeze
+  SHARE_SWATCHES = %w[bg-[#2a78d6] bg-[#eb6834] bg-[#1baf7a] bg-[#eda100] bg-[#e87ba4]].freeze
+  SHARE_OTHER_COLOR = "#a8a7a1"
+  SHARE_OTHER_FILL = "fill-[#a8a7a1]"
+  SHARE_OTHER_SWATCH = "bg-[#a8a7a1]"
+
+  # Shapes as well as colours for charted rows, as in GA, so a line is told
+  # from its neighbours by more than hue. Total gets a shape of its own.
+  # Kept to a 10×10 box, since the chart tooltip copies these paths.
+  MARKERS = {
+    circle: "M5 .5a4.5 4.5 0 1 1 0 9a4.5 4.5 0 1 1 0-9z", square: "M1 1h8v8H1z", diamond: "M5 0l5 5-5 5-5-5z",
+    triangle_down: "M0 1h10L5 9.5z", triangle: "M5 .5L10 9H0z", drop: "M5 0C5 0 9 4.6 9 6.5a4 4 0 0 1-8 0C1 4.6 5 0 5 0z"
+  }.freeze
+  ROW_MARKERS = %i[circle square diamond triangle_down triangle].freeze
+  TOTAL_MARKER = :drop
+
+  # Hex copies of slate-800, slate-400 and slate-600, because the tooltip's
+  # keys need raw colours yet must match the drawn marks.
+  LINE_COLORS = %w[#1e293b #94a3b8].freeze
+  BAR_COLOR = "#475569"
+  # A hue no line uses, so a day's event isn't read as one of the series.
+  EVENT_COLOR = "#eb6834"
+  EVENT_MARKER = :triangle
+
+  # Named for what each date in a run stands for, so a week's point isn't
+  # read as a single day's.
+  DATE_AXIS_TITLES = {hour: "Hour", day: "Date", week: "Week starting", month: "Month"}.freeze
+  # Worded as Search Console's own readout, for the days its figures may
+  # still change.
+  UNSETTLED_NOTE = "Data is still being collected"
+
+  # Told apart by dash as well as shade, so a second series never relies on
+  # colour alone. A colour of its own is for more series than two shades
+  # can tell apart; dotted is for a total drawn among its parts.
+  Series = Struct.new(:name, :values, :dashed, :color, :dotted, :marker, keyword_init: true) do
+    def dasharray
+      if dotted then "0 4"
+      elsif dashed then "4 3"
+      end
+    end
+  end
+
+  # Each on its own scale because clicks and impressions differ a
+  # thousandfold, so a shared axis would flatten one into the floor. A
+  # position is inverted so up still reads as better, since 1 is the top.
+  # The period compared with is dotted on the same scale, so a line is read
+  # against its own past rather than a second axis.
+  Measure = Struct.new(:name, :values, :color, :dashed, :inverted, :whole, :tick, :reading, :previous, :previous_name, keyword_init: true)
+
+  # Its tip is chart_tip's data, so it reads out like any other chart's.
+  ScatterPoint = Struct.new(:x, :y, :color, :tip, keyword_init: true)
+
+  def compact_number(value)
+    number_to_human(value, format: "%n%u", units: COMPACT_UNITS, precision: 3, significant: true)
+  end
+
+  # Stretched to its box, so one size fits a tile or a table row.
+  def sparkline(values, label:, width: 80, height: 24)
+    return tag.span("—", class: "text-slate-400") if values.empty? || values.all?(&:zero?)
+
+    max = values.max.to_f
+    step = values.size > 1 ? width.to_f / (values.size - 1) : 0
+    points = values.each_with_index.map { |value, index| "#{(index * step).round(1)},#{(height - 2 - value / max * (height - 4)).round(1)}" }
+    tag.svg(
+      viewBox: "0 0 #{width} #{height}",
+      preserveAspectRatio: "none",
+      role: "img",
+      aria: {label: label},
+      class: "h-6 w-20 overflow-visible text-slate-500"
+    ) do
+      safe_join([
+        tag.title(label),
+        tag.polyline(
+          points: points.join(" "),
+          fill: "none",
+          stroke: "currentColor",
+          "stroke-width": 1.5,
+          "stroke-linejoin": "round",
+          "vector-effect": "non-scaling-stroke"
+        )
+      ])
+    end
+  end
+
+  # Both styles start at zero so heights compare honestly.
+  # Events mark days as on a line chart, so a bar's rise can be put down to
+  # what happened that day. Unsettled is the first day whose figures may
+  # still change, so its readout and every later one say so.
+  def time_chart(points, label:, y_title:, x_title: nil, style: :bars, unit: "", per: :day, events: {}, event_name: nil, unsettled: nil)
+    keys = points.map(&:first)
+    if style == :line
+      return line_chart(keys, [Series.new(name: label, values: points.map(&:last))], label: label, unit: unit, y_title: y_title, x_title: x_title,
+        events: events, event_name: event_name, unsettled: unsettled)
+    end
+
+    events = events.slice(*keys)
+    safe_join([
+      (event_legend(event_name) if events.any?),
+      chart_frame(keys, points.map(&:last).compact.max, label, x_title: x_title, y_title: y_title, per: per,
+        overlay: (->(_) { event_markers(keys, events, lines: false) } if events.any?)) do |max|
+        bar_marks(points, max, unit, per, events, event_name, unsettled: unsettled)
+      end
+    ].compact)
+  end
+
+  # The rest grouped as :other always takes the grey, so it reads as left
+  # over rather than as one more group.
+  def share_series(groups)
+    groups.each_with_index.map do |(key, values), index|
+      other = key == :other
+      Series.new(name: other ? "Other" : yield(key), values: values, color: other ? SHARE_OTHER_COLOR : SHARE_COLORS[index])
+    end
+  end
+
+  # The first part sits at the base so its height can be read straight off
+  # the axis; the top is whole because what's stacked are counts. Titles
+  # name a bar in its readout when its date alone wouldn't say what it is.
+  def stacked_chart(keys, series, label:, y_title:, x_title: nil, per: :day, titles: nil, unsettled: nil)
+    totals = keys.each_index.map { |index| series.sum { |part| part.values[index].to_i } }
+    safe_join([
+      swatch_legend(series.map { |part| [part.name, part.color] }),
+      chart_frame(keys, round_top(totals.max.to_f, whole: true), label, x_title: x_title, y_title: y_title, per: per) do |max|
+        stacked_marks(keys, series, max, per, titles, unsettled: unsettled)
+      end
+    ])
+  end
+
+  # One shared axis so series are only ever compared in the same unit.
+  # Selectable for charts with too many lines to read at once. Events mark
+  # the days something happened, by key, so a jump can be put down to it.
+  def line_chart(keys, series, label:, y_title:, x_title: nil, unit: "", selectable: false, per: :day, events: {}, event_name: nil, unsettled: nil)
+    max = series.flat_map(&:values).compact.max
+    events = events.slice(*keys)
+    safe_join([
+      (chart_legend(series, selectable: selectable, events: (event_name if events.any?)) if series.size > 1 || events.any?),
+      chart_frame(keys, max, label, x_title: x_title, y_title: y_title, crosshair: true, lines: true, per: per,
+        overlay: ->(top) { safe_join([line_end_markers(keys, series, top), event_markers(keys, events)]) }) do |top|
+        line_marks(keys, series, top, unit, per, events, event_name, unsettled: unsettled)
+      end
+    ].compact)
+  end
+
+  # An axis per figure in its line's colour, so a line is read against the
+  # scale it was drawn on. Past two, the outer axes give way on
+  # a phone, which has no room for four; the readout still has every figure.
+  def measures_chart(keys, measures, label:, per: :day, unsettled: nil)
+    x = ->(index) { point_x(index, keys.size) }
+    tops = measures.map { |measure| round_top([*measure.values, *measure.previous].compact.max.to_f, whole: measure.whole) }
+    ys = measures.zip(tops).map do |measure, top|
+      ->(value) { ((measure.inverted ? value.to_f / top : 1 - value.to_f / top) * CHART_HEIGHT).round(2) }
+    end
+    lines = measures.each_with_index.flat_map do |measure, index|
+      line_runs(measure.values).map do |run|
+        tag.polyline(points: run.map { |value, i| "#{x.(i)},#{ys[index].(value)}" }.join(" "), fill: "none", stroke: measure.color,
+          "stroke-width": 2, "stroke-linejoin": "round", "stroke-dasharray": ("4 3" if measure.dashed), "vector-effect": "non-scaling-stroke",
+          class: "pointer-events-none")
+      end
+    end
+    previous_lines = measures.each_with_index.flat_map do |measure, index|
+      line_runs(measure.previous || []).map do |run|
+        tag.polyline(points: run.map { |value, i| "#{x.(i)},#{ys[index].(value)}" }.join(" "), fill: "none", stroke: measure.color,
+          "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", "stroke-dasharray": "0 4", "stroke-opacity": 0.6,
+          "vector-effect": "non-scaling-stroke", class: "pointer-events-none", data: {previous: ""})
+      end
+    end
+    hits = keys.each_with_index.map do |key, index|
+      rows = measures.each_with_index.flat_map do |measure, measure_index|
+        value = measure.values[index]
+        current = {
+          value: value.nil? ? "No data" : measure.reading.(value),
+          name: measure.name,
+          color: measure.color,
+          dashed: (true if measure.dashed),
+          y: (ys[measure_index].(value) unless value.nil?)
+        }.compact
+        next [current] unless measure.previous
+
+        before = measure.previous[index]
+        [current, {value: before.nil? ? "No data" : measure.reading.(before), name: measure.previous_name, color: measure.color,
+                   dotted: true, y: (ys[measure_index].(before) unless before.nil?)}.compact]
+      end
+      tag.rect(
+        y: 0,
+        height: CHART_HEIGHT,
+        fill: "transparent",
+        data: chart_tip(chart_bucket_label(key, per), rows, x: x.(index), note: unsettled_note(key, per, unsettled)),
+        **point_hit(index, keys.size)
+      )
+    end
+    markers = measures.each_with_index.flat_map do |measure, index|
+      known = measure.values.each_index.reject { |i| measure.values[i].nil? }
+      [known.first, known.last].compact.uniq.map do |i|
+        tag.span(class: "pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white",
+          style: "left: #{(x.(i) / CHART_WIDTH * 100).round(2)}%; top: #{(ys[index].(measure.values[i]) / CHART_HEIGHT * 100).round(2)}%; " \
+            "background-color: #{measure.color}", aria: {hidden: true})
+      end
+    end
+    axes = measures.zip(tops).each_with_index.map do |(measure, top), index|
+      measure_axis(measure, top, side: index.even? ? :left : :right, outer: index > 1)
+    end
+
+    tag.figure(class: "min-w-0") do
+      chart_tooltip(label: label, crosshair: true, class: "grid grid-cols-[auto_minmax(0,1fr)_auto]") do
+        safe_join([
+          tag.div(class: "flex") { safe_join(axes.values_at(2, 0).compact) },
+          tag.div(class: "relative min-w-0") do
+            safe_join([
+              tag.svg(viewBox: "0 0 #{CHART_WIDTH} #{CHART_HEIGHT}", preserveAspectRatio: "none", role: "img", aria: {label: label},
+                class: "block h-56 w-full overflow-visible") { safe_join([grid_lines, *previous_lines, *lines.reverse, *hits]) },
+              *markers
+            ])
+          end,
+          tag.div(class: "flex") { safe_join(axes.values_at(1, 3).compact) },
+          tag.span, x_axis(keys, format: ("%b %Y" if per == :month), inset: nil, lines: true), tag.span,
+          tag.span, axis_title(DATE_AXIS_TITLES.fetch(per), class: "text-center"), tag.span
+        ])
+      end
+    end
+  end
+
+  # Bars across rather than up, so long names stay readable. The readout
+  # repeats the name in full because a touch screen never shows a title.
+  # Numbered from first_series so each bar answers to its line in the chart
+  # beside it. Round gridlines so a bar's length can be read off the axis as
+  # well as from its figure.
+  def ranking_chart(rows, label:, total:, x_title:, y_title:, first_series: nil)
+    step, top = axis_scale(rows.map { |_, value, _| value.to_f }.max.to_f)
+    ticks = (0..(top / step).round).map { |index| index * step }
+    columns = "grid grid-cols-[minmax(0,11rem)_1fr] gap-x-3"
+    # Equal-height rows so each bar sits in the same slot whichever card
+    # it's in.
+    tag.figure(class: "flex min-w-0 flex-1 flex-col") do
+      safe_join([
+        tag.div(class: [columns, "mb-1 px-1"], aria: {hidden: true}) { safe_join([axis_title(y_title, class: "truncate text-left"), tag.span]) },
+        chart_tooltip(label: label, class: "flex flex-1 flex-col") do
+          tag.ul(class: "grid flex-1 auto-rows-fr text-xs") do
+            safe_join(rows.each_with_index.map do |(name, value, swatch, color, marker), index|
+              share = share_of_total(value, total)
+              tip = chart_tip(name, [{value: number_with_delimiter(value), name: ("#{share} of total" if share), color: color, marker: marker}.compact])
+              tip = tip.merge(series: first_series + index, action: "click->series-highlight#toggle") if first_series
+              tag.li(class: [columns, "min-h-8 rounded px-1 transition-opacity hover:bg-slate-100 data-active:bg-slate-100", ("cursor-pointer" if first_series)],
+                data: tip) do
+                safe_join([
+                  tag.span(name, title: name, class: "self-center truncate font-medium text-slate-700"),
+                  tag.div(class: "relative flex items-center py-1") do
+                    safe_join([
+                      *ticks.drop(1).map do |tick|
+                        tag.span(class: "absolute inset-y-0 w-px bg-slate-200", style: "left: #{(tick / top * 100).round(2)}%", aria: {hidden: true})
+                      end,
+                      tag.span(class: "absolute inset-y-0 left-0 w-px bg-slate-300", aria: {hidden: true}),
+                      tag.span(class: "absolute top-1/2 -left-1.5 h-px w-1.5 bg-slate-300", aria: {hidden: true}),
+                      tag.div(class: ["relative h-5 shrink-0 rounded-r-sm", swatch], style: "width: #{(value.to_f / top * 100).round(2)}%")
+                    ])
+                  end
+                ], " ")
+              end
+            end)
+          end
+        end,
+        tag.div(class: [columns, "mt-1 px-1 text-xs text-slate-400"], aria: {hidden: true}) do
+          safe_join([
+            tag.span,
+            tag.div(class: "relative h-4") do
+              safe_join(ticks.map do |tick|
+                tag.span(compact_number(tick), style: "left: #{(tick / top * 100).round(2)}%", class: "absolute top-0 -translate-x-1/2 tabular-nums")
+              end)
+            end
+          ])
+        end,
+        tag.div(class: [columns, "px-1"], aria: {hidden: true}) { safe_join([tag.span, axis_title(x_title, class: "text-center")]) }
+      ])
+    end
+  end
+
+  # Two readings of a row as dots joined by a line, so the gap between them
+  # is what's read rather than either figure alone; shaped as well as
+  # coloured so the two are told apart without hue. On a fixed scale, since
+  # a score out of 100 means the same whatever the highest one is.
+  def dumbbell_chart(rows, keys:, label:, x_title:, y_title:, top: 100, ticks: [0, 25, 50, 75, 100])
+    columns = "grid grid-cols-[minmax(0,11rem)_1fr] gap-x-3"
+    left = ->(value) { (value.to_f / top * 100).clamp(0, 100).round(2) }
+    tag.figure(class: "min-w-0") do
+      safe_join([
+        tag.ul(class: "mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600") do
+          safe_join(keys.map do |name, color, marker|
+            tag.li(class: "inline-flex items-center gap-1.5") { safe_join([marker_svg(marker, color, size: 10), name]) }
+          end)
+        end,
+        tag.div(class: [columns, "mb-1 px-1"], aria: {hidden: true}) { safe_join([axis_title(y_title, class: "truncate text-left"), tag.span]) },
+        chart_tooltip(label: label) do
+          tag.ul(class: "grid text-xs") do
+            safe_join(rows.map do |name, values|
+              known = values.compact
+              readings = keys.zip(values).map do |(key, color, marker), value|
+                {value: value.nil? ? "No data" : number_with_delimiter(value.round), name: key, color: color, marker: marker}
+              end
+              readings << {value: number_with_delimiter((known.max - known.min).round), name: "Gap"} if known.size > 1
+              tag.li(class: [columns, "min-h-8 rounded px-1 hover:bg-slate-100 data-active:bg-slate-100"], data: chart_tip(name, readings)) do
+                safe_join([
+                  tag.span(name, title: name, class: "self-center truncate font-medium text-slate-700"),
+                  tag.div(class: "relative h-8") do
+                    safe_join([
+                      *ticks.map { |tick| tag.span(class: "absolute inset-y-0 w-px bg-slate-200", style: "left: #{left.(tick)}%", aria: {hidden: true}) },
+                      (if known.size > 1
+                         tag.span(class: "absolute top-1/2 h-0.5 -translate-y-1/2 bg-slate-400",
+                           style: "left: #{left.(known.min)}%; width: #{(left.(known.max) - left.(known.min)).round(2)}%", aria: {hidden: true})
+                       end),
+                      *keys.zip(values).filter_map do |(_, color, marker), value|
+                        next if value.nil?
+
+                        tag.span(marker_svg(marker, color, size: 10, outline: true), style: "left: #{left.(value)}%", aria: {hidden: true},
+                          class: "pointer-events-none absolute top-1/2 flex -translate-x-1/2 -translate-y-1/2")
+                      end
+                    ].compact)
+                  end
+                ], " ")
+              end
+            end)
+          end
+        end,
+        tag.div(class: [columns, "mt-1 px-1 text-xs text-slate-400"], aria: {hidden: true}) do
+          safe_join([
+            tag.span,
+            tag.div(class: "relative h-4") do
+              safe_join(ticks.map { |tick| tag.span(tick, style: "left: #{left.(tick)}%", class: "absolute top-0 -translate-x-1/2 tabular-nums") })
+            end
+          ])
+        end,
+        tag.div(class: [columns, "px-1"], aria: {hidden: true}) { safe_join([tag.span, axis_title(x_title, class: "text-center")]) }
+      ])
+    end
+  end
+
+  # A point per row, against a dashed curve of what's usual, so a row far
+  # off it stands out. x runs from 1 at the left by default, as a search
+  # position does. The points sit over the SVG rather than in it, so they
+  # stay round however wide the chart is drawn.
+  def scatter_chart(points, label:, x_title:, y_title:, x_max:, x_ticks:, y_tick:, curve: [], key: [], x_min: 1, x_tick: ->(tick) { tick })
+    y_top = round_top([*points.map(&:y), *curve.map(&:last)].compact.max.to_f)
+    left = ->(x) { ((x.to_f - x_min) / (x_max - x_min) * 100).clamp(0, 100).round(2) }
+    top = ->(y) { (100 - y.to_f / y_top * 100).clamp(0, 100).round(2) }
+    line = if curve.size > 1
+      tag.polyline(points: curve.map { |x, y| "#{(left.(x) * CHART_WIDTH / 100).round(2)},#{(top.(y) * CHART_HEIGHT / 100).round(2)}" }.join(" "),
+        fill: "none", stroke: LINE_COLORS.first, "stroke-width": 2, "stroke-dasharray": "4 3", "vector-effect": "non-scaling-stroke",
+        class: "pointer-events-none")
+    end
+    dots = points.map do |point|
+      tag.span(class: "absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 ring-white hover:ring-2 hover:ring-slate-900 " \
+        "data-active:z-10 data-active:ring-2 data-active:ring-slate-900",
+        style: "left: #{left.(point.x)}%; top: #{top.(point.y)}%; background-color: #{point.color}", data: point.tip)
+    end
+    tag.figure(class: "min-w-0") do
+      safe_join([
+        (swatch_legend(key) if key.any?),
+        chart_tooltip(label: label) do
+          tag.div(class: "flex") do
+            safe_join([
+              y_axis_title(y_title, tall: true),
+              y_axis([y_tick.(y_top), y_tick.(y_top / 2.0), y_tick.(0)], tall: true),
+              tag.div(class: "relative min-w-0 flex-1") do
+                safe_join([
+                  tag.svg(viewBox: "0 0 #{CHART_WIDTH} #{CHART_HEIGHT}", preserveAspectRatio: "none", role: "img", aria: {label: label},
+                    class: "block h-56 w-full overflow-visible") { safe_join([grid_lines, line].compact) },
+                  *dots
+                ])
+              end
+            ])
+          end
+        end,
+        tag.div(class: "relative ml-14 h-5.5 border-t border-slate-300 text-xs text-slate-400", aria: {hidden: true}) do
+          safe_join(x_ticks.flat_map do |tick|
+            [tag.span(x_tick.(tick), style: "left: #{left.(tick)}%", class: ["absolute top-1.5 whitespace-nowrap tabular-nums", ("-translate-x-1/2" unless tick == x_min)]),
+             tag.span(class: "absolute top-0 h-1 w-px bg-slate-300", style: "left: #{left.(tick)}%")]
+          end)
+        end,
+        axis_title(x_title, class: "ml-14 text-center")
+      ].compact)
+    end
+  end
+
+  # Log-scaled because a few cells hold most of the views, and a linear
+  # scale would leave the rest the same pale shade.
+  def heat_class(value, max)
+    return "bg-white text-slate-300" if value.to_f.zero?
+
+    HEAT_CLASSES[[(Math.log(value + 1) / Math.log(max + 1) * (HEAT_CLASSES.size - 1)).round, HEAT_CLASSES.size - 1].min]
+  end
+
+  # Apart from chart_frame so a heatmap or a strip of days gets the same
+  # readout as a chart. touch-pan-y so vertical swipes still scroll the page
+  # while sideways ones read across the days.
+  def chart_tooltip(label:, crosshair: false, **options, &block)
+    tag.div(class: ["relative touch-pan-y touch-pinch-zoom rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-400",
+      options[:class]],
+      tabindex: 0, role: "group", aria: {label: "#{label}. Arrow keys read each value."},
+      data: {controller: "chart-tooltip",
+             action: "pointerdown->chart-tooltip#point pointermove->chart-tooltip#point pointerleave->chart-tooltip#leave " \
+               "focus->chart-tooltip#focus blur->chart-tooltip#hide keydown->chart-tooltip#key " \
+               "scroll@document->chart-tooltip#scrolled:capture:passive"}) do
+      safe_join([
+        capture(&block),
+        (tag.span(hidden: true, class: "pointer-events-none absolute w-px bg-slate-400", data: {chart_tooltip_target: "crosshair"}) if crosshair),
+        tag.div(hidden: true, role: "status",
+          class: "pointer-events-none fixed z-50 max-w-xs rounded-md bg-slate-900 px-3 py-2 text-xs shadow-lg",
+          data: {chart_tooltip_target: "tooltip"})
+      ].compact)
+    end
+  end
+
+  # JSON so names reach the page as text, never as markup. A note is read
+  # after the figures, as a caveat on all of them.
+  def chart_tip(title, rows, x: nil, note: nil)
+    {chart_tooltip_target: "hit", tip: {title: title, rows: rows, x: x, note: note}.compact.to_json}
+  end
+
+  # A log scale, since a few countries hold most of the traffic and a linear
+  # one would leave every other country the same pale shade.
+  def world_map(counts, label:, unit:)
+    max = counts.values.max.to_i
+    off_map = counts.reject { |code, count| WorldMap.codes.include?(code) || code == GoogleReportsHelper::UNKNOWN_COUNTRY || count.zero? }
+    tag.figure(class: "min-w-0") do
+      safe_join([
+        chart_tooltip(label: label) do
+          tag.svg(viewBox: "0 0 #{WorldMap.width} #{WorldMap.height}", width: WorldMap.width, height: WorldMap.height,
+            role: "img", aria: {label: label}, class: "h-auto w-full") do
+            safe_join(WorldMap.countries.map do |country|
+              count = counts.fetch(country.code, 0)
+              tag.path(d: country.path, class: [map_fill(count, max), "stroke-white hover:opacity-75 data-active:opacity-75"], "stroke-width": 0.5,
+                data: chart_tip(country.name, [{value: number_with_delimiter(count), name: unit.pluralize(count)}]))
+            end)
+          end
+        end,
+        map_legend(max, unit),
+        (tag.figcaption(class: "mt-1 text-xs text-slate-500") do
+          "Too small for the map: " + off_map.sort_by { |code, count| [-count, code] }
+            .map { |code, count| "#{country_label(code)} #{number_with_delimiter(count)}" }.join(", ")
+        end if off_map.any?)
+      ].compact)
+    end
+  end
+
+  # Shares rather than counts, so a drift in the audience shows as segments
+  # growing or shrinking; inset by a gap so touching colours stay apart.
+  # Countries by default, since that's how views are split; other shares
+  # name their own keys.
+  def share_chart(shares, label:, y_title:, key_label: ->(key) { country_label(key) }, count_name: "view", empty: "No views in this period.")
+    named = shares[:keys]
+    buckets = shares[:buckets]
+    return tag.p(empty, class: "text-sm text-slate-500") if buckets.empty?
+
+    keys = [[:other, SHARE_OTHER_FILL, SHARE_OTHER_COLOR], *named.zip(SHARE_FILLS, SHARE_COLORS)]
+    slot = CHART_WIDTH.to_f / buckets.size
+    bars = buckets.each_with_index.map do |(start, counts), index|
+      total = counts.values.sum.to_f
+      y = CHART_HEIGHT.to_f
+      segments = keys.filter_map do |key, fill, _|
+        height = total.zero? ? 0 : counts.fetch(key, 0) / total * CHART_HEIGHT
+        y -= height
+        next if height.zero?
+
+        tag.rect(x: (index * slot + 2).round(2), y: y.round(2), width: [slot - 4, 1].max.round(2), height: height.round(2),
+          class: [fill, "stroke-white"], "stroke-width": 2, "vector-effect": "non-scaling-stroke")
+      end
+      # Other last so the readout lists countries in the legend's order.
+      rows = keys.rotate.map do |key, _, color|
+        count = counts.fetch(key, 0)
+        {value: total.zero? ? "—" : number_to_percentage(count / total * 100, precision: 1), color: color,
+         name: "#{key == :other ? "Other" : key_label.(key)} · #{number_with_delimiter(count)} #{count_name.pluralize(count)}"}
+      end
+      hit = tag.rect(x: (index * slot).round(2), y: 0, width: slot.round(2), height: CHART_HEIGHT, fill: "transparent",
+        class: "hover:stroke-slate-900 data-active:stroke-slate-900", "stroke-width": 2, "vector-effect": "non-scaling-stroke",
+        data: chart_tip(share_bucket_label(start, shares[:unit]).upcase_first, rows))
+      safe_join([*segments, hit])
+    end
+    tag.figure(class: "min-w-0") do
+      safe_join([
+        share_legend(named, key_label),
+        chart_tooltip(label: label) do
+          tag.div(class: "flex") do
+            safe_join([
+              y_axis_title(y_title),
+              y_axis(%w[100% 50% 0%]),
+              tag.svg(viewBox: "0 0 #{CHART_WIDTH} #{CHART_HEIGHT}", preserveAspectRatio: "none", role: "img", aria: {label: label},
+                class: "h-32 min-w-0 flex-1") { safe_join(bars) }
+            ])
+          end
+        end,
+        x_axis(buckets.keys, format: shares[:unit] == :month ? "%b %Y" : nil),
+        axis_title(DATE_AXIS_TITLES.fetch(shares[:unit]), class: "ml-14 text-center")
+      ])
+    end
+  end
+
+  def share_bucket_label(start, unit)
+    unit == :week ? "Week of #{l(start)}" : l(start, format: "%B %Y")
+  end
+
+  # A share of a whole reads faster as a filled bar than as a percentage.
+  def meter(part, whole, label:)
+    share = whole.to_i.zero? ? 0 : part.to_f / whole * 100
+    tag.div(class: "h-2.5 overflow-hidden rounded-full bg-slate-200", role: "meter", aria: {label: label, valuenow: share.round(1), valuemin: 0, valuemax: 100}) do
+      tag.div(class: "bg-progress-striped h-full rounded-full", style: "width: #{share.round(1)}%")
+    end
+  end
+
+  # Banded at a figure's own limits, so where it falls reads as good,
+  # middling or poor at a glance. The scale runs half as far again past
+  # poor, so a very slow page's mark still sits inside.
+  def threshold_meter(value, good:, poor:, label:)
+    top = poor * 1.5
+    at = ->(figure) { (figure.to_f / top * 100).clamp(0, 100).round(2) }
+    tag.div(class: "relative h-2.5", role: "meter", aria: {label: label, valuenow: value, valuemin: 0, valuemax: top}) do
+      safe_join([
+        tag.div(class: "absolute inset-0 flex overflow-hidden rounded-full", aria: {hidden: true}) do
+          safe_join([
+            tag.span(class: "bg-emerald-200", style: "width: #{at.(good)}%"),
+            tag.span(class: "bg-amber-200", style: "width: #{(at.(poor) - at.(good)).round(2)}%"),
+            tag.span(class: "flex-1 bg-red-200")
+          ])
+        end,
+        tag.span(class: "absolute -inset-y-1 w-1 -translate-x-1/2 rounded-full bg-slate-900 ring-2 ring-white", style: "left: #{at.(value)}%",
+          aria: {hidden: true})
+      ])
+    end
+  end
+
+  private
+
+  # The overlay is HTML because the stretched SVG would squash round marks
+  # out of shape.
+  def chart_frame(keys, max, label, y_title:, x_title: nil, crosshair: false, lines: false, per: :day, overlay: nil)
+    max = [max.to_f, 1].max
+    x_title ||= DATE_AXIS_TITLES.fetch(per) if keys.first.respond_to?(:strftime)
+    tag.figure(class: "min-w-0") do
+      safe_join([
+        chart_tooltip(label: label, crosshair: crosshair) do
+          tag.div(class: "flex") do
+            safe_join([
+              y_axis_title(y_title),
+              y_axis([compact_number(max), compact_number(max / 2.0), "0"]),
+              tag.div(class: "relative min-w-0 flex-1") do
+                safe_join([
+                  tag.svg(viewBox: "0 0 #{CHART_WIDTH} #{CHART_HEIGHT}", preserveAspectRatio: "none", role: "img", aria: {label: label},
+                    class: "block h-32 w-full overflow-visible") { safe_join([grid_lines, yield(max)]) },
+                  overlay&.call(max)
+                ].compact)
+              end
+            ])
+          end
+        end,
+        x_axis(keys, format: ("%b %Y" if per == :month), lines: lines),
+        axis_title(x_title, class: "ml-14 text-center")
+      ])
+    end
+  end
+
+  def axis_title(text, **options)
+    tag.p(text, class: ["text-xs font-medium text-slate-500", options[:class]], style: options[:style], aria: {hidden: true})
+  end
+
+  # Turned to run up the axis, as a printed chart's is, so it takes a
+  # column's width rather than a row's height, and cut short rather than
+  # stretch the chart.
+  def y_axis_title(text, color: nil, tall: false)
+    tag.div(class: ["flex w-4 shrink-0 items-center justify-center", tall ? "h-56" : "h-32"], aria: {hidden: true}) do
+      tag.span(text, title: text, style: ("color: #{color}" if color),
+        class: ["truncate text-xs font-medium text-slate-500 [writing-mode:vertical-rl] rotate-180", tall ? "max-h-56" : "max-h-32"])
+    end
+  end
+
+  # Round steps, so the axis reads in round numbers whatever the largest
+  # value is; whole and never under one, since what's ranked are counts.
+  def axis_scale(max)
+    max = [max.to_f, 1.0].max
+    raw = max / 4
+    magnitude = 10.0**Math.log10(raw).floor
+    step = [[1, 2, 2.5, 5, 10].map { |factor| factor * magnitude }.find { |candidate| candidate >= raw && (candidate % 1).zero? }, 1.0].max
+    [step, (max / step).ceil * step]
+  end
+
+  def map_fill(count, max)
+    return MAP_EMPTY_FILL if count.zero?
+
+    MAP_FILLS[[(Math.log(count + 1) / Math.log(max + 1) * (MAP_FILLS.size - 1)).round, MAP_FILLS.size - 1].min]
+  end
+
+  def map_legend(max, unit)
+    return "".html_safe if max.zero?
+
+    tag.div(class: "mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500") do
+      safe_join([
+        tag.span(class: "inline-flex items-center gap-1") do
+          safe_join([tag.span(class: "h-2.5 w-4 rounded-sm bg-[#f0efec] ring-1 ring-slate-200"), "None"])
+        end,
+        tag.span(class: "inline-flex items-center gap-1") do
+          safe_join([
+            "1",
+            tag.span(class: "flex", aria: {hidden: true}) { safe_join(MAP_SWATCHES.map { |swatch| tag.span(class: "h-2.5 w-4 #{swatch}") }) },
+            "#{compact_number(max)} #{unit.pluralize}"
+          ])
+        end
+      ])
+    end
+  end
+
+  def share_legend(keys, key_label)
+    entries = keys.zip(SHARE_SWATCHES).map { |key, swatch| [key_label.(key), swatch] } + [["Other", SHARE_OTHER_SWATCH]]
+    tag.ul(class: "mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600") do
+      safe_join(entries.map do |name, swatch|
+        tag.li(class: "inline-flex items-center gap-1.5") { safe_join([tag.span(class: "size-2.5 rounded-sm #{swatch}"), name]) }
+      end)
+    end
+  end
+
+  def chart_legend(series, selectable: false, events: nil)
+    tag.ul(class: "mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600") do
+      event_key = tag.li(class: "inline-flex items-center gap-1.5") { safe_join([marker_svg(EVENT_MARKER, EVENT_COLOR, size: 10), events]) } if events
+      safe_join([*series.each_with_index.map do |line, index|
+        swatch =
+          if line.marker
+            marker_svg(line.marker, line.color || LINE_COLORS.fetch(index, LINE_COLORS.last), size: 10)
+          else
+            tag.svg(width: 18, height: 6, aria: {hidden: true}, class: (line_class(index) unless line.color)) do
+              tag.line(x1: 0, x2: 18, y1: 3, y2: 3, stroke: line.color || "currentColor", "stroke-width": 2, "stroke-dasharray": line.dasharray,
+                "stroke-linecap": ("round" if line.dotted))
+            end
+          end
+        key = safe_join([swatch, line.name])
+        tag.li(class: "inline-flex items-center gap-1.5") do
+          next key unless selectable
+
+          tag.button(key, type: "button", title: "Show #{line.name} only", aria: {pressed: false},
+            class: "inline-flex items-center gap-1.5 rounded transition-opacity hover:text-slate-900 aria-pressed:font-semibold aria-pressed:text-slate-900",
+            data: {series: index, series_highlight_target: "toggle",
+                   action: "click->series-highlight#toggle mouseenter->series-highlight#preview mouseleave->series-highlight#restore"})
+        end
+      end, event_key].compact)
+    end
+  end
+
+  # Ticks sit on the gridlines rather than the labels, so each one points at
+  # the exact height its label names.
+  def y_axis(labels, side: :left, color: nil, tall: false)
+    left = side == :left
+    tag.div(class: ["relative flex w-10 shrink-0 flex-col justify-between text-xs tabular-nums", tall ? "h-56" : "h-32", ("text-slate-400" unless color),
+      left ? "border-r border-slate-300 pr-2 text-right" : "border-l border-slate-300 pl-2 text-left"],
+      style: ("color: #{color}" if color), aria: {hidden: true}) do
+      safe_join([
+        *labels.map { |text| tag.span(text) },
+        *%w[top-0 top-1/2 bottom-0].map { |place| tag.span(class: "absolute #{left ? "-right-px" : "-left-px"} #{place} h-px w-1.5 bg-slate-300") }
+      ])
+    end
+  end
+
+  # Titled and labelled in its line's colour, which is all that ties an axis
+  # to its line once there are several.
+  def measure_axis(measure, top, side:, outer:)
+    labels = [top, top / 2.0, 0].map { |value| measure.tick.(value) }
+    labels.reverse! if measure.inverted
+    parts = [y_axis_title(measure.name, color: measure.color, tall: true), y_axis(labels, side: side, color: measure.color, tall: true)]
+    tag.div(class: ["shrink-0", outer ? "hidden sm:flex" : "flex", ("ml-1" if side == :right && outer), ("mr-1" if side == :left && outer)]) do
+      safe_join(side == :left ? parts : parts.reverse)
+    end
+  end
+
+  # Rounded up to a step a reader can halve in their head, at any size,
+  # since a rate's scale runs well below one. A count's top halves to a
+  # whole number, since half a click can't happen.
+  def round_top(max, whole: false)
+    return whole ? 2.0 : 1.0 unless max.positive?
+
+    magnitude = 10.0**Math.log10(max).floor
+    factors = if !whole then [1, 2, 2.5, 5, 10]
+    elsif magnitude < 10 then [2, 4, 6, 8, 10]
+    else [1, 2, 4, 6, 8, 10]
+    end
+    magnitude = [magnitude, 1].max if whole
+    # The tolerance stops float error bumping an exact step up to the next.
+    factors.map { |factor| factor * magnitude }.find { |candidate| candidate >= max * (1 - 1e-9) }
+  end
+
+  # A day without data breaks the line, so a missing import doesn't read as
+  # a day with nothing in it.
+  def line_runs(values)
+    values.each_with_index.chunk_while { |(a, _), (b, _)| !a.nil? && !b.nil? }.reject { |run| run.first.first.nil? }
+  end
+
+  # Categories get every label since each bar is its own bucket. A date
+  # label is pinned inside only where centring would cut it off at the
+  # card's edge, so a few weeks or months still sit under their points; its
+  # tick stays on the mark so a pinned label still points at its point.
+  def x_axis(keys, format: nil, inset: "ml-14", lines: false)
+    return "".html_safe if keys.empty?
+
+    unless keys.first.respond_to?(:strftime)
+      return tag.div(class: ["relative flex border-t border-slate-300 pt-1.5 text-xs text-slate-400", inset], aria: {hidden: true}) do
+        safe_join([
+          *keys.map { |key| tag.span(key.to_s, class: "flex-1 truncate text-center") },
+          *keys.each_index.map { |index| x_tick(index, keys.size) }
+        ])
+      end
+    end
+
+    format ||= keys.first.year == keys.last.year ? "%-d %b" : "%-d %b %Y"
+    ticks = tick_indexes(keys.size)
+    # Only the ends and the middle on a phone, where six dates run into
+    # each other.
+    narrow = [ticks.first, ticks[ticks.size / 2], ticks.last]
+    tag.div(class: ["relative h-5.5 border-t border-slate-300 text-xs text-slate-400", inset], aria: {hidden: true}) do
+      safe_join(ticks.flat_map do |index|
+        center = x_percent(index, keys.size, lines)
+        pinned = if center < EDGE_LABEL_ROOM then :left elsif center > 100 - EDGE_LABEL_ROOM then :right end
+        position = {left: "left: 0%", right: "right: 0%"}.fetch(pinned, "left: #{center}%")
+        hidden = ("max-sm:hidden" unless narrow.include?(index))
+        [tag.span(l(keys[index], format: format), style: position,
+          class: ["absolute top-1.5 whitespace-nowrap", ("-translate-x-1/2" unless pinned), hidden]),
+         x_tick(index, keys.size, lines: lines, class: hidden)]
+      end)
+    end
+  end
+
+  def x_tick(index, size, lines: false, **options)
+    tag.span(class: ["absolute top-0 h-1 w-px bg-slate-300", options[:class]], style: "left: #{x_percent(index, size, lines)}%")
+  end
+
+  # Bars each fill a slot, so they're marked at its middle; lines run from
+  # axis to axis, so their first and last points sit on the axes.
+  def x_percent(index, size, lines)
+    lines ? (point_x(index, size) / CHART_WIDTH * 100).round(2) : ((index + 0.5) / size * 100).round(2)
+  end
+
+  # A lone point has no line to run, so it's centred.
+  def point_x(index, size)
+    size > 1 ? (index * CHART_WIDTH.to_f / (size - 1)).round(2) : CHART_WIDTH / 2.0
+  end
+
+  # Reaches halfway to each neighbour, so the nearest point is the one read;
+  # the ends stop at the axes.
+  def point_hit(index, size)
+    half = size > 1 ? CHART_WIDTH.to_f / (size - 1) / 2 : CHART_WIDTH / 2.0
+    from = [point_x(index, size) - half, 0.0].max
+    to = [point_x(index, size) + half, CHART_WIDTH].min
+    {x: from.round(2), width: (to - from).round(2)}
+  end
+
+  # A whole number of points apart, so every gap between labels is the same
+  # width. Both ends when a step divides the axis into enough labels;
+  # otherwise counted back from the latest, the point most often looked for.
+  def tick_indexes(size)
+    last = size - 1
+    return [0] if last.zero?
+
+    shortest = (last / (MAX_TICKS - 1.0)).ceil
+    step = (shortest..last).find { |gap| (last % gap).zero? && last / gap + 1 >= MIN_TICKS }
+    step ? 0.step(last, step).to_a : last.step(0, -shortest).to_a.reverse
+  end
+
+  # No zero line, because the x axis border beneath already draws one.
+  def grid_lines
+    safe_join([0, CHART_HEIGHT / 2].map do |y|
+      tag.line(x1: 0, x2: CHART_WIDTH, y1: y, y2: y, stroke: "currentColor", class: "text-slate-200", "vector-effect": "non-scaling-stroke")
+    end)
+  end
+
+  # Hit areas are the full column height, so a short bar is as easy to hover
+  # as a tall one.
+  def bar_marks(points, max, unit, per, events = {}, event_name = nil, unsettled: nil)
+    slot = CHART_WIDTH.to_f / [points.size, 1].max
+    gap = [slot * 0.2, 2].min
+    safe_join(points.each_with_index.map do |(key, value), index|
+      height = value.to_f / max * CHART_HEIGHT
+      reading = value.nil? ? "No data" : "#{number_with_delimiter(value)}#{unit}"
+      title = chart_bucket_label(key, per)
+      rows = [{value: reading, color: BAR_COLOR}] + events.fetch(key, []).map { |name| {value: event_name, name: name, color: EVENT_COLOR, marker: EVENT_MARKER} }
+      tag.g(class: "group", data: chart_tip(title, rows, note: unsettled_note(key, per, unsettled))) do
+        safe_join([
+          tag.rect(x: (index * slot).round(2), y: 0, width: slot.round(2), height: CHART_HEIGHT, fill: "transparent"),
+          tag.rect(x: (index * slot + gap / 2).round(2), y: (CHART_HEIGHT - height).round(2), width: (slot - gap).round(2),
+            height: height.round(2), class: "fill-slate-600 group-hover:fill-slate-900 group-data-active:fill-slate-900")
+        ])
+      end
+    end)
+  end
+
+  # Parts are inset by a gap, so touching colours stay apart; a day with no
+  # data has no bar and no readout, so it isn't read as a day of none.
+  def stacked_marks(keys, series, max, per, titles = nil, unsettled: nil)
+    slot = CHART_WIDTH.to_f / [keys.size, 1].max
+    gap = [slot * 0.2, 2].min
+    safe_join(keys.each_with_index.filter_map do |key, index|
+      next if series.all? { |part| part.values[index].nil? }
+
+      y = CHART_HEIGHT.to_f
+      parts = series.filter_map do |part|
+        height = part.values[index].to_f / max * CHART_HEIGHT
+        y -= height
+        next if height.zero?
+
+        tag.rect(x: (index * slot + gap / 2).round(2), y: y.round(2), width: (slot - gap).round(2), height: height.round(2), fill: part.color,
+          class: "stroke-white", "stroke-width": 1, "vector-effect": "non-scaling-stroke")
+      end
+      rows = series.map { |part| {value: number_with_delimiter(part.values[index].to_i), name: part.name, color: part.color} }
+      tag.g(class: "group", data: chart_tip(titles&.at(index) || chart_bucket_label(key, per), rows, note: unsettled_note(key, per, unsettled))) do
+        safe_join([
+          tag.rect(x: (index * slot).round(2), y: 0, width: slot.round(2), height: CHART_HEIGHT, fill: "transparent",
+            class: "group-hover:fill-slate-900/5 group-data-active:fill-slate-900/5"),
+          *parts
+        ])
+      end
+    end)
+  end
+
+  def event_legend(name)
+    tag.ul(class: "mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600") do
+      tag.li(class: "inline-flex items-center gap-1.5") { safe_join([marker_svg(EVENT_MARKER, EVENT_COLOR, size: 10), name]) }
+    end
+  end
+
+  def swatch_legend(entries)
+    tag.ul(class: "mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600") do
+      safe_join(entries.map do |name, color|
+        tag.li(class: "inline-flex items-center gap-1.5") { safe_join([tag.span(class: "size-2.5 rounded-sm", style: "background-color: #{color}"), name]) }
+      end)
+    end
+  end
+
+  # The first series is filled beneath, so the main figure stands out from
+  # the ones it's compared against.
+  def line_marks(keys, series, max, unit, per, events = {}, event_name = nil, unsettled: nil)
+    x = ->(index) { point_x(index, keys.size) }
+    y = ->(value) { (CHART_HEIGHT - value.to_f / max * CHART_HEIGHT).round(2) }
+    lines = series.each_with_index.flat_map do |line, index|
+      line_runs(line.values).map do |run|
+        tag.polyline(points: run.map { |value, i| "#{x.(i)},#{y.(value)}" }.join(" "), fill: "none", stroke: line.color || "currentColor",
+          "stroke-width": 2, "stroke-linejoin": "round", "stroke-dasharray": line.dasharray, "stroke-linecap": ("round" if line.dotted),
+          "vector-effect": "non-scaling-stroke", class: [(line_class(index) unless line.color), "pointer-events-none transition-opacity"],
+          data: {series: index, series_line: ""})
+      end
+    end
+    # Broken where the line is, so a day without data isn't shaded as none.
+    areas = line_runs(series.first.values).map do |run|
+      tag.polygon(points: "#{x.(run.first.last)},#{CHART_HEIGHT} #{run.map { |value, i| "#{x.(i)},#{y.(value)}" }.join(" ")} #{x.(run.last.last)},#{CHART_HEIGHT}",
+        class: "fill-slate-200/60 transition-opacity", data: {series: 0})
+    end
+    # One readout per day for every series, so no line has to be hit to be
+    # read.
+    hits = keys.each_with_index.map do |key, index|
+      rows = series.each_with_index.map do |line, line_index|
+        value = line.values[index]
+        {value: value.nil? ? "No data" : "#{number_with_delimiter(value)}#{unit}", name: (line.name if series.size > 1 || events.any?),
+         color: line.color || LINE_COLORS.fetch(line_index, LINE_COLORS.last), dashed: (true if line.dashed), dotted: (true if line.dotted),
+         marker: line.marker, y: (y.(value) unless value.nil?)}.compact
+      end
+      rows += events.fetch(key, []).map { |name| {value: event_name, name: name, color: EVENT_COLOR, marker: EVENT_MARKER} }
+      tag.rect(**point_hit(index, keys.size), y: 0, height: CHART_HEIGHT, fill: "transparent",
+        data: chart_tip(chart_bucket_label(key, per), rows, x: x.(index), note: unsettled_note(key, per, unsettled)))
+    end
+    safe_join([*areas, *lines.reverse, *hits])
+  end
+
+  # So a line's ends are found at a glance and a line of one point still
+  # shows.
+  def line_end_markers(keys, series, max)
+    safe_join(series.each_with_index.flat_map do |line, index|
+      known = line.values.each_index.reject { |i| line.values[i].nil? }
+      [known.first, known.last].compact.uniq.map do |i|
+        position = "left: #{x_percent(i, keys.size, true)}%; top: #{(100 - line.values[i].to_f / max * 100).round(2)}%"
+        color = line.color || LINE_COLORS.fetch(index, LINE_COLORS.last)
+        if line.marker
+          tag.span(marker_svg(line.marker, color, size: 10, outline: true),
+            class: "pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 transition-opacity", style: position, data: {series: index}, aria: {hidden: true})
+        else
+          tag.span(class: "pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white transition-opacity",
+            style: "#{position}; background-color: #{color}", data: {series: index}, aria: {hidden: true})
+        end
+      end
+    end)
+  end
+
+  # On the axis rather than the line, so a mark never hides a point; the
+  # day's readout names what happened.
+  def event_markers(keys, events, lines: true)
+    safe_join(events.keys.map do |key|
+      tag.span(marker_svg(EVENT_MARKER, EVENT_COLOR, size: 10, outline: true),
+        class: "pointer-events-none absolute bottom-0.5 flex -translate-x-1/2", style: "left: #{x_percent(keys.index(key), keys.size, lines)}%",
+        data: {event: ""}, aria: {hidden: true})
+    end)
+  end
+
+  # Outlined in white on a line, so it stands clear of the lines it sits on.
+  def marker_svg(marker, color, size:, outline: false)
+    tag.svg(width: size, height: size, viewBox: "-1 -1 12 12", class: "shrink-0 overflow-visible", aria: {hidden: true}) do
+      tag.path(d: MARKERS.fetch(marker), fill: color, stroke: ("#fff" if outline), "stroke-width": (2 if outline), "paint-order": ("stroke" if outline))
+    end
+  end
+
+  def line_class(index)
+    index.zero? ? "text-slate-800" : "text-slate-400"
+  end
+
+  def chart_key_label(key)
+    key.respond_to?(:strftime) ? l(key, format: "%a, %-d %b %Y") : key.to_s
+  end
+
+  # So a week's or month's readout doesn't look like a single day's.
+  def chart_bucket_label(key, per)
+    return chart_key_label(key) unless key.respond_to?(:strftime)
+
+    case per
+    when :hour then key.strftime("%a, %-d %b %Y, %H:00 %Z")
+    when :week then "Week of #{l(key)}"
+    when :month then l(key, format: "%B %Y")
+    else chart_key_label(key)
+    end
+  end
+
+  # A week or month counts as unsettled once any of its days is, so a total
+  # still being added to doesn't read as final; an hour by the day it's in.
+  def unsettled_note(key, per, unsettled)
+    return unless unsettled && key.respond_to?(:to_date)
+
+    last = case per
+    when :week then key.to_date + 6
+    when :month then key.to_date.end_of_month
+    else key.to_date
+    end
+    UNSETTLED_NOTE if last >= unsettled
+  end
+end

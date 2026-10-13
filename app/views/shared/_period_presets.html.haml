@@ -1,0 +1,53 @@
+-# Shared so every period bar looks and behaves alike. One button naming
+-# the span showing, like the compare and country buttons beside it, with
+-# every span in its menu: days, then quarters, then months, and picked
+-# dates last.
+- custom = period.custom?
+- button_class = "group inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 tabular-nums shadow-sm hover:bg-slate-50 aria-expanded:bg-slate-50"
+- link_class = "flex items-center justify-between gap-3 rounded-md px-3 py-2 hover:bg-slate-100"
+- control_class = "h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+- hidden = keep.compact.map(&:query).reduce({}, :merge).except(:from, :to, :page).merge(period.compare_query)
+
+%div{class: "relative inline-flex", data: {controller: "dropdown", action: "keydown->dropdown#closeWithKeyboard turbo:before-cache@document->dropdown#close"}}
+  %button{type: "button", class: button_class, aria: {expanded: "false", controls: "period-menu", haspopup: "true"},
+    data: {action: "dropdown#toggle", dropdown_target: "button"}}
+    = icon("calendar", size: 14, class: "text-slate-400")
+    %span{class: "sr-only"} Period:
+    = custom ? "Custom" : Period.preset_label(period.preset)
+    = icon("chevron-down", size: 14, class: "text-slate-400 transition-transform duration-150 group-aria-expanded:rotate-180")
+  %div{id: "period-menu", hidden: true, data: {dropdown_target: "menu"},
+    class: "absolute top-full z-20 mt-2 w-72 rounded-lg border border-slate-200 bg-white p-1.5 text-sm shadow-lg"}
+    %nav{aria: {label: "Period"}}
+      - Period::PRESETS.slice_before { |preset| [:this_quarter, :last_3_months].include?(preset) }.each_with_index do |group, index|
+        %ul{class: ("mt-1 border-t border-slate-100 pt-1" if index.positive?)}
+          - group.each do |preset|
+            - current = period.preset?(preset)
+            %li
+              -# Figures are stored a day at a time, so the shortest span is a whole day.
+              = link_to list_url(*keep, **period.preset_query(preset)), aria: {current: (current ? "true" : nil)},
+                title: {1 => "Yesterday; figures are stored a day at a time, and Google fills in recent days late",
+                  today: "Today so far; figures are still coming in, and Google's may not have arrived yet"}[preset],
+                class: [link_class, current ? "font-medium text-slate-900" : "text-slate-700"] do
+                = Period.preset_label(preset)
+                = icon("check", size: 14, class: "text-slate-500") if current
+
+    -# Picked dates open on the form, so what the report shows can be
+    -# nudged rather than typed again.
+    %div{class: "mt-1 border-t border-slate-100 pt-1", data: {controller: "disclosure"}}
+      %button{type: "button", aria: {expanded: custom.to_s, controls: "custom-period"},
+        class: ["group flex w-full items-center justify-between rounded-md px-3 py-2 hover:bg-slate-100", custom ? "font-medium text-slate-900" : "text-slate-700"],
+        data: {action: "disclosure#toggle", disclosure_target: "button"}}
+        Custom range…
+        = icon("chevron-down", size: 14, class: "text-slate-400 transition-transform group-aria-expanded:rotate-180")
+      %div{id: "custom-period", hidden: !custom, class: "px-3 pt-1 pb-2", data: {disclosure_target: "panel"}}
+        = form_with url: request.path, method: :get, class: "grid gap-2" do
+          - hidden.each do |name, value|
+            = hidden_field_tag name, value, id: nil
+          = label_tag :from, class: "grid gap-1 text-xs text-slate-500" do
+            From
+            = date_field_tag :from, period.from, max: Date.current, class: control_class
+          = label_tag :to, class: "grid gap-1 text-xs text-slate-500" do
+            To
+            = date_field_tag :to, period.to, max: Date.current, class: control_class
+          %button{type: "submit", class: "inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white shadow-sm hover:bg-slate-700"}
+            Apply

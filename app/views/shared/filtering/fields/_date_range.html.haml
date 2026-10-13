@@ -1,0 +1,9 @@
+-# Native date inputs so the browser handles entry and the format is fixed.
+%fieldset{class: "sm:col-span-2"}
+  %legend{class: label_class}= date_range.label
+  %div{class: "flex items-center gap-2"}
+    = label_tag date_range.from_param, "#{date_range.label} from", class: "sr-only"
+    = date_field_tag date_range.from_param, filtering.values[date_range.from_param], class: control_class
+    %span{class: "text-sm text-slate-400", aria: {hidden: "true"}} to
+    = label_tag date_range.to_param, "#{date_range.label} to", class: "sr-only"
+    = date_field_tag date_range.to_param, filtering.values[date_range.to_param], class: control_class
