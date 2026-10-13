@@ -63,13 +63,47 @@ everyone out, and login attempts are limited to 10 per 3 minutes. See
 Shown as `12 Mar, 2026`, and times as `12 Mar, 2026 12:00 IST`
 ([config/locales/en.rb](config/locales/en.rb)). The app's time zone is IST
 (`config.time_zone`), so anything picked or grouped by day counts IST
-days; MongoDB still stores UTC.
+days; MongoDB still stores UTC. CSV exports keep ISO 8601 UTC timestamps so
+spreadsheets read them unambiguously.
 
 ## Navigation
 
 The top nav is defined in [config/navigation.yml](config/navigation.yml):
 plain links, or dropdowns grouped by where the data comes from. Adding a
 page means adding its named route there.
+
+## List pages
+
+Index pages build their lists from independent, server-side pieces in
+[lib/](lib/), each with a view helper:
+
+| Piece | Reads params | View helper |
+|---|---|---|
+| [`Filtering`](lib/filtering.rb) — search fields ([`Contains`](lib/filtering/contains.rb), [`DateRange`](lib/filtering/date_range.rb), [`Select`](lib/filtering/select.rb)) and [`Tabs`](lib/filtering/tabs.rb) | per field, e.g. `q`, `modified_from` | `search_panel`, `filter_tabs` |
+| [`Sorting`](lib/sorting.rb) — whitelisted columns | `sort`, `direction` | `sort_header` |
+| [`Pagination`](lib/pagination.rb) — page and page size | `page`, `per` | `pagination_nav` |
+
+```ruby
+# controller
+@filtering = Filtering.new(params, fields: [ Filtering::Contains.new(:q, field: :title, label: "Title contains") ])
+@sorting = Sorting.new(params, columns: { "title" => "asc", "created_at" => "desc" })
+@pagination = Pagination.new(@sorting.apply(@filtering.apply(Post.all)), params, per_page_options: [ 25, 50 ])
+```
+
+```haml
+-# view: `keep:` lists the other pieces whose params each control's links preserve
+= search_panel @filtering, keep: [ @sorting, @pagination ]
+= sort_header @sorting, "Title", "title", keep: [ @filtering, @pagination ]
+= pagination_nav @pagination, keep: [ @filtering, @sorting ]
+```
+
+Every list page also answers `.csv` with all matching rows (not just the
+current page), linked as **Export CSV** via
+`list_url(@filtering, @sorting, format: :csv)` and built by the model's
+`to_csv`.
+
+See [app/controllers/crawled_pages_controller.rb](app/controllers/crawled_pages_controller.rb)
+for a full example.
 
 ## Configuration
 

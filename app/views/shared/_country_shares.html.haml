@@ -1,0 +1,5 @@
+-# Always every country, since a share is of all of them.
+- shares = stats.country_shares
+= render "shared/shares", id: "country-shares", title: "Country share by #{shares[:unit]}", icon: "bar-chart", shares: shares,
+  split: "country", y_title: "Share of views",
+  note: "The period's five busiest countries keep the same colour in every bar; Unknown is counted in Other."
