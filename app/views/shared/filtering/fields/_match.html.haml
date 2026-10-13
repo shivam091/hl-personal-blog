@@ -1,0 +1,12 @@
+-# How it matches sits beside the label, so the box keeps its full width.
+-# The row is held to a label's height, so the box lines up with the other
+-# fields' boxes.
+%div
+  %div{class: "mb-1.5 flex h-4 items-center justify-between gap-2"}
+    = label_tag match.name, match.label, class: "text-xs font-medium text-slate-600"
+    = label_tag match.match_param, "How #{match.label.downcase} matches", class: "sr-only"
+    = picker_select_tag match.match_param, options_for_select([%w[contains contains], %w[exactly exact]], filtering.values[match.match_param] || "contains"),
+      class: "h-6 rounded border-0 bg-transparent px-1.5 py-0 text-left text-xs text-slate-600 hover:bg-slate-100 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+  %div{class: "relative"}
+    = icon("search", class: "pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400")
+    = search_field_tag match.name, filtering.values[match.name], placeholder: match.placeholder, class: "#{control_class} pl-9"
