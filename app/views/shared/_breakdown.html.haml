@@ -1,0 +1,34 @@
+-# Shares are of the full total even when only the top rows are shown, so a
+-# shortened list doesn't overstate the leaders.
+- rows = ranked_counts(counts)
+- previous = local_assigns[:previous]
+- metric = local_assigns.fetch(:metric, DashboardHelper::HIGHER_IS_BETTER)
+- if rows.empty?
+  %p{class: "text-sm text-slate-500"}= empty
+- else
+  - total = rows.sum(&:last)
+  - shown = local_assigns[:limit] ? rows.first(limit) : rows
+  %div{class: "inner-table"}
+    %table
+      %thead
+        %tr
+          %th{scope: "col", class: "w-1/4 text-left"}= heading
+          %th{scope: "col", class: "w-1/4 text-right"}= count_heading
+          %th{scope: "col", class: "w-1/2 text-right"} Share
+      %tbody
+        - shown.each do |key, count|
+          - share = total.zero? ? 0 : count.to_f * 100 / total
+          %tr
+            %th{scope: "row", class: "text-left font-medium"}= key
+            - if previous
+              %td{class: "text-right tabular-nums whitespace-nowrap"}
+                = number_with_delimiter(count)
+                %div= row_change(count, previous[key], metric)
+            - else
+              %td{class: "text-right tabular-nums"}= number_with_delimiter(count)
+            %td
+              %div{class: "flex items-center gap-3"}
+                %div{class: "flex-1"}= meter(count, total, label: "Share of #{key}")
+                %span{class: "w-14 shrink-0 text-right tabular-nums"}= number_to_percentage(share, precision: 1)
+  - if shown.size < rows.size
+    %p{class: "mt-2 px-1 text-xs text-slate-500"} +#{rows.size - shown.size} more

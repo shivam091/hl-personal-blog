@@ -1,0 +1,10 @@
+- tabs = filtering.tabs
+- add_breadcrumb(tabs.choices.fetch(filtering.tab).first) if filtering.tab
+%nav{class: "mb-4 flex flex-wrap gap-1 text-sm", aria: {label: tabs.label}}
+  - tabs.options.each do |label, key|
+    - current = filtering.tab == key
+    = link_to list_url(filtering, *keep, tabs.name => key),
+      class: ["rounded-md px-3 py-1.5", current ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"],
+      aria: {current: (current ? "page" : nil)} do
+      = label
+      %span{class: ["ml-1 tabular-nums", current ? "text-slate-300" : "text-slate-400"]}= number_with_delimiter(counts[key])
