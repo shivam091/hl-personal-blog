@@ -1,0 +1,106 @@
+- content_for :title, "Sync requests"
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} Sync requests
+  %p{class: "mt-1 text-sm text-slate-500"}
+    Every sync, whether started from a page, a background job or a scheduled rake task. Resync runs one again over
+    the same range.
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", message: (@filtering.filtered? ? "No sync requests match." : "No syncs recorded yet."),
+    icon: (@filtering.filtered? ? "search" : "inbox")
+- else
+  -# The row checkboxes join this form through their form attribute, since
+  -# each row's own buttons are forms and forms can't nest.
+  %div{data: {controller: "bulk-select", bulk_select_one_value: "sync request", bulk_select_many_value: "sync requests",
+    bulk_select_confirm_value: "Delete {items}? This can't be undone."}}
+    = form_with url: destroy_selected_sync_requests_path, method: :delete, id: "bulk-delete",
+      class: "mb-3 flex items-center justify-between gap-3", data: {bulk_select_target: "form", turbo_confirm: "Delete the selected sync requests? This can't be undone."} do
+      %p{class: "text-sm text-slate-600", aria: {live: "polite"}, data: {bulk_select_target: "count"}}
+        No sync requests selected
+      %button{type: "submit", disabled: true, data: {bulk_select_target: "submit"},
+        class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:bg-white"}
+        = icon("trash", size: 14)
+        Delete selected
+
+    %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"}
+      %table{class: "w-full border-collapse text-left text-sm"}
+        %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+          %tr
+            %th{scope: "col", class: "w-0 py-2.5 pr-1 pl-3"}
+              %input{type: "checkbox", class: "block size-4 rounded border-slate-300 accent-slate-900",
+                aria: {label: "Select all sync requests on this page"},
+                data: {bulk_select_target: "all", action: "bulk-select#toggleAll"}}
+            %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", aria: {label: "Row number"}} #
+            - sort_keep = [@filtering, @pagination]
+            = sort_header @sorting, "Requested", "created_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+            = sort_header @sorting, "Section", "kind", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+            %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Scope
+            = sort_header @sorting, "Status", "status", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+            %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Result
+            = sort_header @sorting, "Finished", "finished_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+            %th{scope: "col", class: "px-3 py-2.5"}
+              %span{class: "sr-only"} Actions
+        %tbody
+          - @sync_requests.each.with_index(@pagination.first_item) do |sync_request, number|
+            %tr{class: "border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50 has-checked:bg-slate-100"}
+              %td{class: "py-2 pr-1 pl-3"}
+                %input{type: "checkbox", name: "ids[]", value: sync_request.id, form: "bulk-delete",
+                  class: "block size-4 rounded border-slate-300 accent-slate-900",
+                  aria: {label: "Select the #{sync_request} from #{l(sync_request.created_at)}"},
+                  data: {bulk_select_target: "item", action: "bulk-select#update"}}
+              %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= number_with_delimiter(number)
+              %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}
+                %time{datetime: sync_request.created_at.iso8601}= l(sync_request.created_at)
+                %div{class: "text-xs text-slate-400"}= sync_request.trigger_label
+              %td{class: "px-3 py-2"}
+                = link_to sync_request.section, public_send(sync_request.kind_info.page),
+                  class: "font-medium whitespace-nowrap text-slate-900 hover:underline"
+                %div{class: "text-xs text-slate-500"}= sync_request.source
+              %td{class: "px-3 py-2 text-slate-600"}= sync_scope(sync_request)
+              %td{class: "px-3 py-2"}= sync_status_badge(sync_request)
+              %td{class: "px-3 py-2 text-slate-600"}
+                - if sync_request.rows
+                  %div{class: "whitespace-nowrap tabular-nums"}= sync_counts(sync_request)
+                - elsif sync_request.error_messages.empty?
+                  %span{class: "text-slate-400"} —
+                - if sync_request.error_messages.any?
+                  -# Collapsed, since one failing batch can hold dozens of
+                  -# errors and would stretch the row. Wrapped, unlike the
+                  -# table's figures, since a message is read, not scanned
+                  -# down a column.
+                  %details{class: "mt-0.5 max-w-md min-w-80 text-xs whitespace-normal text-red-700"}
+                    %summary{class: "cursor-pointer"}
+                      = icon("alert-circle", size: 12, class: "inline")
+                      = pluralize(sync_request.error_count, "error")
+                    %ul{class: "mt-1 list-disc space-y-0.5 pl-4 break-words"}
+                      - sync_request.error_messages.each do |message|
+                        %li= message
+                      - if sync_request.error_count > sync_request.error_messages.size
+                        %li{class: "list-none text-red-500"} and #{sync_request.error_count - sync_request.error_messages.size} more
+              %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}
+                - if sync_request.finished_at
+                  %time{datetime: sync_request.finished_at.iso8601}= l(sync_request.finished_at)
+                  %div{class: "text-xs text-slate-400"} took #{sync_duration(sync_request)}
+                - else
+                  %span{class: "text-slate-400"} —
+              %td{class: "px-3 py-2"}
+                %div{class: "flex items-center justify-end gap-1"}
+                  -# Not offered while it's still running, since a second run
+                  -# would only be skipped by the sync lock.
+                  - unless sync_request.in_progress?
+                    = button_to resync_sync_request_path(sync_request), title: "Resync",
+                      form: {data: {turbo_confirm: "Run the #{sync_request} again (#{sync_scope(sync_request)})?"}},
+                      class: "inline-flex rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                      aria: {label: "Resync the #{sync_request} from #{l(sync_request.created_at)}"} do
+                      = icon("refresh")
+                  = button_to sync_request_path(sync_request), method: :delete, title: "Delete",
+                    form: {data: {turbo_confirm: "Delete the #{sync_request} from #{l(sync_request.created_at)}? This can't be undone."}},
+                    class: "inline-flex rounded-md p-1.5 text-red-600 hover:bg-red-50 hover:text-red-700",
+                    aria: {label: "Delete the #{sync_request} from #{l(sync_request.created_at)}"} do
+                    = icon("trash")
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]

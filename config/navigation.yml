@@ -8,3 +8,19 @@ shared:
     - label: Dashboard
       icon: home
       route: root
+
+    - label: Monitoring
+      icon: activity
+      items:
+        - label: Request logs
+          icon: list
+          route: request_logs
+        - label: Sync requests
+          icon: refresh
+          route: sync_requests
+        - label: Export requests
+          icon: download
+          route: export_requests
+        - label: External calls
+          icon: send
+          route: external_calls
