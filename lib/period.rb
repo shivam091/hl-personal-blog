@@ -1,0 +1,200 @@
+# encoding: UTF-8
+
+# Daily figures only mean something over a span of days, so a report always
+# covers one rather than being empty until dates are picked.
+class Period
+  # Days back from yesterday, and today to see what's come in so far; then
+  # calendar quarters and the year so far, since figures are often read a
+  # quarter or a year at a time; then months back from yesterday, up to the
+  # 16 Google keeps.
+  PRESETS = [:today, 1, 7, 28, :this_quarter, :last_quarter, :this_year, *[3, 6, 8, 12, 16].map { |months| :"last_#{months}_months" }].freeze
+  MONTHS = /\Alast_(\d+)_months\z/
+  DEFAULT_DAYS = 28
+  # What a period's figures are judged against, the period before unless
+  # another is picked, so a figure can be read as better or worse at once. A
+  # year back takes out the season a span falls in; only possible here past
+  # 16 months because figures are kept for longer. Another country is the
+  # same dates, so the difference is the audience rather than the time.
+  COMPARES = {
+    "previous" => "Previous period",
+    "year" => "Same period last year",
+    "country" => "Another country",
+    "off" => "Off"
+  }.freeze
+  DEFAULT_COMPARE = "previous"
+
+  # The country a compared period's figures come from instead of the page's
+  # own filter.
+  attr_reader :from, :to, :default_days, :compare, :compare_country, :country
+
+  def initialize(params, default_days: DEFAULT_DAYS, today: Date.current, countries: false, country: nil)
+    @default_days = default_days
+    @today = today
+    @countries = countries
+    @country = country
+    @compare = params[:compare].presence_in(COMPARES.keys) || DEFAULT_COMPARE
+    @compare_country = params[:vs].to_s.upcase if @compare == "country"
+    # Only pages filtered by country can draw one's figures, and a country
+    # has to be named to be compared with.
+    @compare = DEFAULT_COMPARE if @compare == "country" && !(countries && @compare_country&.match?(/\A[A-Z]{2}\z/))
+    @compare_country = nil unless @compare == "country"
+    @to = parse(params[:to]) || last_full_day
+    @from = parse(params[:from]) || @to - (default_days - 1)
+    # Dates typed the wrong way round still mean the days between them.
+    @from, @to = @to, @from if @from > @to
+  end
+
+  # Cached figures are keyed on this, as a compared country's share its dates.
+  def key
+    [from, to, country]
+  end
+
+  def countries?
+    @countries
+  end
+
+  def apply(scope)
+    scope.where(date: from..to)
+  end
+
+  def days
+    (to - from).to_i + 1
+  end
+
+  # So a figure can be judged as better or worse, not just read as a number.
+  # A whole calendar year, quarter or month is compared with the one before,
+  # however many days each has. A year back keeps the same dates, a 29
+  # February becoming the 28th.
+  def previous
+    return Period.new({from: from.iso8601, to: to.iso8601}, default_days: default_days, today: @today, country: compare_country) if compare_countries?
+    return Period.new({from: from.prev_year.iso8601, to: to.prev_year.iso8601}, default_days: default_days, today: @today) if year_on_year? || year_so_far?
+
+    before = from - 1
+    {beginning_of_year: :end_of_year, beginning_of_quarter: :end_of_quarter, beginning_of_month: :end_of_month}.each do |start, finish|
+      if from == from.public_send(start) && to == from.public_send(finish)
+        return Period.new({from: before.public_send(start).iso8601, to: before.iso8601}, default_days: default_days, today: @today)
+      end
+    end
+
+    Period.new({from: (from - days).iso8601, to: (from - 1).iso8601}, default_days: default_days, today: @today)
+  end
+
+  class << self
+    def months(preset)
+      preset.to_s[MONTHS, 1].to_i
+    end
+
+    # Named as Google's own date pickers name their shortest span, so it reads
+    # the same here as in Google's reports.
+    def preset_label(preset)
+      case preset
+      when :today then "Today"
+      when 1 then "Yesterday"
+      when :this_quarter then "This quarter"
+      when :last_quarter then "Last quarter"
+      when :this_year then "This year"
+      when MONTHS then "Last #{months(preset)} months"
+      else "#{preset} days"
+      end
+    end
+  end
+
+  def preset?(preset)
+    [from, to] == preset_range(preset)
+  end
+
+  # Dates no preset covers, so the picker opens on them rather than hiding
+  # what the report is showing.
+  def custom?
+    preset.nil?
+  end
+
+  # The preset this period is, if any, so the period's button can name it.
+  def preset
+    PRESETS.find { |preset| preset?(preset) }
+  end
+
+  # The dates another comparison would judge these against, so choosing one
+  # shows what it means before it's picked.
+  def previous_with(compare)
+    Period.new({from: from.iso8601, to: to.iso8601, compare: compare}, default_days: default_days, today: @today).previous
+  end
+
+  def compare?
+    compare != "off"
+  end
+
+  def year_on_year?
+    compare == "year"
+  end
+
+  def compare_countries?
+    compare == "country"
+  end
+
+  # So links that change filtering, sorting or paging keep the period, while
+  # the default one keeps URLs clean.
+  def query
+    (preset?(default_days) ? {} : {from: from.iso8601, to: to.iso8601}).merge(compare_query)
+  end
+
+  # The comparison carries over, so picking another span keeps what it's
+  # judged against.
+  def preset_query(preset)
+    return compare_query if preset == default_days
+
+    from, to = preset_range(preset)
+    {from: from.iso8601, to: to.iso8601, **compare_query}
+  end
+
+  def compare_query
+    return {} if compare == DEFAULT_COMPARE
+    return {compare: compare, vs: compare_country} if compare_countries?
+
+    {compare: compare}
+  end
+
+  # Presets other than today end yesterday, as Google's own do, since
+  # today's figures are still coming in and would read as a drop against a
+  # full day.
+  def last_full_day
+    @today - 1
+  end
+
+  # A compared country is named by itself, its dates being this period's.
+  def to_s
+    return country if country
+
+    from == to ? I18n.l(from) : "#{I18n.l(from)} – #{I18n.l(to)}"
+  end
+
+  private
+
+  # The year so far is set against the same days a year earlier, since the
+  # stretch just before it is the end of the last year, not like for like. A
+  # whole year is left to be compared with the one before.
+  def year_so_far?
+    preset?(:this_year) && to != to.end_of_year
+  end
+
+  # This quarter and year run to yesterday, so on their first day they're
+  # still the ones just ended.
+  def preset_range(preset)
+    case preset
+    when :today then [@today, @today]
+    when :this_quarter then [last_full_day.beginning_of_quarter, last_full_day]
+    when :this_year then [last_full_day.beginning_of_year, last_full_day]
+    when :last_quarter
+      ended = last_full_day.beginning_of_quarter - 1
+      [ended.beginning_of_quarter, ended]
+    when MONTHS then [last_full_day.months_ago(self.class.months(preset)) + 1, last_full_day]
+    else [last_full_day - (preset - 1), last_full_day]
+    end
+  end
+
+  def parse(value)
+    Date.iso8601(value) if value.present?
+  rescue Date::Error
+    nil
+  end
+end

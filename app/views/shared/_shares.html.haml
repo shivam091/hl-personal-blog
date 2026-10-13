@@ -1,0 +1,29 @@
+-# The table holds the same figures for anyone who can't tell the segment
+-# colours apart.
+- key_label = local_assigns[:key_label] || ->(key) { country_label(key) }
+= render layout: "shared/card", locals: {id: id, title: title, icon: icon} do
+  %div{class: "px-4 py-3"}
+    = share_chart(shares, y_title: y_title, key_label: key_label, empty: local_assigns[:empty] || "No views in this period.",
+      label: "Each #{shares[:unit]}'s views split by #{split}, as a share of that #{shares[:unit]}")
+    - if shares[:buckets].any?
+      %details{class: "group mt-3"}
+        %summary{class: "inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"}
+          = icon("chevron-down", size: 12, class: "transition-transform group-open:rotate-180")
+          Show as table
+        %div{class: "mt-2 overflow-x-auto"}
+          %table{class: "w-full border-collapse text-xs"}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "py-1 pr-3 text-left font-medium"}= shares[:unit].to_s.capitalize
+                - shares[:keys].each do |key|
+                  %th{scope: "col", class: "px-2 py-1 text-right font-medium whitespace-nowrap"}= key_label.(key)
+                %th{scope: "col", class: "pl-2 py-1 text-right font-medium"} Other
+            %tbody
+              - shares[:buckets].each do |start, counts|
+                - total = counts.values.sum.to_f
+                %tr{class: "border-t border-slate-200"}
+                  %th{scope: "row", class: "py-1 pr-3 text-left font-medium whitespace-nowrap"}= share_bucket_label(start, shares[:unit])
+                  - [*shares[:keys], :other].each do |key|
+                    %td{class: "px-2 py-1 text-right tabular-nums"}
+                      = total.zero? ? "—" : number_to_percentage(counts.fetch(key, 0) / total * 100, precision: 1)
+  %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}= note
