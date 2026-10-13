@@ -58,6 +58,41 @@ sign in while either is blank). Sessions last 12 hours, changing either one sign
 everyone out, and login attempts are limited to 10 per 3 minutes. See
 [app/controllers/concerns/authentication.rb](app/controllers/concerns/authentication.rb).
 
+## Request logs
+
+Every request (except `/up` and assets) is saved as a
+[`RequestLog`](app/models/request_log.rb) by the
+[`RequestLogger`](app/middlewares/request_logger.rb) middleware, after the
+response has been sent. It looks up the client's IP through
+[`IpInfoService`](app/services/ip_info_service.rb) (cached per IP for a day;
+local and private IPs are skipped). Each log is
+keyed by its request id (`X-Request-Id`, also tagged on production log
+lines).
+
+`/request-logs` lists them, searchable by URL, time, IP, method, and user
+agent, with tabs by status class, sortable, paginated, and exportable as CSV.
+Each log's page shows the timing, the client's location and network, the
+params, the headers (cookies and credentials are never stored), and any
+exception.
+
+Logs are never deleted automatically. They share the blog's live database
+and its storage quota, so clear old ones from **Clear logs…** on the list:
+pick a start and end date (whole days, IST) and
+[`ClearRequestLogsJob`](app/jobs/clear_request_logs_job.rb) deletes them in
+the background through Active Job's `:async` adapter, inside the web process
+(see [Background jobs](#background-jobs)).
+
+## Background jobs
+
+Jobs run on Active Job's `:async` adapter: a thread pool inside the Puma web
+process, in every environment. There's no Redis, queue database, or separate
+worker service to run or pay for on Render. The trade-off is that a job
+queued in memory is lost if the process stops before it starts, e.g. on a
+deploy or restart. That's acceptable for the jobs here: clearing logs is a
+single `deleteMany` that MongoDB finishes even if the app goes away, and an
+unstarted one can simply be requested again. If jobs ever need to survive
+restarts, move to a persistent adapter and a Render background worker.
+
 ## Dates and times
 
 Shown as `12 Mar, 2026`, and times as `12 Mar, 2026 12:00 IST`
@@ -133,6 +168,14 @@ admin:
 cors:
   origins:
     - http://localhost:3000
+
+# Request log IP lookups. Each endpoint's JSON is merged in order; %{ip} is
+# replaced with the client IP. Swap in richer endpoints on a paid plan.
+ipinfo:
+  token: ...
+  endpoints:
+    - https://ipinfo.io/%{ip}/json
+    - https://api.ipinfo.io/lite/%{ip}
 ```
 
 On Render, set the `RAILS_MASTER_KEY` environment variable to the contents of
