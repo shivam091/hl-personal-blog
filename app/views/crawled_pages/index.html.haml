@@ -1,0 +1,112 @@
+- content_for :title, "Crawled pages"
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Crawled pages
+  %div{class: toolbar_class}
+    = columns_button(@layout)
+    = link_to list_url(@filtering, @sorting, format: :csv), class: outline_button_class do
+      = icon("download", size: 14)
+      Export CSV
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
+    message: (@filtering.filtered? ? "No crawled pages match." : "No crawled pages yet. Sync the sitemap.")
+- else
+  -# The row checkboxes join this form through their form attribute, since
+  -# each row's own buttons are forms and forms can't nest.
+  %div{data: {controller: "bulk-select", bulk_select_one_value: "page", bulk_select_many_value: "pages"}}
+    = form_with url: mark_indexed_crawled_pages_path, method: :patch, id: "bulk-mark-indexed",
+      class: "mb-3 flex items-center justify-between gap-3", data: {bulk_select_target: "form"} do
+      %p{class: "text-sm text-slate-600", aria: {live: "polite"}, data: {bulk_select_target: "count"}} No pages selected
+      - button_class = "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium shadow-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:bg-white"
+      %div{class: "flex flex-wrap items-center justify-end gap-2"}
+        %button{type: "submit", disabled: true, data: {bulk_select_target: "submit"},
+          class: "#{button_class} text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"}
+          = icon("check-circle", size: 14)
+          Mark as indexed
+        %button{type: "submit", disabled: true, formaction: mark_not_indexed_crawled_pages_path, data: {bulk_select_target: "submit"},
+          class: "#{button_class} text-slate-700 hover:bg-slate-50"}
+          = icon("rotate-ccw", size: 14)
+          Mark as not indexed
+        %button{type: "submit", disabled: true, formaction: request_indexing_crawled_pages_path, data: {bulk_select_target: "submit"},
+          class: "#{button_class} text-slate-700 hover:bg-slate-50"}
+          = icon("clock", size: 14)
+          Mark as requested
+
+    %div{class: list_container_class(@layout)}
+      %table{class: list_table_class(@layout)}
+        %thead{class: list_head_class(@layout)}
+          %tr
+            %th{scope: "col", class: "w-0 py-2.5 pr-1 pl-3"}
+              %input{type: "checkbox", class: "block size-4 rounded border-slate-300 accent-slate-900",
+                aria: {label: "Select every page listed here"},
+                data: {bulk_select_target: "all", action: "bulk-select#toggleAll"}}
+            - if @layout.row_numbers?
+              %th{scope: "col", class: list_heading_right_class, aria: {label: "Row number"}} #
+            = column_headers @layout, @sorting, keep: [@filtering, @pagination]
+            %th{scope: "col", class: "px-3 py-2.5"}
+              %span{class: "sr-only"} Actions
+        %tbody
+          - @crawled_pages.each.with_index(@pagination.first_item) do |page, number|
+            %tr{class: "border-b border-slate-100 last:border-b-0 hover:bg-slate-50 has-checked:bg-slate-100"}
+              %td{class: "py-2 pr-1 pl-3"}
+                %input{type: "checkbox", name: "ids[]", value: page.id, form: "bulk-mark-indexed",
+                  class: "block size-4 rounded border-slate-300 accent-slate-900",
+                  aria: {label: "Select #{page}"},
+                  data: {bulk_select_target: "item", action: "bulk-select#update"}}
+              - if @layout.row_numbers?
+                %td{class: muted_number_cell_class}= number_with_delimiter(number)
+              - @layout.visible_columns.each do |column|
+                - case column.key
+                - when "url"
+                  %td{class: "px-3 py-2 whitespace-nowrap"}
+                    = blog_page_link(page.url, nil)
+                - when "last_modified_at"
+                  %td{class: muted_cell_class}
+                    - if page.last_modified_at
+                      %time{datetime: page.last_modified_at.iso8601}= l(page.last_modified_at)
+                    - else
+                      —
+                - when "indexed"
+                  %td{class: "px-3 py-2"}
+                    - if page.indexed
+                      %span{class: "inline-flex size-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"}
+                        = icon("check", size: 14, label: "Indexed")
+                    - elsif page.index_requested_at
+                      %span{class: "inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800",
+                        title: "Requested in Search Console #{l(page.index_requested_at)}; marked indexed once an inspection finds it in Google"}
+                        = icon("clock", size: 12)
+                        Requested
+                    - else
+                      %span{class: "inline-flex size-6 items-center justify-center rounded-full bg-slate-100 text-slate-400"}
+                        = icon("x", size: 14, label: "Not indexed")
+              %td{class: "px-3 py-2 text-right whitespace-nowrap"}
+                = copy_button(page.url, "Copy URL to clipboard")
+                -# Spends one of the day's inspections, so it's asked for rather
+                -# than run on every visit.
+                = button_to inspect_url_crawled_page_path(page), form_class: "inline-flex", title: "Inspect URL now",
+                  class: "inline-flex rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900",
+                  aria: {label: "Inspect #{page} now"} do
+                  = icon("file-search")
+                - unless page.indexed
+                  = button_to request_indexing_crawled_page_path(page), method: :patch, form_class: "inline-flex",
+                    title: (page.index_requested_at ? "Mark as requested again" : "Mark as requested"),
+                    class: "inline-flex rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900",
+                    aria: {label: "Mark #{page} as requested"} do
+                    = icon("clock")
+                - if page.indexed
+                  = button_to mark_not_indexed_crawled_page_path(page), method: :patch, title: "Mark as not indexed", form_class: "inline-flex",
+                    class: "inline-flex rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900",
+                    aria: {label: "Mark #{page} as not indexed"} do
+                    = icon("rotate-ccw")
+                - else
+                  = button_to mark_indexed_crawled_page_path(page), method: :patch, title: "Mark as indexed", form_class: "inline-flex",
+                    class: "inline-flex rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700",
+                    aria: {label: "Mark #{page} as indexed"} do
+                    = icon("check-circle")
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]
