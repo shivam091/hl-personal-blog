@@ -1,0 +1,7 @@
+%ul{class: "divide-y divide-slate-100 text-sm"}
+  - messages.each do |message|
+    %li
+      = link_to message_path(message), class: "flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-2.5 hover:bg-slate-50" do
+        %span{class: "w-40 shrink-0 whitespace-nowrap text-slate-500"}= time_or_dash(message.created_at)
+        %span{class: "min-w-0 flex-1 truncate text-slate-800"}= message.message
+        = recaptcha_score_badge(message.recaptcha_score)

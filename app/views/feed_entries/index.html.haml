@@ -1,0 +1,96 @@
+- content_for :title, "Feed entries"
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Feed entries
+  %div{class: toolbar_class}
+    = link_to list_url(@filtering, @sorting, format: :csv), class: outline_button_class do
+      = icon("download", size: 14)
+      Export CSV
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
+    message: (@filtering.filtered? ? "No feed entries match." : "No feed entries yet. Sync the feed.")
+- else
+  - if @notified_entries.any?
+    %div{class: "mb-6"}
+      = render layout: "shared/card", locals: {id: "deliveries", title: "Subscriber emails", icon: "send"} do
+        %p{class: lead_note_class}
+          Emails delivered and still undelivered for the last #{pluralize(@notified_entries.size, "entry", plural: "entries")} sent to subscribers.
+          Undelivered ones can be sent again from the entry's page.
+        %div{class: "px-4 py-3"}
+          = stacked_chart(@notified_entries.map { |entry| entry.notified_at.to_date },
+            [ChartsHelper::Series.new(name: "Delivered", values: @notified_entries.map(&:notified_count), color: ChartsHelper::SHARE_COLORS[0]),
+             ChartsHelper::Series.new(name: "Undelivered", values: @notified_entries.map { |entry| entry.notification_failures.size }, color: ChartsHelper::SHARE_COLORS[1])],
+            titles: @notified_entries.map(&:name), x_title: "Sent", y_title: "Emails", label: "Subscriber emails delivered and undelivered for each entry sent")
+
+  - chip_class = "inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+  - subscriber_count = NewsletterSubscriber.count
+  %div{class: table_card_class}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: table_head_class}
+        %tr
+          %th{scope: "col", class: list_heading_right_class, aria: {label: "Row number"}} #
+          - sort_keep = [@filtering, @pagination]
+          = sort_header @sorting, "Title", "name", keep: sort_keep, class: list_heading_class
+          = sort_header @sorting, "Type", "type", keep: sort_keep, class: list_heading_class
+          %th{scope: "col", class: list_heading_class} Categories
+          %th{scope: "col", class: list_heading_class} Tags
+          = sort_header @sorting, "Published", "published_at", keep: sort_keep, class: list_heading_class
+          = sort_header @sorting, "Updated", "last_modified_at", keep: sort_keep, class: list_heading_class
+          %th{scope: "col", class: "px-3 py-2.5"}
+            %span{class: "sr-only"} Actions
+      %tbody
+        - @feed_entries.each.with_index(@pagination.first_item) do |entry, number|
+          %tr{class: "border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50"}
+            %td{class: muted_number_cell_class}= number_with_delimiter(number)
+            %td{class: "px-3 py-2"}
+              %div{class: "flex items-start gap-3"}
+                - if entry.thumbnail_url.present?
+                  = image_tag entry.thumbnail_url, alt: "", loading: "lazy", class: "h-12 w-16 shrink-0 rounded border border-slate-200 object-cover bg-slate-50"
+                %div{class: "min-w-0"}
+                  = blog_page_link(entry.name, feed_entry_path(entry), live: entry.url)
+                  %div{class: "text-xs text-slate-500"}= entry.url
+                  -# Only the description is capped, as it can run to paragraphs;
+                  -# the whole of it shows on hover.
+                  - if entry.description.present?
+                    %p{class: "mt-1 max-w-md truncate text-xs text-slate-600", title: entry.description}= entry.description
+            %td{class: "px-3 py-2"}
+              = link_to entry.type.capitalize, list_url(@filtering, @sorting, @pagination, type: entry.type),
+                class: "#{chip_class} bg-slate-900 text-white hover:bg-slate-700"
+            %td{class: "px-3 py-2"}
+              %div{class: "flex flex-wrap gap-1"}
+                - entry.category_names.each do |name|
+                  = link_to name, list_url(@filtering, @sorting, @pagination, category: name),
+                    class: "#{chip_class} bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+            %td{class: "min-w-48 px-3 py-2"}
+              %div{class: "flex flex-wrap gap-1"}
+                - entry.tag_names.each do |name|
+                  = link_to name, list_url(@filtering, @sorting, @pagination, tag: name),
+                    class: "#{chip_class} bg-slate-100 text-slate-700 hover:bg-slate-200"
+            - [entry.published_at, entry.last_modified_at].each do |time|
+              %td{class: muted_cell_class}
+                - if time
+                  %time{datetime: time.iso8601}= l(time)
+                - else
+                  —
+            %td{class: "px-3 py-2"}
+              -# A flex row, so buttons (in their forms) and the sent badge share
+              -# one centre line instead of sitting on the text baseline.
+              %div{class: "flex items-center justify-end gap-1"}
+                - if entry.notifiable?
+                  = button_to notify_feed_entry_path(entry), title: "Notify subscribers", form_class: "inline-flex",
+                    form: {data: {turbo_confirm: "Email all #{pluralize(subscriber_count, "subscriber")} about #{entry.name}? This can only be done once."}},
+                    class: "inline-flex rounded-md p-1.5 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700",
+                    aria: {label: "Notify subscribers about #{entry.name}"} do
+                    = icon("send")
+                - elsif entry.notified_at
+                  - sent = entry.notified_count ? "Sent to #{pluralize(entry.notified_count, "subscriber")}" : "Sending to subscribers"
+                  - sent += ", #{entry.notification_failures.size} failed" if entry.notified_count && entry.notification_failures.present?
+                  %span{class: ["inline-flex p-1.5", entry.notification_failures.present? ? "text-amber-600" : "text-emerald-600"], title: "#{sent} on #{l(entry.notified_at)}"}
+                    = icon("check-circle", label: "#{sent} on #{l(entry.notified_at)}")
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]

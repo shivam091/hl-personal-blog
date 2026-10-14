@@ -1,0 +1,20 @@
+-# Its own partial so a refused save redraws just this form, the name typed
+-# kept and the reason under it, rather than reloading the list.
+- search = local_assigns[:search]
+- error = search&.errors&.full_messages&.to_sentence.presence
+
+%div{id: "saved-search-form", class: "grid gap-1 sm:ml-auto"}
+  = form_with url: saved_searches_path, class: "flex items-center gap-1.5" do
+    = hidden_field_tag :list, list, id: nil
+    = hidden_field_tag :query, query, id: nil
+    = label_tag "saved_search_name", "Name this search", class: "sr-only"
+    = text_field_tag :name, search&.name, id: "saved_search_name", placeholder: "Name this search",
+      aria: {invalid: (error ? "true" : nil), describedby: ("saved-search-error" if error)},
+      class: ["h-8 w-44 rounded-md border bg-white px-2.5 text-sm shadow-sm placeholder:text-slate-400 focus:ring-1 focus:outline-none",
+        error ? "border-red-400 focus:border-red-500 focus:ring-red-500" : "border-slate-300 focus:border-slate-500 focus:ring-slate-500"]
+    %button{type: "submit", class: "inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"}
+      = icon("save", size: 14)
+      Save search
+  - if error
+    %p{id: "saved-search-error", role: "alert", class: "text-xs text-red-700"}
+      = error
