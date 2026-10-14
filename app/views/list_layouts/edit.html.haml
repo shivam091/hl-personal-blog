@@ -1,0 +1,4 @@
+- content_for :title, "#{@layout.label} columns"
+
+= turbo_frame_tag "modal" do
+  = render "dialog", layout: @layout

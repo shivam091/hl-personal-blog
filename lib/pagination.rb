@@ -7,10 +7,11 @@ class Pagination
 
   attr_reader :page, :per_page, :per_page_options, :total_count
 
-  def initialize(scope, params, per_page_options: DEFAULT_PER_PAGE_OPTIONS)
+  def initialize(scope, params, per_page_options: DEFAULT_PER_PAGE_OPTIONS, default_per_page: nil)
     @scope = scope
     @per_page_options = per_page_options
-    @per_page = params[:per_page].to_i.presence_in(per_page_options) || per_page_options.first
+    @default_per_page = default_per_page.presence_in(per_page_options) || per_page_options.first
+    @per_page = params[:per_page].to_i.presence_in(per_page_options) || @default_per_page
     @total_count = scope.count
     @page = params[:page].to_i.clamp(1, total_pages)
   end
@@ -54,7 +55,7 @@ class Pagination
   # So links that change filtering or sorting keep the chosen page size but
   # start again from page 1, where the new results begin.
   def query
-    {per_page: (per_page unless per_page == per_page_options.first)}.compact
+    per_page_query(per_page)
   end
 
   # Page links must keep the page size, and page 1 needs no param.
@@ -65,6 +66,6 @@ class Pagination
   # Changing the page size restarts from page 1, since the old page number
   # no longer points at the same records.
   def per_page_query(size)
-    {per_page: (size unless size == per_page_options.first)}.compact
+    {per_page: (size unless size == @default_per_page)}.compact
   end
 end
