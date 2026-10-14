@@ -58,6 +58,62 @@ sign in while either is blank). Sessions last 12 hours, changing either one sign
 everyone out, and login attempts are limited to 10 per 3 minutes. See
 [app/controllers/concerns/authentication.rb](app/controllers/concerns/authentication.rb).
 
+## Crawled pages
+
+`/crawled-pages` tracks the blog's pages and whether Google has indexed
+them (`CrawledPage`, a backend-only collection keyed on URL). Pages come
+from the sitemap and can't be added or edited here; besides marking their
+indexed status, the list exports CSVs in the crawled-pages layout:
+
+```csv
+#,URL,Last modified,Status
+1,https://harshal-ladhe.vercel.app,2026-07-05T12:07:01.000Z,Yes
+```
+
+`Status` "Yes" means indexed; blank means not. The same export works from
+the command line:
+
+```bash
+bin/rails 'crawled_pages:export[path/to/out.csv]'   # or no path for stdout
+```
+
+## Feed entries
+
+`/feed-entries` lists everything the blog's Atom feed publishes
+(`FeedEntry`, keyed on the entry's URL), with its type, tags, and
+categories. Tags (`Tag`) and categories (`Category`) are collections of
+their own; entries refer to them by id. The list can be filtered by type,
+title, URL, tag, category, and published/updated dates, sorted, paged, and
+exported. Entries can't be added, edited, or deleted here: the feed owns
+them.
+
+Each feed `<entry>` maps to:
+
+| Feed | Field |
+|---|---|
+| `<id>` | `_id` (the URL, also `url`) |
+| `<title>` | `name` |
+| `<content>` (or `<summary>`) | `description` |
+| `<category scheme="urn:taxonomy:type">` | `type`: `post`, `tutorial`, or `snippet` |
+| `<category scheme="urn:taxonomy:tag">` | `tags` |
+| `<category scheme="urn:taxonomy:category">` | `categories` |
+| `<published>` | `published_at` |
+| `<updated>` | `last_modified_at` |
+
+Exports put tags and categories comma-separated in one cell:
+
+```csv
+#,URL,Title,Description,Type,Published,Updated,Tags,Categories
+1,https://harshal-ladhe.vercel.app/post/css/css-z-index-and-stacking-contexts,Mastering CSS z-index,Learn how…,post,2026-10-08T05:10:25.000Z,2026-10-08T05:10:25.000Z,"css, z-index",CSS
+```
+
+Importing matches on URL: new URLs are added, changed entries updated, and
+any tag or category not seen before is created.
+
+```bash
+bin/rails 'feed_entries:export[path/to/out.csv]'   # or no path for stdout
+```
+
 ## Request logs
 
 Every request (except `/up` and assets) is saved as a
