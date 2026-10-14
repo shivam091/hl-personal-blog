@@ -14,6 +14,22 @@ RSpec.describe Sorting do
     expect(sorting.query).to eq({})
   end
 
+  it "starts from a given default, keeping URLs for it clean" do
+    sorted = Sorting.new({}, columns: columns, default: ["last_modified_at", "asc"])
+    expect([sorted.column, sorted.direction, sorted.query]).to eq(["last_modified_at", "asc", {}])
+
+    url_first = Sorting.new({sort: "url"}, columns: columns, default: ["last_modified_at", "asc"])
+    expect(url_first.query).to eq(sort: "url", direction: "asc")
+  end
+
+  it "ignores a default naming an unknown column or direction" do
+    sorted = Sorting.new({}, columns: columns, default: ["gone", "asc"])
+    expect([sorted.column, sorted.direction]).to eq(["url", "asc"])
+
+    sideways = Sorting.new({}, columns: columns, default: ["last_modified_at", "up"])
+    expect([sideways.column, sideways.direction]).to eq(["last_modified_at", "desc"])
+  end
+
   it "only accepts whitelisted columns and directions" do
     expect([sorting(sort: "$where", direction: "up").column]).to eq(["url"])
     expect([sorting(sort: "$where", direction: "up").direction]).to eq(["asc"])
