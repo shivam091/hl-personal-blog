@@ -25,6 +25,15 @@ RSpec.describe Pagination do
     expect(Pagination.new(ListSpecDocument.none, {page: "2"}, per_page_options: [20]).page).to eq(1)
   end
 
+  it "starts from a given default page size, leaving it out of URLs" do
+    pagination = Pagination.new(scope, {}, per_page_options: [25, 50], default_per_page: 50)
+
+    expect(pagination.per_page).to eq(50)
+    expect(pagination.query).to eq({})
+    expect(pagination.per_page_query(25)).to eq(per_page: 25)
+    expect(Pagination.new(scope, {}, per_page_options: [25, 50], default_per_page: 7).per_page).to eq(25)
+  end
+
   it "reads the page size from params, falling back to the first option" do
     expect(Pagination.new(scope, {per_page: "50"}, per_page_options: [25, 50]).per_page).to eq(50)
     expect(Pagination.new(scope, {per_page: "7"}, per_page_options: [25, 50]).per_page).to eq(25)
