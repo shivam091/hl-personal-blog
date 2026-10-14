@@ -39,6 +39,19 @@ RSpec.describe Filtering do
     expect(urls(filtering(modified_from: "garbage"))).to eq(urls(filtering))
   end
 
+  it "opens on a default tab, naming All in the URL instead" do
+    opened = Filtering.new({}, fields: fields, tabs: tabs, default_tab: "no")
+    expect([opened.tab, opened.query]).to eq(["no", {}])
+    expect(opened.tab_query(nil)).to eq(indexed: "all")
+    expect(opened.tab_query("yes")).to eq(indexed: "yes")
+
+    all = Filtering.new({indexed: "all"}, fields: fields, tabs: tabs, default_tab: "no")
+    expect([all.tab, all.query]).to eq([nil, {indexed: "all"}])
+    expect(all.apply(ListSpecDocument.all).count).to eq(3)
+
+    expect(Filtering.new({}, fields: fields, tabs: tabs, default_tab: "gone").tab).to be_nil
+  end
+
   it "filters by tab and counts tabs within the search" do
     css = filtering(q: "css", indexed: "yes")
 

@@ -1,0 +1,97 @@
+-# A modal over the list, so the effect of a change is seen on the list it
+-# was made for. Only its buttons close it, so a stray Escape doesn't throw
+-# away an arrangement half made.
+- label_class = "mb-1 block text-sm font-medium text-slate-700"
+-# No display utility, since the select lays out its value and arrow as a
+-# row of its own where the browser allows it.
+- select_class = "h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+- button_class = "inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+- sort_column, sort_direction = layout.default_sort
+
+%div{data: {controller: "modal", modal_open_value: "true", action: "turbo:before-cache@document->modal#beforeCache"}}
+  %dialog{data: {modal_target: "dialog", action: "cancel->modal#preventDismiss keydown.esc->modal#preventDismiss"},
+    aria: {labelledby: "list-setting-dialog-title", describedby: "list-setting-dialog-description"},
+    class: "m-auto w-[calc(100%-2rem)] max-w-2xl overflow-hidden rounded-xl bg-white p-0 text-slate-900 shadow-2xl ring-1 ring-slate-900/5 backdrop:bg-slate-900/60 backdrop:backdrop-blur-sm"}
+    = form_with url: list_setting_path(layout.key), method: :patch, id: "list-setting-form",
+      data: {turbo_frame: "_top", controller: "column-picker"} do |form|
+      %div{class: "max-h-[70vh] space-y-6 overflow-y-auto p-6"}
+        %div{class: "flex gap-4"}
+          %div{class: "flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600"}
+            = icon("columns", size: 18)
+          %div{class: "min-w-0"}
+            %h2{id: "list-setting-dialog-title", class: "text-base font-semibold"}
+              #{layout.label} columns
+            %p{id: "list-setting-dialog-description", class: "mt-1 text-sm text-slate-600"}
+              Drag columns to reorder them, or across to show or hide them. Locked columns name each row, so they always stay shown.
+
+        %div{class: "grid gap-4 sm:grid-cols-2"}
+          - [["shown", "Shown", layout.visible_columns, "Drag columns here to show them."],
+            ["hidden", "Hidden", layout.hidden_columns, "Drag columns here to hide them."]].each do |zone, title, columns, empty|
+            %section
+              %h3{id: "column-zone-#{zone}", class: "mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase"}= title
+              %ul{data: {zone: zone, column_picker_target: "zone", action: "dragover->column-picker#dragOver drop->column-picker#drop"},
+                aria: {labelledby: "column-zone-#{zone}"},
+                class: "group/zone min-h-24 space-y-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-2"}
+                - columns.each do |column|
+                  = render "column", column: column, zone: zone
+                -# Only while the zone is otherwise empty, so it never sits
+                -# between columns.
+                %li{data: {placeholder: true}, class: "hidden px-2 py-6 text-center text-sm text-slate-400 only:block"}= empty
+
+        %div{class: "grid gap-4 sm:grid-cols-3"}
+          %div{class: "sm:col-span-2"}
+            = label_tag :sort, "Default sort", class: label_class
+            %div{class: "flex gap-2"}
+              = picker_select_tag :sort, options_for_select(layout.sortable_columns.map { |column| [column.label, column.key] }, sort_column), class: select_class
+              = picker_select_tag :direction, options_for_select([["Descending", "desc"], ["Ascending", "asc"]], sort_direction),
+                class: select_class.sub("w-full", "w-36 shrink-0"), aria: {label: "Default sort direction"}
+          %div
+            = label_tag :per_page, "Rows per page", class: label_class
+            = picker_select_tag :per_page, options_for_select(Pagination::DEFAULT_PER_PAGE_OPTIONS, layout.default_per_page), class: select_class
+
+        %div{class: "grid gap-4 sm:grid-cols-2"}
+          - if layout.tabs
+            %div
+              = label_tag :tab, "Opens on", class: label_class
+              = picker_select_tag :tab, options_for_select(layout.tabs.options.map { |label, key| [label, key.to_s] }, layout.default_tab.to_s), class: select_class
+          %fieldset
+            %legend{class: label_class} Row density
+            %div{class: "flex h-9 items-center gap-4"}
+              - ListLayout::DENSITIES.each do |density|
+                %label{class: "inline-flex items-center gap-2 text-sm text-slate-700"}
+                  = radio_button_tag :density, density, layout.density == density, class: "size-4 accent-slate-900"
+                  = density.capitalize
+
+        -# A row of their own, since they switch parts of the table on and off
+        -# rather than pick between choices like the fields above.
+        %fieldset
+          %legend{class: label_class} Table
+          %div{class: "flex flex-wrap gap-x-6 gap-y-2"}
+            -# Hidden zeros, since an unticked box posts nothing and would read
+            -# as left alone.
+            %label{class: "inline-flex items-center gap-2 text-sm text-slate-700"}
+              = hidden_field_tag :row_numbers, "0", id: nil
+              = check_box_tag :row_numbers, "1", layout.row_numbers?, class: "size-4 rounded border-slate-300 accent-slate-900"
+              Row numbers
+            %label{class: "inline-flex items-center gap-2 text-sm text-slate-700"}
+              = hidden_field_tag :sticky_header, "0", id: nil
+              = check_box_tag :sticky_header, "1", layout.sticky_header?, class: "size-4 rounded border-slate-300 accent-slate-900"
+              Keep the header in view
+
+        %p{class: "sr-only", aria: {live: "polite"}, data: {column_picker_target: "status"}}
+
+    %div{class: "flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:items-center"}
+      -# A form of its own, since forms can't nest and it isn't a save.
+      = button_to list_setting_path(layout.key), method: :delete, form: {data: {turbo_frame: "_top"}}, form_class: "flex sm:mr-auto",
+        disabled: !layout.customized?, title: (layout.customized? ? nil : "Already the default layout"),
+        class: "#{button_class} w-full disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white" do
+        = icon("rotate-ccw", size: 14)
+        Reset to default
+      -# A link, so Cancel also works when the dialog is opened on its own.
+      = link_to list_settings_path, data: {action: "modal#dismiss"}, class: button_class do
+        = icon("x", size: 14)
+        Cancel
+      %button{type: "submit", form: "list-setting-form",
+        class: "inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"}
+        = icon("save", size: 14)
+        Save layout
