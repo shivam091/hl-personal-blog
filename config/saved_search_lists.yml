@@ -1,0 +1,11 @@
+# Apart from list_layouts.yml, so each list is named in exactly one file.
+shared:
+  page_views: {label: Page views, route: page_views, controller: page_views}
+  page_likes: {label: Page likes, route: page_likes, controller: page_likes}
+  newsletter_subscribers: {label: Subscribers, route: newsletter_subscribers, controller: newsletter_subscribers}
+  messages: {label: Messages, route: messages, controller: messages}
+  feed_entries: {label: Feed entries, route: feed_entries, controller: feed_entries}
+  request_logs: {label: Request logs, route: request_logs, controller: request_logs}
+  sync_requests: {label: Sync requests, route: sync_requests, controller: sync_requests}
+  external_calls: {label: External calls, route: external_calls, controller: external_calls}
+  export_requests: {label: Export requests, route: export_requests, controller: export_requests}
