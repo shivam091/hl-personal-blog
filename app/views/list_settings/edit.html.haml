@@ -1,0 +1,6 @@
+- content_for :title, "#{@layout.label} columns"
+
+-# Framed so it can open over the list; a direct visit still works, as the
+-# same dialog on its own.
+= turbo_frame_tag "modal" do
+  = render "dialog", layout: @layout

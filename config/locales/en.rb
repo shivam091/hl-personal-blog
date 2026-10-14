@@ -29,6 +29,57 @@
         }
       }
     },
+    mongoid: {
+      attributes: {
+        crawled_page: {
+          url: "URL",
+          last_modified_at: "Last modified",
+          indexed: "Indexed"
+        },
+        feed_entry: {
+          url: "URL",
+          _id: "URL",
+          name: "Title",
+          description: "Description",
+          type: "Type",
+          published_at: "Published",
+          last_modified_at: "Updated",
+          tags: "Tags",
+          categories: "Categories"
+        },
+        tag: {
+          name: "Name"
+        },
+        category: {
+          name: "Name"
+        },
+        page_view: {
+          url: "URL",
+          visitor_count: "Visitors",
+          unique_visitor_count: "Unique visitors",
+          updated_at: "Last updated"
+        },
+        page_like: {
+          url: "URL",
+          like_count: "Likes",
+          updated_at: "Last liked",
+          created_at: "First liked"
+        },
+        newsletter_subscriber: {
+          email: "Email",
+          country: "Country",
+          subscribed_at: "Subscribed"
+        },
+        message: {
+          name: "Name",
+          email: "Email",
+          message: "Message",
+          recaptcha_score: "reCAPTCHA score",
+          country: "Country",
+          created_at: "Sent"
+        }
+      }
+    },
     sessions: {
       new: {
         notice: "This application is for authorised users only. If you are not an authorised user, " \
