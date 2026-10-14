@@ -1,0 +1,82 @@
+- page_view = @page_view
+- content_for :title, "#{page_view.slug} – Page views"
+
+= link_to page_views_path, class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
+  = icon("arrow-left")
+  Page views
+
+%div{class: "mb-6"}
+  %h1{class: "text-xl font-semibold tracking-tight break-all"}= page_view.slug
+  %p{class: "mt-1 flex flex-wrap items-center gap-x-2 text-sm text-slate-500"}
+    = blog_page_link(page_view.url, nil, truncate: true)
+    - if page_view.updated_at
+      %span ·
+      %span
+        Last updated
+        = time_tag(page_view.updated_at)
+
+= render "shared/stats", stats: page_view_stats(page_view)
+
+= render "page_views/scorecard", page_view: page_view, page_like: @page_like, period: @period,
+  feed_entry: @feed_entry, crawled_page: @crawled_page,
+  views_since: @views_since, likes_since: @likes_since
+
+- if @launch_curve
+  = render layout: "shared/card", locals: {id: "launch", title: "First #{LaunchCurve::DAYS} days", icon: "trending-up", class: "mb-6"} do
+    - typical = @launch_curve.typical
+    %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+      Views so far, day by day from publishing.
+      - if typical
+        Dashed is the median of #{pluralize(@launch_curve.typical_count, "earlier entry", plural: "earlier entries")} over their own first #{LaunchCurve::DAYS} days.
+      - else
+        Too few earlier entries with a full first #{LaunchCurve::DAYS} days to show a typical one yet.
+    %div{class: "px-4 py-3"}
+      = line_chart(@launch_curve.dates,
+        [ChartsHelper::Series.new(name: "This entry", values: @launch_curve.views),
+         (ChartsHelper::Series.new(name: "Typical entry", values: typical, dashed: true) if typical)].compact,
+        y_title: "Views so far", label: "Running total of views of #{page_view.slug} over its first #{LaunchCurve::DAYS} days, beside the typical entry's")
+
+-# Only views from once devices and referrers were dated can fall in a
+-# period; the all-time cards below still hold the earlier ones.
+- since = page_view.breakdowns_dated_since
+- note = "Not dated for this page yet; see the all-time totals below." if since.nil?
+- note ||= "Dated from #{l(since)}; earlier views are only in the all-time totals below." if since && @period.from < since
+%div{class: "grid items-start gap-6 lg:grid-cols-2"}
+  = render layout: "shared/card", locals: {id: "period-devices", title: "Devices in the period", icon: "cpu"} do
+    %div{class: "px-4 py-3"}
+      = render "shared/breakdown", counts: page_view.devices_within(@period), heading: "Device", count_heading: "Views",
+        empty: "No device data in this period."
+    - if note
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}= note
+  = render layout: "shared/card", locals: {id: "period-referrers", title: "Referrers in the period", icon: "log-in"} do
+    %div{class: "px-4 py-3"}
+      = render "shared/breakdown", counts: referrer_hosts(page_view.referrers_within(@period)), heading: "Referrer",
+        count_heading: "Views", empty: "No referrer data in this period."
+    - if note
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}= note
+
+%h2{class: "mt-8 mb-3 text-sm font-semibold text-slate-700"} All time
+
+%div{class: "grid items-start gap-6 lg:grid-cols-2"}
+  = render layout: "shared/card", locals: {id: "views-by-day", title: "Views by day", icon: "clock"} do
+    %div{class: "px-4 py-3"}
+      = render "shared/daily_counts", by_day: page_view.views_by_day, countries_by_day: page_view.countries_by_day,
+        count_heading: "Views", empty: "No daily views recorded."
+  %div{class: "grid gap-6"}
+    = render layout: "shared/card", locals: {id: "like-rate", title: "Likes per 100 views", icon: "heart"} do
+      - if @like_rates["This page"].nil?
+        %p{class: "px-4 py-3 text-sm text-slate-500"}
+          Fewer than #{BlogStats::MIN_VIEWS_FOR_RATE} views so far, too few for a like rate.
+      - else
+        %div{class: "px-4 py-3"}
+          = ranking_chart(@like_rates.compact.zip([[ChartsHelper::SHARE_SWATCHES[0], ChartsHelper::SHARE_COLORS[0]], [ChartsHelper::SHARE_OTHER_SWATCH, ChartsHelper::SHARE_OTHER_COLOR]]).map { |(name, rate), colors| [name, rate, *colors] },
+            total: nil, x_title: "Likes per 100 views", y_title: "All time", label: "Likes per 100 views of this page, beside the site's average")
+    = render layout: "shared/card", locals: {id: "countries", title: "Views by country", icon: "globe"} do
+      %div{class: "px-4 py-3"}
+        = render "shared/breakdown", counts: page_view.countries, heading: "Country", count_heading: "Views", empty: "No country data for this page."
+    = render layout: "shared/card", locals: {id: "devices", title: "Devices", icon: "cpu"} do
+      %div{class: "px-4 py-3"}
+        = render "shared/breakdown", counts: page_view.devices, heading: "Device", count_heading: "Views", empty: "No device data for this page."
+    = render layout: "shared/card", locals: {id: "referrers", title: "Referrers", icon: "log-in"} do
+      %div{class: "px-4 py-3"}
+        = render "shared/breakdown", counts: referrer_hosts(page_view.referrers), heading: "Referrer", count_heading: "Views", empty: "No referrer data for this page."
