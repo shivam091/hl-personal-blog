@@ -8,11 +8,15 @@ class Sorting
 
   attr_reader :columns, :column, :direction, :tiebreaker
 
-  def initialize(params, columns:, tiebreaker: :_id)
+  # A saved default can name a column since dropped from the list, so it
+  # falls back to the first column rather than ordering by it.
+  def initialize(params, columns:, tiebreaker: :_id, default: nil)
     @columns = columns
     @tiebreaker = tiebreaker
-    @column = params[:sort].presence_in(columns.keys) || default_column
-    @direction = params[:direction].presence_in(DIRECTIONS) || columns[@column]
+    @default_column = default&.first.presence_in(columns.keys) || columns.keys.first
+    @default_direction = (default&.last if @default_column == default&.first).presence_in(DIRECTIONS) || columns[@default_column]
+    @column = params[:sort].presence_in(columns.keys) || @default_column
+    @direction = params[:direction].presence_in(DIRECTIONS) || (default_column? ? @default_direction : columns[@column])
   end
 
   def apply(scope)
@@ -56,11 +60,11 @@ class Sorting
 
   private
 
-  def default_column
-    columns.keys.first
+  def default_column?
+    column == @default_column
   end
 
   def default?
-    column == default_column && direction == columns[column]
+    default_column? && direction == @default_direction
   end
 end

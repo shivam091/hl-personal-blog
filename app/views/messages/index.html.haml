@@ -1,0 +1,63 @@
+- content_for :title, "Messages"
+
+%div{class: "mb-6 flex flex-wrap items-center justify-between gap-3"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} Messages
+  = link_to list_url(@filtering, @sorting, format: :csv),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", message: (@filtering.filtered? ? "No messages match." : "No messages yet."),
+    icon: (@filtering.filtered? ? "search" : "inbox")
+- else
+  %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+        %tr
+          %th{scope: "col", class: "w-10 px-3 py-2.5"}
+            %span{class: "sr-only"} Expand
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", aria: {label: "Row number"}} #
+          - sort_keep = [@filtering, @pagination]
+          = sort_header @sorting, Message.human_attribute_name(:name), "name", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5 font-semibold"}= Message.human_attribute_name(:message)
+          = sort_header @sorting, "Score", "recaptcha_score", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+          = sort_header @sorting, Message.human_attribute_name(:created_at), "created_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Actions
+
+      - @messages.each.with_index(@pagination.first_item) do |message, number|
+        - message_id = dom_id(message, :message)
+        %tbody{class: "border-b border-slate-100 last:border-b-0", data: {controller: "disclosure"}}
+          %tr{class: "align-top hover:bg-slate-50"}
+            %td{class: "px-3 py-2"}
+              %button{type: "button",
+                class: "group inline-flex rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400",
+                aria: {expanded: "false", controls: message_id, label: "Show the full message from #{message.name}"},
+                data: {action: "disclosure#toggle", disclosure_target: "button"}}
+                = icon("chevron-down", class: "transition-transform duration-150 group-aria-expanded:rotate-180")
+            %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= number_with_delimiter(number)
+            %td{class: "px-3 py-2 whitespace-nowrap"}
+              %div
+                = link_to message.name, message_path(message), class: "font-medium text-slate-900 hover:underline"
+              = mail_to message.email, class: "text-xs text-slate-500 hover:text-slate-900 hover:underline"
+            %td{class: "px-3 py-2 text-slate-600"}
+              %p{class: "max-w-md truncate"}= message.message
+            %td{class: "px-3 py-2 text-right tabular-nums"}
+              %div{class: "flex flex-col items-end gap-1"}
+                = recaptcha_score_badge(message.recaptcha_score)
+            %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}= time_or_dash(message.created_at)
+            %td{class: "px-3 py-2"}
+              %div{class: "flex items-center gap-1"}
+                = mail_to message.email, subject: "Re: your message", title: "Reply",
+                  class: "inline-flex rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900",
+                  aria: {label: "Reply to #{message.name}"} do
+                  = icon("reply")
+          %tr{id: message_id, hidden: true, class: "bg-slate-50", data: {disclosure_target: "panel"}}
+            %td{colspan: 2}
+            %td{colspan: 5, class: "px-3 pt-1 pb-4 whitespace-normal"}
+              %p{class: "max-w-md min-w-80 whitespace-pre-line break-words text-slate-800"}= message.message
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]
