@@ -1,0 +1,28 @@
+- subscriber = @newsletter_subscriber
+- messages = subscriber.messages.to_a
+- content_for :title, "#{subscriber.email} – Subscribers"
+
+= link_to newsletter_subscribers_path, class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
+  = icon("arrow-left")
+  Subscribers
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-xl font-semibold tracking-tight break-all"}= subscriber.email
+    - if subscriber.subscribed_at
+      %p{class: "mt-1 text-sm text-slate-500"}
+        Subscribed
+        = time_tag(subscriber.subscribed_at)
+  = mail_to subscriber.email,
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("send", size: 14)
+    Email
+
+%div{class: "grid gap-6 lg:grid-cols-3"}
+  = render "shared/details", id: "subscriber", title: "Subscriber", icon: "users", rows: newsletter_subscriber_rows(subscriber)
+  %div{class: "lg:col-span-2"}
+    = render layout: "shared/card", locals: {id: "messages", title: "Messages sent", icon: "message-square"} do
+      - if messages.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No messages from this subscriber.
+      - else
+        = render "messages/message_list", messages: messages

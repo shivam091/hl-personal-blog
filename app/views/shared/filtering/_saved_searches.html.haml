@@ -1,0 +1,19 @@
+-# Shown even with none saved while a search is active, since that's when
+-# one can be saved. Sorting alone isn't a search worth a name.
+- current = filtering.query.merge(sorting&.query || {}).to_query
+- savable = filtering.query.present?
+- if searches.any? || savable
+  %div{class: "flex flex-wrap items-center gap-2 border-t border-slate-200 px-4 py-3 text-sm"}
+    - if searches.any?
+      %span{class: "text-xs font-medium text-slate-500"} Saved:
+      - searches.each do |search|
+        - active = search.params.to_query == current
+        %span{class: ["inline-flex items-center rounded-full border", active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700"]}
+          = link_to search.name, "#{request.path}?#{search.params.to_query}", aria: {current: (active ? "page" : nil)},
+            class: ["py-0.5 pl-3 pr-1 font-medium", active ? "" : "hover:text-slate-900"]
+          = button_to saved_search_path(search), method: :delete, form_class: "inline-flex",
+            aria: {label: "Remove the saved search #{search}"},
+            class: ["mr-1 rounded-full p-0.5", active ? "text-slate-300 hover:text-white" : "text-slate-400 hover:bg-slate-100 hover:text-slate-900"] do
+            = icon("x", size: 12)
+    - if savable && searches.none? { |search| search.params.to_query == current }
+      = render "shared/filtering/saved_search_form", list: list, query: current

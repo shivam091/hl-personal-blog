@@ -1,0 +1,19 @@
+- move_class = "inline-flex rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-30"
+
+%li{draggable: "true", data: {column: column.key, label: column.label, required: column.required.to_s, action: "dragstart->column-picker#dragStart dragend->column-picker#dragEnd"},
+  class: "flex cursor-grab items-center gap-2 rounded-md border border-slate-200 bg-white py-1.5 pr-1.5 pl-2 text-sm shadow-sm active:cursor-grabbing data-dragging:opacity-40"}
+  = icon("grip-vertical", class: "text-slate-400")
+  %input{type: "hidden", name: "#{zone}[]", value: column.key}
+  %span{class: "min-w-0 flex-1 truncate"}= column.label
+  - if column.required
+    = icon("lock", size: 14, label: "Always shown", class: "text-slate-400")
+  -# Dragging needs a pointer, so every move it makes is also a button.
+  %button{type: "button", class: move_class, data: {move: "up", action: "column-picker#moveUp"}, aria: {label: "Move #{column.label} up"}}
+    = icon("arrow-up", size: 14)
+  %button{type: "button", class: move_class, data: {move: "down", action: "column-picker#moveDown"}, aria: {label: "Move #{column.label} down"}}
+    = icon("arrow-down", size: 14)
+  - unless column.required
+    %button{type: "button", class: move_class, data: {toggle: true, action: "column-picker#toggle"},
+      aria: {label: "#{zone == "shown" ? "Hide" : "Show"} #{column.label}"}}
+      = icon("eye-off", size: 14, class: "group-data-[zone=hidden]/zone:hidden")
+      = icon("eye", size: 14, class: "hidden group-data-[zone=hidden]/zone:block")

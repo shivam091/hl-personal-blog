@@ -1,0 +1,41 @@
+- slug = page_view.slug
+- dates = (period.from..period.to).to_a
+- views_by_day = page_view.views_by_day
+- likes_by_day = page_like&.likes_by_day || {}
+- rows_class = "flex justify-between gap-3 px-4 py-2 text-sm"
+
+= render "google/shared/period", period: period, keep: []
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
+  %div{class: "lg:col-span-2"}
+    = render layout: "shared/card", locals: {id: "period-views", title: "Views and likes in the period", icon: "activity"} do
+      %div{class: "space-y-4 px-4 py-3"}
+        %div
+          %p{class: "mb-1 text-xs font-medium text-slate-500"} Views per day
+          = time_chart(dates.map { |date| [date, views_by_day[date.iso8601].to_i] }, y_title: "Views", label: "Views of #{slug} per day", style: :line)
+        %div
+          %p{class: "mb-1 text-xs font-medium text-slate-500"} Likes per day
+          = time_chart(dates.map { |date| [date, likes_by_day[date.iso8601].to_i] }, y_title: "Likes", label: "Likes of #{slug} per day")
+      - if (note = counted_since_note(period, views: views_since, likes: likes_since))
+        %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}= note
+
+  %div{class: "grid gap-6"}
+    = render layout: "shared/card", locals: {id: "page-status", title: "Feed and index", icon: "search-check"} do
+      %ul{class: "divide-y divide-slate-100"}
+        %li{class: rows_class}
+          %span{class: "text-slate-500"} In the feed
+          %span{class: "text-right font-medium"}= feed_entry ? "#{feed_entry.type.capitalize}: #{feed_entry.name}" : "No"
+        - if feed_entry
+          %li{class: rows_class}
+            %span{class: "text-slate-500"} Published
+            %span= l(feed_entry.published_at.to_date)
+          %li{class: rows_class}
+            %span{class: "text-slate-500"} Updated
+            %span= l(feed_entry.last_modified_at.to_date)
+        %li{class: rows_class}
+          %span{class: "text-slate-500"} In the sitemap
+          %span{class: "font-medium"}= crawled_page ? "Yes" : "No"
+        - if crawled_page
+          %li{class: rows_class}
+            %span{class: "text-slate-500"} Indexed
+            %span= crawled_page.indexed ? "Yes" : "No"
