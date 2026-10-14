@@ -7,7 +7,7 @@
 %nav{class: "mb-4 flex flex-wrap gap-1 text-sm", aria: {label: tabs.label}}
   - tabs.options.each do |label, key|
     - current = filtering.tab == key
-    = link_to list_url(filtering, *keep, tabs.name => key),
+    = link_to list_url(filtering, *keep, tabs.name => nil, **filtering.tab_query(key)),
       class: ["rounded-md px-3 py-1.5", current ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"],
       aria: {current: (current ? "page" : nil)} do
       = label
