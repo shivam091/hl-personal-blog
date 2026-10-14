@@ -1,0 +1,17 @@
+- label_class = "mb-1 block text-sm font-medium text-slate-700"
+- input_class = "block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+
+- if crawled_page.errors.any?
+  = render "shared/error_summary", record: crawled_page
+
+%div
+  = form.label :url, class: label_class
+  = form.url_field :url, placeholder: "https://harshal-ladhe.vercel.app/about", class: input_class
+
+%div
+  = form.label :last_modified_at, "#{CrawledPage.human_attribute_name(:last_modified_at)} (IST)", class: label_class
+  = form.datetime_field :last_modified_at, class: input_class
+
+%div{class: "flex flex-wrap items-center gap-x-2"}
+  = form.check_box :indexed, class: "size-4 rounded border-slate-300 accent-slate-900"
+  = form.label :indexed, "Indexed by Google", class: "text-sm font-medium text-slate-700"

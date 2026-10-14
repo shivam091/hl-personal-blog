@@ -4,7 +4,7 @@ require "rails_helper"
 
 RSpec.describe "Sessions", type: :request, signed_out: true do
   it "sends signed-out requests to the login page, with no nav" do
-    [root_path, sync_requests_path].each do |path|
+    [crawled_pages_path, crawled_pages_path(format: :csv), new_crawled_page_path].each do |path|
       get path
       expect(response).to redirect_to(new_session_path), path
     end
@@ -13,6 +13,13 @@ RSpec.describe "Sessions", type: :request, signed_out: true do
     expect(response).to have_http_status(:ok)
     expect(response.body).to include("Sign in", "This application is for authorised users only.")
     expect(response.body).not_to include("Crawled pages", "Sign out")
+  end
+
+  it "blocks writes too" do
+    post crawled_pages_path, params: {crawled_page: {url: "https://example.com/a"}}
+
+    expect(response).to redirect_to(new_session_path)
+    expect(CrawledPage.count).to eq(0)
   end
 
   it "keeps the health check public" do
@@ -29,10 +36,10 @@ RSpec.describe "Sessions", type: :request, signed_out: true do
   end
 
   it "returns to the page first asked for" do
-    get root_path(q: "css")
+    get crawled_pages_path(q: "css")
     sign_in
 
-    expect(response).to redirect_to(root_path(q: "css"))
+    expect(response).to redirect_to(crawled_pages_path(q: "css"))
   end
 
   it "rejects a wrong username or password" do

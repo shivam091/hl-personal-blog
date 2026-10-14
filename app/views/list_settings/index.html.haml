@@ -1,0 +1,45 @@
+- content_for :title, "List layouts"
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} List layouts
+  %p{class: "mt-1 text-sm text-slate-600"}
+    The columns each list shows, in what order, and how it's sorted and paged until you choose otherwise. A sort or page size picked on a list still applies to that visit only.
+
+%ul{class: "grid gap-4 md:grid-cols-2"}
+  - @layouts.each do |layout|
+    %li{class: "flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm"}
+      %div{class: "flex items-start justify-between gap-3"}
+        %h2{class: "font-semibold"}
+          = link_to layout.label, url_for(layout.route.to_sym), class: "hover:underline"
+        - if layout.customized?
+          %span{class: "rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800"} Customized
+        - else
+          %span{class: "rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"} Default
+
+      %ol{class: "mt-3 flex flex-wrap gap-1.5", aria: {label: "Shown columns, in order"}}
+        - layout.visible_columns.each do |column|
+          %li{class: "rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-700"}= column.label
+        - layout.hidden_columns.each do |column|
+          %li{class: "rounded border border-dashed border-slate-200 px-1.5 py-0.5 text-xs text-slate-400 line-through", title: "Hidden"}
+            = column.label
+            %span{class: "sr-only"} (hidden)
+
+      %dl{class: "mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm"}
+        %dt{class: "text-slate-500"} Sorted by
+        %dd= sort_summary(layout)
+        %dt{class: "text-slate-500"} Rows per page
+        %dd= layout.default_per_page
+        - if layout.tabs
+          %dt{class: "text-slate-500"} Opens on
+          %dd= layout.default_tab ? layout.tabs.choices.fetch(layout.default_tab).first : layout.tabs.all_label
+        %dt{class: "text-slate-500"} Display
+        %dd= [layout.density.capitalize, ("row numbers" if layout.row_numbers?), ("fixed header" if layout.sticky_header?)].compact.join(", ")
+        - if (count = @saved_search_counts[layout.key].to_i).positive?
+          %dt{class: "text-slate-500"} Saved searches
+          %dd= count
+
+      %div{class: "mt-4 flex flex-wrap gap-2 pt-1 sm:mt-auto"}
+        = columns_button(layout)
+
+-# Empty until a dialog opens, so the page stays put behind it.
+= turbo_frame_tag "modal"

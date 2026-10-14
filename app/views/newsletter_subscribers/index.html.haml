@@ -1,0 +1,54 @@
+- content_for :title, "Subscribers"
+
+%div{class: "mb-6 flex flex-wrap items-center justify-between gap-3"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} Subscribers
+  = link_to list_url(@filtering, @sorting, format: :csv),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", message: (@filtering.filtered? ? "No subscribers match." : "No subscribers yet."),
+    icon: (@filtering.filtered? ? "search" : "inbox")
+- else
+  -# The list's whole life rather than a period, since a list only grows by
+  -# its history. Narrowed by the search above, so the charts describe the
+  -# subscribers listed below.
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "subscriber-growth", title: "List size by week", icon: "trending-up"} do
+      %div{class: "px-4 py-3"}
+        = line_chart(@weekly_totals.keys, [ChartsHelper::Series.new(name: "Subscribers", values: @weekly_totals.values)], per: :week,
+          y_title: "Subscribers", label: "Subscribers on the list at the end of each week, since the first sign-up")
+    = render layout: "shared/card", locals: {id: "subscriber-countries", title: "Subscribers by country", icon: "globe"} do
+      %div{class: "px-4 py-3"}
+        = world_map(@country_counts, label: "Subscribers by country", unit: "subscriber")
+
+  %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+        %tr
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", aria: {label: "Row number"}} #
+          - sort_keep = [@filtering, @pagination]
+          = sort_header @sorting, NewsletterSubscriber.human_attribute_name(:email), "email", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5 font-semibold"}= NewsletterSubscriber.human_attribute_name(:country)
+          = sort_header @sorting, NewsletterSubscriber.human_attribute_name(:subscribed_at), "subscribed_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5"}
+            %span{class: "sr-only"} Actions
+      %tbody
+        - @newsletter_subscribers.each.with_index(@pagination.first_item) do |subscriber, number|
+          %tr{class: "border-b border-slate-100 last:border-b-0 hover:bg-slate-50"}
+            %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= number_with_delimiter(number)
+            %td{class: "px-3 py-2 whitespace-nowrap"}
+              = link_to subscriber.email, newsletter_subscriber_path(subscriber), class: "font-medium text-slate-900 hover:underline"
+            %td{class: "px-3 py-2 text-slate-600"}= subscriber.country.presence || "—"
+            %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}= time_or_dash(subscriber.subscribed_at)
+            %td{class: "px-3 py-2 text-right"}
+              = button_to newsletter_subscriber_path(subscriber), method: :delete, title: "Unsubscribe",
+                form: {data: {turbo_confirm: "Unsubscribe #{subscriber.email}? They'll get no more newsletter emails, and can subscribe again on the blog."}},
+                class: "inline-flex rounded-md p-1.5 text-red-600 hover:bg-red-50 hover:text-red-700",
+                aria: {label: "Unsubscribe #{subscriber.email}"} do
+                = icon("trash")
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]

@@ -1,0 +1,27 @@
+-# Shown even with none saved while a search is active, since that's when
+-# one can be saved.
+- current = filtering.query.merge(sorting.query).to_query
+- searches = SavedSearch.for(layout.key).to_a
+- if searches.any? || current.present?
+  %div{class: "mb-4 flex flex-wrap items-center gap-2 text-sm"}
+    - if searches.any?
+      %span{class: "text-xs font-medium text-slate-500"} Saved:
+      - searches.each do |search|
+        - active = search.params.to_query == current
+        %span{class: ["inline-flex items-center rounded-full border", active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700"]}
+          = link_to search.name, "#{request.path}?#{search.params.to_query}", aria: {current: (active ? "page" : nil)},
+            class: ["py-0.5 pl-3 pr-1 font-medium", active ? "" : "hover:text-slate-900"]
+          = button_to saved_search_path(search), method: :delete, form_class: "inline-flex",
+            aria: {label: "Remove the saved search #{search}"},
+            class: ["mr-1 rounded-full p-0.5", active ? "text-slate-300 hover:text-white" : "text-slate-400 hover:bg-slate-100 hover:text-slate-900"] do
+            = icon("x", size: 12)
+    - if current.present? && searches.none? { |search| search.params.to_query == current }
+      = form_with url: saved_searches_path, class: "flex items-center gap-1.5 sm:ml-auto" do
+        = hidden_field_tag :list, layout.key, id: nil
+        = hidden_field_tag :query, current, id: nil
+        = label_tag "saved_search_name", "Name this search", class: "sr-only"
+        = text_field_tag :name, nil, id: "saved_search_name", required: true, maxlength: 40, placeholder: "Name this search",
+          class: "h-8 w-44 rounded-md border border-slate-300 bg-white px-2.5 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+        %button{type: "submit", class: "inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"}
+          = icon("save", size: 14)
+          Save search

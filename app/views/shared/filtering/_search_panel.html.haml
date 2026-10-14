@@ -2,7 +2,7 @@
 -# visible so a narrowed list is never mistaken for the whole one.
 - label_class = "mb-1.5 block text-xs font-medium text-slate-600"
 - control_class = "h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
-- tab_query = filtering.tabs ? {filtering.tabs.name => filtering.tab}.compact : {}
+- tab_query = filtering.tab_query
 
 %details{class: "group mb-4 rounded-lg border border-slate-200 bg-white shadow-sm", open: filtering.searching?}
   %summary{class: "flex list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-lg px-4 py-3 text-sm hover:bg-slate-50 group-open:rounded-b-none"}

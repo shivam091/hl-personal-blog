@@ -9,6 +9,32 @@ shared:
       icon: home
       route: root
 
+    - label: Blog
+      icon: book-open
+      items:
+        - label: Page views
+          icon: eye
+          route: page_views
+        - label: Page likes
+          icon: heart
+          route: page_likes
+        - label: Subscribers
+          icon: users
+          route: newsletter_subscribers
+        - label: Messages
+          icon: message-square
+          route: messages
+        - label: Feed entries
+          icon: rss
+          route: feed_entries
+
+    - label: Google
+      icon: globe
+      items:
+        - label: Crawled pages
+          icon: search-check
+          route: crawled_pages
+
     - label: Monitoring
       icon: activity
       items:
@@ -24,3 +50,10 @@ shared:
         - label: External calls
           icon: send
           route: external_calls
+
+    - label: Settings
+      icon: settings
+      items:
+        - label: List layouts
+          icon: columns
+          route: list_settings
