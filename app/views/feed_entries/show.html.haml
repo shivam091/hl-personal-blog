@@ -1,0 +1,42 @@
+- entry = @feed_entry
+- content_for :title, "#{entry.name} – Feed entries"
+
+= link_to feed_entries_path, class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
+  = icon("arrow-left")
+  Feed entries
+
+%div{class: page_header_class}
+  %div{class: "min-w-0"}
+    %h1{class: "text-xl font-semibold tracking-tight break-words"}= entry.name
+    %p{class: "mt-1"}
+      = blog_page_link(entry.url, nil, truncate: true)
+
+%div{class: "grid gap-6 lg:grid-cols-3"}
+  %div{class: "lg:col-span-2"}
+    - if (thumbnail = feed_entry_thumbnail_url(entry))
+      = render layout: "shared/card", locals: {id: "thumbnail", title: "Thumbnail", icon: "image", class: "mb-6"} do
+        = link_to thumbnail, target: "_blank", rel: "noopener", class: "block p-4" do
+          = image_tag thumbnail, alt: "Thumbnail for #{entry.name}", loading: "lazy", class: "max-h-80 w-full rounded-md border border-slate-200 object-contain bg-slate-50"
+    = render layout: "shared/card", locals: {id: "description", title: "Description", icon: "file"} do
+      - if entry.description.present?
+        %p{class: "px-4 py-3 text-sm whitespace-pre-line break-words text-slate-800"}= entry.description
+      - else
+        %p{class: empty_note_class} No description.
+    - if entry.notification_failures.present?
+      - resend = capture do
+        - if entry.resendable?
+          = button_to resend_feed_entry_path(entry), form_class: "inline-flex",
+            form: {data: {turbo_confirm: "Email #{entry.name} again to #{pluralize(entry.notification_failures.size, "address", plural: "addresses")}?"}},
+            class: "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700" do
+            = icon("send", size: 14)
+            Send again
+      = render layout: "shared/card", locals: {id: "notification-failures", title: "Undelivered emails", icon: "alert-triangle", class: "mt-6", actions: resend.presence} do
+        %ul{class: "divide-y divide-slate-100"}
+          - entry.notification_failures.each do |failure|
+            %li{class: "px-4 py-3 text-sm"}
+              %div{class: "flex flex-wrap items-baseline justify-between gap-x-3"}
+                %span{class: "font-medium break-all text-slate-800"}= failure["email"]
+                - if failure["failed_at"]
+                  = time_tag(failure["failed_at"], l(failure["failed_at"].in_time_zone), class: "text-xs text-slate-500")
+              %p{class: "mt-1 break-words text-red-700"}= failure["error"]
+  = render "shared/details", id: "entry", title: "Entry", icon: "rss", rows: feed_entry_rows(entry)
