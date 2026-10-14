@@ -5,13 +5,18 @@
 # where it survives paging, sorting, and shared links. Fields are duck-typed
 # so new kinds of search can be added without changing this class.
 class Filtering
-  attr_reader :fields, :tabs, :values, :tab
+  # Asked for by name once a list opens on another tab, since an absent tab
+  # param then means that tab.
+  ALL_TAB = "all"
 
-  def initialize(params, fields: [], tabs: nil)
+  attr_reader :fields, :tabs, :values, :tab, :default_tab
+
+  def initialize(params, fields: [], tabs: nil, default_tab: nil)
     @fields = fields
     @tabs = tabs
+    @default_tab = default_tab.presence_in(Array(tabs&.choices&.keys))
     @values = fields.map { |field| field.read(params) }.reduce({}, :merge)
-    @tab = tabs&.read(params)
+    @tab = tabs&.read(params) || (@default_tab if tabs && params[tabs.name].blank?)
   end
 
   # Kept apart from the tab so tab counts reflect the search without each
@@ -43,7 +48,15 @@ class Filtering
 
   # So links that change sorting or paging don't drop the search and tab.
   def query
-    search_query.merge(tabs ? {tabs.name => tab} : {}).compact
+    search_query.merge(tab_query).compact
+  end
+
+  # The default tab needs no param, so the list's own link opens on it.
+  def tab_query(key = tab)
+    return {} unless tabs
+
+    value = key == default_tab ? nil : (key || (ALL_TAB if default_tab))
+    {tabs.name => value}.compact
   end
 
   # Only some searches mean the same on another list, so only theirs are

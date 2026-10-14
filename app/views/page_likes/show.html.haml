@@ -1,0 +1,22 @@
+- page_like = @page_like
+- content_for :title, "#{page_like.slug} – Page likes"
+
+= link_to page_likes_path, class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
+  = icon("arrow-left")
+  Page likes
+
+%div{class: "mb-6"}
+  %h1{class: "text-xl font-semibold tracking-tight break-all"}= page_like.slug
+  %p{class: subtitle_class}
+    = blog_page_link(page_like.url, nil, truncate: true)
+
+= render "shared/stats", stats: page_like_stats(page_like)
+
+%div{class: "grid gap-6 lg:grid-cols-2"}
+  = render layout: "shared/card", locals: {id: "likes-by-day", title: "Likes by day", icon: "clock"} do
+    %div{class: "px-4 py-3"}
+      = render "shared/daily_counts", by_day: page_like.likes_by_day, countries_by_day: page_like.countries_by_day,
+        count_heading: "Likes", empty: "No daily likes recorded."
+  = render layout: "shared/card", locals: {id: "countries", title: "Likes by country", icon: "globe"} do
+    %div{class: "px-4 py-3"}
+      = render "shared/breakdown", counts: page_like.countries, heading: "Country", count_heading: "Likes", empty: "No country data for this page."
