@@ -17,6 +17,7 @@ Rails.application.routes.draw do
   # Ids are entry URLs, so dots mustn't start a format.
   resources :feed_entries, only: %i[index show destroy], path: "feed-entries", constraints: {id: /.+/} do
     post :import, on: :collection
+    post :sync, on: :collection
     post :notify, on: :member
     post :resend, on: :member
   end
@@ -24,6 +25,7 @@ Rails.application.routes.draw do
   resources :crawled_pages, except: :show, path: "crawled-pages" do
     collection do
       post :import
+      post :sync
       # Ticked rows go to the collection route, so marking several is one
       # request rather than one per row.
       patch :mark_indexed, path: "indexed"

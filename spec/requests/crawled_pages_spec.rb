@@ -110,6 +110,18 @@ RSpec.describe "Crawled pages", type: :request do
     end
   end
 
+  describe "POST /crawled_pages/sync" do
+    it "queues a sitemap sync from the list" do
+      get crawled_pages_path
+      expect(response.body).to include("Sync sitemap")
+
+      expect { post sync_crawled_pages_path }.to change(SyncRequest, :count).by(1)
+      expect(SyncSitemapJob).to have_been_enqueued.with(request_id: SyncRequest.find_by(kind: "sitemap", trigger: "admin").id.to_s)
+      expect(response).to redirect_to(crawled_pages_path)
+      expect(flash[:notice]).to start_with("Syncing from the sitemap in the background.")
+    end
+  end
+
   describe "POST /crawled_pages" do
     it "creates a page" do
       post crawled_pages_path, params: {crawled_page: {url: "https://example.com/new", last_modified_at: "2026-10-01T09:00", indexed: "1"}}
@@ -392,6 +404,22 @@ RSpec.describe "Crawled pages", type: :request do
 
       expect(response).to redirect_to(crawled_pages_path)
       expect(flash[:alert]).to eq("Choose a CSV file to import.")
+    end
+  end
+
+  describe "sync requests" do
+    it "flags a sitemap sync in progress" do
+      SyncRequest.create!(kind: "sitemap", status: "running")
+
+      get crawled_pages_path
+
+      expect(Nokogiri::HTML5(response.body).at_css("#last-sync").text).to include("Sync in progress")
+    end
+
+    it "resyncs with the sitemap's own job" do
+      post resync_sync_request_path(SyncRequest.create!(kind: "sitemap", status: "failed"))
+
+      expect(SyncSitemapJob).to have_been_enqueued.with(request_id: SyncRequest.find_by(trigger: "resync").id.to_s)
     end
   end
 end
