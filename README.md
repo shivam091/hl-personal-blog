@@ -77,6 +77,22 @@ the command line:
 bin/rails 'crawled_pages:export[path/to/out.csv]'   # or no path for stdout
 ```
 
+### Sitemap sync
+
+[`SitemapSyncService`](app/services/sitemap_sync_service.rb) reads the blog's
+sitemap (`/sitemap.xml` at credentials `blog.url`, following a sitemap
+index if there is one), creates a crawled page for each new URL, and updates last modified on
+known ones. It never changes indexed status (only Google's crawl report
+knows that) and never deletes pages that dropped out of the sitemap.
+
+`bin/rails crawled_pages:sync_sitemap` runs the sync in its own process,
+not through Active Job, because the process exits when it's done. **Sync
+sitemap** on the crawled pages list queues
+[`SyncSitemapJob`](app/jobs/sync_sitemap_job.rb) in the web process.
+
+A run with no pages synced and errors exits non-zero, so it shows as failed;
+the logs list each skipped URL.
+
 ## Feed entries
 
 `/feed-entries` lists everything the blog's Atom feed publishes
@@ -107,12 +123,28 @@ Exports put tags and categories comma-separated in one cell:
 1,https://harshal-ladhe.vercel.app/post/css/css-z-index-and-stacking-contexts,Mastering CSS z-index,Learn how…,post,2026-10-08T05:10:25.000Z,2026-10-08T05:10:25.000Z,"css, z-index",CSS
 ```
 
-Importing matches on URL: new URLs are added, changed entries updated, and
-any tag or category not seen before is created.
+Syncing matches on URL: new URLs are added, changed entries
+updated, and any tag or category not seen before is created. Entries that
+drop out of the feed are kept.
 
 ```bash
 bin/rails 'feed_entries:export[path/to/out.csv]'   # or no path for stdout
+bin/rails feed_entries:sync_feed
 ```
+
+### Feed sync
+
+[`FeedSyncService`](app/services/feed_sync_service.rb) reads the feed at
+`/atom.xml` on credentials `blog.url` (`https://harshal-ladhe.vercel.app`
+in both development and production). An `ATOM_FEED_URL` environment
+variable overrides it, to point at another feed without re-encrypting
+credentials. **Sync feed** on the list queues
+[`SyncFeedJob`](app/jobs/sync_feed_job.rb).
+
+`bin/rails feed_entries:sync_feed` runs the sync in its own process rather
+than through Active Job, because the process exits when it's done. A run with no entries
+synced and errors exits non-zero, so it shows as failed; the logs list each
+skipped entry.
 
 ## Request logs
 
@@ -232,6 +264,12 @@ ipinfo:
   endpoints:
     - https://ipinfo.io/%{ip}/json
     - https://api.ipinfo.io/lite/%{ip}
+
+# The blog's address. Its sitemap, Atom feed and logo, and the links to it
+# in mail and on pages here, are all taken from it. ATOM_FEED_URL still
+# overrides the feed.
+blog:
+  url: https://harshal-ladhe.vercel.app
 ```
 
 On Render, set the `RAILS_MASTER_KEY` environment variable to the contents of

@@ -9,6 +9,14 @@ class Blog
       Rails.application.credentials.blog&.[](:url).to_s.chomp("/").presence
     end
 
+    def sitemap_url
+      "#{url}/sitemap.xml" if url
+    end
+
+    def atom_feed_url
+      "#{url}/atom.xml" if url
+    end
+
     # From the blog itself, which is always up, unlike this app on Render's
     # free plan, where a sleeping app would leave a broken image. A PNG, as
     # Gmail won't show SVG.
