@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en">
+  <title>Blog</title>
+  <id>https://blog.example.com/</id>
+  <updated>2026-10-08T22:26:00+05:30</updated>
+
+  <entry xml:lang="en">
+    <title>Theming Native Controls with `accent-color`</title>
+    <link rel="alternate" type="text/html" href="https://blog.example.com/tutorial/accent-color" />
+    <id>https://blog.example.com/tutorial/accent-color</id>
+    <published>2026-10-08T19:32:00+05:30</published>
+    <updated>2026-10-08T22:26:00+05:30</updated>
+    <media:thumbnail url="https://cdn.example.com/cover.png" width="1536" height="1024" />
+    <summary type="html">The accent-color property themes the checked…</summary>
+    <content type="html">The accent-color property themes the checked and filled parts of native controls &amp; more.</content>
+    <category term="tutorial" scheme="urn:taxonomy:type" />
+    <category term="css" scheme="urn:taxonomy:tag" />
+    <category term="forms" scheme="urn:taxonomy:tag" />
+    <category term="CSS" scheme="urn:taxonomy:category" />
+  </entry>
+
+  <entry xml:lang="en">
+    <title>Mastering CSS z-index</title>
+    <link rel="alternate" type="text/html" href="https://blog.example.com/post/css/z-index" />
+    <id>https://blog.example.com/post/css/z-index</id>
+    <published>2026-10-08T10:40:25+05:30</published>
+    <updated>2026-10-08T10:40:25+05:30</updated>
+    <summary type="html">Learn how CSS z-index really works.</summary>
+    <category term="post" scheme="urn:taxonomy:type" />
+    <category term="css" scheme="urn:taxonomy:tag" />
+    <category term="z-index" scheme="urn:taxonomy:tag" />
+    <category term="CSS" scheme="urn:taxonomy:category" />
+    <category term="Layout" scheme="urn:taxonomy:category" />
+  </entry>
+</feed>
