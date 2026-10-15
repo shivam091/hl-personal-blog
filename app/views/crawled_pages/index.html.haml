@@ -3,11 +3,16 @@
 %div{class: page_header_class}
   %div
     %h1{class: page_title_class} Crawled pages
+    = last_sync_status("sitemap")
   %div{class: toolbar_class}
     = columns_button(@layout)
     = link_to list_url(@filtering, @sorting, format: :csv), class: outline_button_class do
       = icon("download", size: 14)
       Export CSV
+    = button_to sync_crawled_pages_path, form_class: "inline-flex", title: "Also runs daily at 00:00 UTC",
+      class: outline_button_class do
+      = icon("refresh", size: 14)
+      Sync sitemap
 
 = search_panel @filtering, keep: [@sorting, @pagination]
 = filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
