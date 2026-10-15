@@ -71,6 +71,12 @@ class CrawledPagesController < ApplicationController
         "Each is marked indexed once an inspection finds it in Google."
   end
 
+  # So new posts can be pulled in right away.
+  def sync
+    SyncRequest.enqueue("sitemap")
+    redirect_to crawled_pages_path, notice: "Syncing from the sitemap in the background. Refresh in a moment to see new and updated pages."
+  end
+
   private
 
   def mark(indexed:)

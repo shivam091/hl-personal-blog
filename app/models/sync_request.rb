@@ -10,7 +10,12 @@ class SyncRequest
   Kind = Struct.new(:key, :section, :source, :page, :enqueue, keyword_init: true)
 
   # Lambdas, so a kind's job loads only when a sync is enqueued.
-  KINDS = [].index_by(&:key).freeze
+  KINDS = [
+    Kind.new(key: "feed", section: "Feed entries", source: "Atom feed", page: :feed_entries_path,
+      enqueue: ->(request) { SyncFeedJob.perform_later(request_id: request.id.to_s) }),
+    Kind.new(key: "sitemap", section: "Crawled pages", source: "Blog sitemap", page: :crawled_pages_path,
+      enqueue: ->(request) { SyncSitemapJob.perform_later(request_id: request.id.to_s) })
+  ].index_by(&:key).freeze
 
   TRIGGERS = {"admin" => "Admin", "resync" => "Resync", "rake" => "Rake task", "job" => "Background job"}.freeze
   STATUSES = %w[queued running succeeded partial failed].freeze
