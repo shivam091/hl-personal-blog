@@ -46,6 +46,12 @@ class FeedEntriesController < ApplicationController
   def show
   end
 
+  # So new posts can be pulled in right away.
+  def sync
+    SyncRequest.enqueue("feed")
+    redirect_to feed_entries_path, notice: "Syncing from the Atom feed in the background. Refresh in a moment to see new and updated entries."
+  end
+
   # On demand rather than on every sync, so only entries worth an email are
   # announced. In the background, since each subscriber gets their own copy.
   def notify
