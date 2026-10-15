@@ -186,4 +186,46 @@ RSpec.describe "Feed entries", type: :request do
       CSV
     end
   end
+
+  describe "POST /feed-entries/sync" do
+    it "queues a feed sync from the list" do
+      get feed_entries_path
+      expect(response.body).to include("Sync feed")
+
+      expect { post sync_feed_entries_path }.to change(SyncRequest, :count).by(1)
+      expect(SyncFeedJob).to have_been_enqueued.with(request_id: SyncRequest.find_by(kind: "feed", trigger: "admin").id.to_s)
+      expect(response).to redirect_to(feed_entries_path)
+      expect(flash[:notice]).to start_with("Syncing from the Atom feed in the background.")
+    end
+  end
+
+  describe "sync requests" do
+    it "shows when the feed was last synced" do
+      travel_to(Time.zone.local(2026, 10, 12, 12)) do
+        SyncRequest.create!(kind: "feed", status: "succeeded", finished_at: 3.hours.ago, created_at: 3.hours.ago)
+        get feed_entries_path
+      end
+
+      line = Nokogiri::HTML5(response.body).at_css("#last-sync")
+      expect(line.text.squish).to include("Last synced 12 Oct, 2026 09:00")
+      expect(line.at_css("a")["href"]).to eq(sync_requests_path(section: "feed"))
+    end
+
+    it "resyncs with the feed's own job" do
+      post resync_sync_request_path(SyncRequest.create!(kind: "feed", status: "failed"))
+
+      expect(SyncFeedJob).to have_been_enqueued.with(request_id: SyncRequest.find_by(trigger: "resync").id.to_s)
+    end
+
+    it "records a job's sync, or updates the request it was enqueued for" do
+      allow(FeedSyncService).to receive(:call) { SyncResult.new(1, 0, 0, []) }
+      request = SyncRequest.enqueue("feed")
+
+      SyncFeedJob.perform_now(request_id: request.id.to_s)
+      SyncFeedJob.perform_now
+
+      expect(request.reload).to have_attributes(status: "succeeded", created_count: 1)
+      expect(SyncRequest.find_by(kind: "feed", trigger: "job").status).to eq("succeeded")
+    end
+  end
 end

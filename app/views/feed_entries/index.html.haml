@@ -3,10 +3,15 @@
 %div{class: page_header_class}
   %div
     %h1{class: page_title_class} Feed entries
+    = last_sync_status("feed")
   %div{class: toolbar_class}
     = link_to list_url(@filtering, @sorting, format: :csv), class: outline_button_class do
       = icon("download", size: 14)
       Export CSV
+    = button_to sync_feed_entries_path, form_class: "inline-flex", title: "Also runs daily at 00:00 UTC",
+      class: "inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-slate-700" do
+      = icon("refresh", size: 14)
+      Sync feed
 
 = search_panel @filtering, keep: [@sorting, @pagination]
 = filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
