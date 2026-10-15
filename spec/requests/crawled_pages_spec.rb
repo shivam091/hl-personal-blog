@@ -123,6 +123,18 @@ RSpec.describe "Crawled pages", type: :request do
     end
   end
 
+  describe "POST /crawled_pages/sync" do
+    it "queues a sitemap sync from the list" do
+      get crawled_pages_path
+      expect(response.body).to include("Sync sitemap")
+
+      expect { post sync_crawled_pages_path }.to change(SyncRequest, :count).by(1)
+      expect(SyncSitemapJob).to have_been_enqueued.with(request_id: SyncRequest.find_by(kind: "sitemap", trigger: "admin").id.to_s)
+      expect(response).to redirect_to(crawled_pages_path)
+      expect(flash[:notice]).to start_with("Syncing from the sitemap in the background.")
+    end
+  end
+
   describe "PATCH /crawled_pages/request-indexing" do
     it "marks the ticked pages not yet indexed, without calling Google" do
       crawled = CrawledPage.create!(url: "https://example.com/post", last_modified_at: 1.day.ago)
@@ -270,6 +282,22 @@ RSpec.describe "Crawled pages", type: :request do
       patch mark_not_indexed_crawled_pages_path
 
       expect(flash[:alert]).to eq("Select at least one page to mark as not indexed.")
+    end
+  end
+
+  describe "sync requests" do
+    it "flags a sitemap sync in progress" do
+      SyncRequest.create!(kind: "sitemap", status: "running")
+
+      get crawled_pages_path
+
+      expect(Nokogiri::HTML5(response.body).at_css("#last-sync").text).to include("Sync in progress")
+    end
+
+    it "resyncs with the sitemap's own job" do
+      post resync_sync_request_path(SyncRequest.create!(kind: "sitemap", status: "failed"))
+
+      expect(SyncSitemapJob).to have_been_enqueued.with(request_id: SyncRequest.find_by(trigger: "resync").id.to_s)
     end
   end
 end
