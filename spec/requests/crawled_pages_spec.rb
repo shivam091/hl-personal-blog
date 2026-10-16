@@ -174,6 +174,35 @@ RSpec.describe "Crawled pages", type: :request do
     end
   end
 
+  describe "POST /crawled_pages/:id/inspect" do
+    let(:crawled) { CrawledPage.create!(url: "https://example.com/post", last_modified_at: 1.day.ago) }
+
+    it "inspects the page now and opens Google's verdict" do
+      service = instance_double(Google::SearchConsole::UrlInspectionSyncService)
+      allow(Google::SearchConsole::UrlInspectionSyncService).to receive(:new) { service }
+      allow(service).to receive(:inspect_now).with(crawled) do
+        Google::SearchConsole::UrlInspection.create!(crawled_page: crawled, verdict: "PASS", inspected_at: Time.current)
+        SyncResult.new(1, 0, 0, [])
+      end
+
+      post inspect_url_crawled_page_path(crawled)
+
+      expect(response).to redirect_to(google_search_console_url_inspection_path(crawled.reload.url_inspection))
+      expect(flash[:notice]).to eq("Inspected https://example.com/post just now.")
+    end
+
+    it "says why when Google couldn't be asked" do
+      service = instance_double(Google::SearchConsole::UrlInspectionSyncService,
+        inspect_now: SyncResult.new(0, 0, 0, ["URL inspection of https://example.com/post: quota exhausted"]))
+      allow(Google::SearchConsole::UrlInspectionSyncService).to receive(:new) { service }
+
+      post inspect_url_crawled_page_path(crawled), headers: {"HTTP_REFERER" => crawled_pages_url}
+
+      expect(response).to redirect_to(crawled_pages_url)
+      expect(flash[:alert]).to eq("Couldn't inspect https://example.com/post: URL inspection of https://example.com/post: quota exhausted")
+    end
+  end
+
   describe "PATCH /crawled_pages/:id/indexed" do
     it "offers each row the mark that would change it" do
       indexed && not_indexed
