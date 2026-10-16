@@ -1,0 +1,15 @@
+Something new on the blog
+
+Hi there! A new <%= @type %> just went live, and I think you'll enjoy it.
+
+<%= @entry.name %>
+<%= @type.capitalize %> · <%= @entry.published_at.in_time_zone.strftime("%B %-d, %Y") %>
+<% if @entry.description.present? %>
+
+<%= @entry.description %>
+<% end %>
+
+Read the <%= @type %>: <%= campaign_url(@entry.url, "text") %>
+
+Thanks for reading,
+<%= blog_name %>
