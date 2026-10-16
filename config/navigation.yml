@@ -28,12 +28,34 @@ shared:
           icon: rss
           route: feed_entries
 
+    - label: Reports
+      icon: bar-chart
+      items:
+        - label: Ranking opportunities
+          icon: target
+          route: ranking_opportunity_report
+
     - label: Google
       icon: globe
       items:
         - label: Crawled pages
           icon: search-check
           route: crawled_pages
+        - label: Search Console
+          icon: search
+          items:
+            - label: Performance
+              full_label: Search performance
+              icon: trending-up
+              route: google_search_console_performance
+            - label: Sitemaps
+              full_label: Sitemaps
+              icon: map
+              route: google_search_console_sitemaps
+            - label: URL inspection
+              full_label: URL inspection
+              icon: file-search
+              route: google_search_console_url_inspections
 
     - label: Monitoring
       icon: activity

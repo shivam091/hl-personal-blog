@@ -18,6 +18,12 @@ Rails.application.routes.draw do
   resources :newsletter_subscribers, only: %i[index show destroy], path: "newsletter-subscribers"
   resources :messages, only: %i[index show]
 
+  # Reports join the blog's own figures with Google's, so they sit apart from
+  # the pages of either source.
+  scope "reports" do
+    resource :ranking_opportunity_report, only: :show, path: "ranking-opportunities"
+  end
+
   # Ids are entry URLs, so dots mustn't start a format.
   resources :feed_entries, only: %i[index show], path: "feed-entries", constraints: {id: /.+/} do
     post :sync, on: :collection
@@ -40,6 +46,25 @@ Rails.application.routes.draw do
       patch :mark_not_indexed, path: "not-indexed"
       patch :request_indexing, path: "request-indexing"
       post :inspect_url, path: "inspect"
+    end
+  end
+
+  # Read-only copies of Google's data: the only writes are syncs from Google.
+  # A report's breakdown is a required segment, since url_for only carries
+  # required ones into sort and page links. The bare path shows the first
+  # breakdown in place, so a menu link lands without a redirect.
+  namespace :google do
+    namespace :search_console, path: "search-console" do
+      get "performance", to: "performance#index", defaults: {breakdown: "pages"}, as: :performance
+      get "performance/:breakdown", to: "performance#index", as: :performance_breakdown
+      post "performance/:breakdown/sync", to: "performance#sync", as: :performance_sync
+      resources :sitemaps, only: :index do
+        post :sync, on: :collection
+        post :submit, on: :collection
+      end
+      resources :url_inspections, only: %i[index show], path: "url-inspections" do
+        post :sync, on: :collection
+      end
     end
   end
 

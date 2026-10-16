@@ -36,6 +36,32 @@ RSpec.describe "Page views", type: :request do
       expect(rows).to eq([PageView::CSV_HEADERS, ["https://blog.example.com/post/busy", "5", "4", "0", "IN: 3; US: 2", nil, nil]])
     end
 
+    it "counts views in a picked span from each page's days, all time staying the default" do
+      PageView.collection.insert_many([
+        {"_id" => "/post/old", "slug" => "/post/old", "url" => "https://blog.example.com/post/old", "visitorCount" => 900,
+          "countriesByDay" => {"2026-01-01" => {"US" => 900}}},
+        {"_id" => "/post/new", "slug" => "/post/new", "url" => "https://blog.example.com/post/new", "visitorCount" => 9,
+          "viewsByDay" => {"2026-10-09" => 2}, "countriesByDay" => {"2026-10-10" => {"IN" => 6}, "2026-10-12" => {"IN" => 1}}}
+      ])
+
+      get page_views_path
+      page = Nokogiri::HTML5(response.body)
+      expect(page.at_css("[aria-controls=period-menu]").text.squish).to eq("Period: All time")
+      expect(page.css("tbody tr:first-child td:nth-child(3) a").first.text).to include("/post/old")
+
+      get page_views_path(from: "2026-10-09", to: "2026-10-11")
+      page = Nokogiri::HTML5(response.body)
+      rows = page.css("tbody[data-controller=disclosure] > tr:first-child").map { |row| row.css("td").map { |cell| cell.text.squish }.values_at(2, 3) }
+      expect(rows).to eq([["https://blog.example.com/post/new", "8"], ["https://blog.example.com/post/old", "0"]])
+      expect(page.css("thead th").map { |th| th.text.squish }).not_to include(PageView.human_attribute_name(:unique_visitor_count))
+      expect(page.at_css("tbody tr[hidden]").text).to include("IN", "ZZ")
+      expect(page.at_css("nav[aria-label=Period] a")["href"]).to eq(page_views_path)
+
+      get page_views_path(format: :csv, from: "2026-10-09", to: "2026-10-11")
+      expect(CSV.parse(response.body).second).to eq(["https://blog.example.com/post/new", "8", "IN: 6; ZZ: 2", nil, nil])
+      expect(ExportRequest.first.filename).to eq("page-views-2026-10-09-to-2026-10-11.csv")
+    end
+
     it "shows an empty state when there are no page views" do
       get page_views_path
 
@@ -142,6 +168,37 @@ RSpec.describe "Page views", type: :request do
       get page_view_path("/post/a")
 
       expect(response.body).to include("No device data in this period.", "Not dated for this page yet; see the all-time totals below.")
+    end
+
+    it "charts the page's clicks, impressions and position, with no data on days not synced" do
+      PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
+      [Date.new(2026, 10, 10), Date.new(2026, 10, 11)].each do |date|
+        Google::SearchConsole::Stat.create!(
+          search_type: "web",
+          date: date,
+          clicks: 9,
+          impressions: 90,
+          position: 5.0
+        )
+      end
+      Google::SearchConsole::Stat.create!(
+        search_type: "web",
+        date: Date.new(2026, 10, 10),
+        page: "https://blog.example.com/post/a",
+        page_path: "/post/a",
+        clicks: 2,
+        impressions: 20,
+        position: 3.0
+      )
+
+      get page_view_path("/post/a", from: "2026-10-09", to: "2026-10-11")
+
+      tips = Nokogiri::HTML5(response.body).css("#page-search-trend ~ div rect[data-tip]").map do |hit|
+        JSON.parse(hit["data-tip"])
+      end
+      expect(tips.map { |tip| tip["rows"].map { |row| row["value"] } }).to eq([
+        ["No data", "No data", "No data"], %w[2 20 3.0], ["0", "0", "No data"]
+      ])
     end
 
     it "sets the page's likes per 100 views beside the site's, once it has views enough for a rate" do
