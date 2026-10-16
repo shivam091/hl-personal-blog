@@ -11,3 +11,5 @@ shared:
   sync_requests: {label: Sync requests, route: sync_requests, controller: sync_requests}
   external_calls: {label: External calls, route: external_calls, controller: external_calls}
   export_requests: {label: Export requests, route: export_requests, controller: export_requests}
+  url_inspections: {label: URL inspection, route: google_search_console_url_inspections, controller: google/search_console/url_inspections}
+  sitemaps: {label: Sitemaps, route: google_search_console_sitemaps, controller: google/search_console/sitemaps}
