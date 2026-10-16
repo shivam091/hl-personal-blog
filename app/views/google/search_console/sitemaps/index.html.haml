@@ -1,0 +1,82 @@
+- content_for :title, "Sitemaps"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Sitemaps
+    %p{class: "mt-1 text-sm text-slate-500"} Each sitemap as Search Console last processed it.
+    = last_sync_status("search_console_sitemaps")
+  %div{class: "flex flex-wrap items-center gap-2"}
+    = link_to list_url(@filtering, @sorting, format: :csv),
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("download", size: 14)
+      Export CSV
+    = button_to sync_google_search_console_sitemaps_path, form_class: "inline-flex",
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("refresh", size: 14)
+      Sync sitemaps
+    = button_to submit_google_search_console_sitemaps_path, form_class: "inline-flex", title: "Also sent after every daily blog sync",
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("send", size: 14)
+      Submit sitemap
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
+    message: (@filtering.filtered? ? "No sitemaps match." : "No sitemaps yet. Sync to fetch them from Search Console.")
+- else
+  %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+        %tr
+          %th{scope: "col", class: "w-10 px-3 py-2.5"}
+            %span{class: "sr-only"} Expand
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", aria: {label: "Row number"}} #
+          - sort_keep = [@filtering, @pagination]
+          = sort_header @sorting, "Path", "path", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          = sort_header @sorting, "Last submitted", "last_submitted_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          = sort_header @sorting, "Last downloaded", "last_downloaded_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold"} Submitted URLs
+          = sort_header @sorting, "Errors", "error_count", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+          = sort_header @sorting, "Warnings", "warning_count", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+
+      - @sitemaps.each.with_index(@pagination.first_item) do |sitemap, number|
+        - details_id = dom_id(sitemap, :details)
+        %tbody{class: "border-b border-slate-100 last:border-b-0", data: {controller: "disclosure"}}
+          %tr{class: "hover:bg-slate-50"}
+            %td{class: "px-3 py-2"}
+              %button{type: "button",
+                class: "group inline-flex rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400",
+                aria: {expanded: "false", controls: details_id, label: "Show details for #{sitemap}"},
+                data: {action: "disclosure#toggle", disclosure_target: "button"}}
+                = icon("chevron-down", class: "transition-transform duration-150 group-aria-expanded:rotate-180")
+            %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= number_with_delimiter(number)
+            %td{class: "px-3 py-2 whitespace-nowrap"}
+              = blog_page_link(sitemap.path, nil)
+              - if sitemap.pending
+                %span{class: "ml-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800"} Pending
+            %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}= time_or_dash(sitemap.last_submitted_at)
+            %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}= time_or_dash(sitemap.last_downloaded_at)
+            %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(sitemap.submitted_urls)
+            %td{class: ["px-3 py-2 text-right tabular-nums", sitemap.error_count.positive? ? "font-medium text-red-700" : "text-slate-500"]}
+              = number_with_delimiter(sitemap.error_count)
+            %td{class: ["px-3 py-2 text-right tabular-nums", sitemap.warning_count.positive? ? "font-medium text-amber-700" : "text-slate-500"]}
+              = number_with_delimiter(sitemap.warning_count)
+          %tr{id: details_id, hidden: true, class: "bg-slate-50", data: {disclosure_target: "panel"}}
+            %td{colspan: 2}
+            %td{colspan: 6, class: "px-3 pt-1 pb-4 whitespace-normal"}
+              %dl{class: "mb-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3"}
+                %div
+                  %dt{class: "text-slate-500"} Type
+                  %dd= sitemap.sitemap_type.presence || "—"
+                %div
+                  %dt{class: "text-slate-500"} Sitemap index
+                  %dd= yes_no(sitemap.sitemaps_index)
+                %div
+                  %dt{class: "text-slate-500"} Pending
+                  %dd= yes_no(sitemap.pending)
+              = render "shared/breakdown", counts: sitemap.contents.to_h { |content| [content["type"], content["submitted"]] },
+                heading: "Content", count_heading: "Submitted", empty: "Google listed no contents for this sitemap."
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]

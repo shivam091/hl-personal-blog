@@ -26,6 +26,10 @@
           from: "Start date",
           to: "End date",
           local_only: "Only local request logs"
+        },
+        "google/sync_range": {
+          from: "Start date",
+          to: "End date"
         }
       }
     },

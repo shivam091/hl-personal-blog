@@ -144,6 +144,37 @@ RSpec.describe "Page views", type: :request do
       expect(response.body).to include("No device data in this period.", "Not dated for this page yet; see the all-time totals below.")
     end
 
+    it "charts the page's clicks, impressions and position, with no data on days not synced" do
+      PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
+      [Date.new(2026, 10, 10), Date.new(2026, 10, 11)].each do |date|
+        Google::SearchConsole::Stat.create!(
+          search_type: "web",
+          date: date,
+          clicks: 9,
+          impressions: 90,
+          position: 5.0
+        )
+      end
+      Google::SearchConsole::Stat.create!(
+        search_type: "web",
+        date: Date.new(2026, 10, 10),
+        page: "https://blog.example.com/post/a",
+        page_path: "/post/a",
+        clicks: 2,
+        impressions: 20,
+        position: 3.0
+      )
+
+      get page_view_path("/post/a", from: "2026-10-09", to: "2026-10-11")
+
+      tips = Nokogiri::HTML5(response.body).css("#page-search-trend ~ div rect[data-tip]").map do |hit|
+        JSON.parse(hit["data-tip"])
+      end
+      expect(tips.map { |tip| tip["rows"].map { |row| row["value"] } }).to eq([
+        ["No data", "No data", "No data"], %w[2 20 3.0], ["0", "0", "No data"]
+      ])
+    end
+
     it "sets the page's likes per 100 views beside the site's, once it has views enough for a rate" do
       PageView.collection.insert_many([
         {"_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a", "visitorCount" => 200},
