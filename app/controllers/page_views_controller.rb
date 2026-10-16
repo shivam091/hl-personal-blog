@@ -1,6 +1,8 @@
 # encoding: UTF-8
 
 class PageViewsController < ApplicationController
+  include ListPeriodCounts
+
   SEARCH_FIELDS = [
     Filtering::Contains.new(:q, field: :url, label: "URL contains", placeholder: "e.g. /post/ or css-grid"),
     Filtering::DateRange.new(:updated, field: :updated_at, label: "Last updated")
@@ -13,14 +15,17 @@ class PageViewsController < ApplicationController
   }.freeze
 
   def index
+    load_list_period
     respond_to do |format|
       format.html do
-        @pagination = Pagination.new(filtered_page_views, params)
+        page_views = filtered_page_views
+        @pagination = Pagination.new(page_views, params)
         @page_views = @pagination.records
+        @country_views = country_views(page_views)
       end
       format.csv do
-        send_csv PageView.to_csv(filtered_page_views),
-          filename: "page-views-#{Date.current.iso8601}.csv"
+        send_csv PageView.to_csv(filtered_page_views, period: (@period unless @period.all_time?)),
+          filename: export_filename("page-views")
       end
     end
   end
@@ -29,6 +34,7 @@ class PageViewsController < ApplicationController
     @page_view = PageView.find(params[:id])
     @period = Period.new(params)
     @page_like = PageLike.where(_id: @page_view.slug).first
+    @search = Google::SearchConsole::Summary.new(@period)
     # Stored as full URLs, so they're matched on the path whatever the host.
     same_path = /\Ahttps?:\/\/[^\/]+#{Regexp.escape(@page_view.slug == "/" ? "" : @page_view.slug)}\/?\z/
     @feed_entry = FeedEntry.where(_id: same_path).first
@@ -46,10 +52,26 @@ class PageViewsController < ApplicationController
     (likes * 100.0 / views).round(2) if views >= BlogStats::MIN_VIEWS_FOR_RATE
   end
 
+  # Over every matching page rather than the visible one, so the totals hold
+  # however the list is paged.
+  def country_views(page_views)
+    page_views.each_with_object(Hash.new(0)) do |page_view, totals|
+      view_countries(page_view).each { |country, count| totals[country] += count.to_i }
+    end
+  end
+
+  def view_countries(page_view)
+    @period.all_time? ? page_view.countries : page_view.countries_within(@period)
+  end
+
   def filtered_page_views
     @filtering = Filtering.new(params, fields: SEARCH_FIELDS)
     # _id is the slug, so it's unique and keeps ties stable across pages.
-    @sorting = Sorting.new(params, columns: SORT_COLUMNS, tiebreaker: :_id)
-    @sorting.apply(@filtering.apply(PageView.all))
+    # Visitors aren't counted by day, so a span can't be sorted by them.
+    @sorting = Sorting.new(params, columns: @period.all_time? ? SORT_COLUMNS : SORT_COLUMNS.except("unique_visitor_count"), tiebreaker: :_id)
+    scope = @filtering.apply(PageView.all)
+    return @sorting.apply(scope) if @period.all_time?
+
+    sorted_within(scope, counted: "visitor_count") { |page_view| page_view.views_within(@period) }
   end
 end

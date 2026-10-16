@@ -2,17 +2,30 @@
 
 %div{class: "mb-6 flex flex-wrap items-center justify-between gap-3"}
   %h1{class: page_title_class} Page views
-  = link_to list_url(@filtering, @sorting, format: :csv),
+  = link_to list_url(@period, @filtering, @sorting, format: :csv),
     class: outline_button_class do
     = icon("download", size: 14)
     Export CSV
 
-= search_panel @filtering, keep: [@sorting, @pagination]
+%div{class: "mb-4 flex flex-wrap items-center gap-3"}
+  = render "shared/period_presets", period: @period, keep: [@filtering, @sorting]
+  = period_note @period, "Views in #{@period}; unique visitors aren't counted by day, so they're all time only."
+
+= search_panel @filtering, keep: [@period, @sorting, @pagination]
 
 - if @pagination.total_count.zero?
   = render "shared/empty_state", message: (@filtering.filtered? ? "No page views match." : "No page views yet."),
     icon: (@filtering.filtered? ? "search" : "inbox")
 - else
+  - if @country_views.values.any?(&:positive?)
+    %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
+      = render layout: "shared/card", locals: {id: "page-views-map", title: "Views by country", icon: "globe", class: "lg:col-span-2"} do
+        %div{class: "px-4 py-3"}
+          = world_map(@country_views, label: "Views by country, shaded by views", unit: "view")
+      = render layout: "shared/card", locals: {id: "page-views-countries", title: "Top countries", icon: "map-pin"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @country_views, heading: "Country", count_heading: "Views",
+            empty: "No country data.", limit: 8
   %div{class: table_card_class}
     %table{class: "w-full border-collapse text-left text-sm"}
       %thead{class: table_head_class}
@@ -20,10 +33,9 @@
           %th{scope: "col", class: "w-10 px-3 py-2.5"}
             %span{class: "sr-only"} Expand
           %th{scope: "col", class: list_heading_right_class, aria: {label: "Row number"}} #
-          - sort_keep = [@filtering, @pagination]
+          - sort_keep = [@period, @filtering, @pagination]
           = sort_header @sorting, PageView.human_attribute_name(:url), "url", keep: sort_keep, class: list_heading_class
-          = sort_header @sorting, PageView.human_attribute_name(:visitor_count), "visitor_count", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
-          = sort_header @sorting, PageView.human_attribute_name(:unique_visitor_count), "unique_visitor_count", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+          = visitor_headers @period, @sorting, keep: sort_keep
           = sort_header @sorting, PageView.human_attribute_name(:updated_at), "updated_at", keep: sort_keep, class: list_heading_class
 
       - @page_views.each.with_index(@pagination.first_item) do |page_view, number|
@@ -38,17 +50,16 @@
                 = icon("chevron-down", class: "transition-transform duration-150 group-aria-expanded:rotate-180")
             %td{class: muted_number_cell_class}= number_with_delimiter(number)
             %td{class: "px-3 py-2 font-medium whitespace-nowrap"}
-              = render "shared/page_link", record: page_view, path: page_view_path(page_view)
-            %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(page_view.visitor_count)
-            %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(page_view.unique_visitor_count)
+              = render "shared/page_link", record: page_view, path: page_view_path(page_view, **@period.query)
+            = visitor_cells page_view, @period
             %td{class: muted_cell_class}= time_or_dash(page_view.updated_at)
           %tr{id: details_id, hidden: true, class: "bg-slate-50", data: {disclosure_target: "panel"}}
             %td{colspan: 2}
-            %td{colspan: 4, class: "px-3 pt-1 pb-4 whitespace-normal"}
-              = render "shared/breakdown", counts: page_view.countries, heading: "Country", count_heading: "Views",
+            %td{colspan: page_view_details_colspan(@period), class: "px-3 pt-1 pb-4 whitespace-normal"}
+              = render "shared/breakdown", counts: period_countries(page_view, @period), heading: "Country", count_heading: "Views",
                 empty: "No country data for this page.", limit: 5
-              = link_to page_view_path(page_view), class: "mt-3 inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+              = link_to page_view_path(page_view, **@period.query), class: "mt-3 inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-slate-900 hover:underline" do
                 All details
                 = icon("chevron-right", size: 14)
 
-= pagination_nav @pagination, keep: [@filtering, @sorting]
+= pagination_nav @pagination, keep: [@period, @filtering, @sorting]
