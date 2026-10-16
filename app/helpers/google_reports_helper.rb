@@ -92,6 +92,31 @@ module GoogleReportsHelper
     end
   end
 
+  # The tab itself first, unsplit, so a split can be undone where it was
+  # picked; nil for a tab nothing splits.
+  def breakdown_splits
+    breakdowns = report_breakdowns
+    tab = breakdowns.find { |breakdown| breakdown.key == @breakdown.parent } || @breakdown
+    splits = breakdowns.select { |breakdown| breakdown.parent == tab.key }
+    [tab, *splits] if splits.any?
+  end
+
+  # Under the tab's own column, as GA's secondary dimension is, so a split
+  # reads as a narrowing of that tab rather than a tab of its own.
+  def split_select(splits)
+    options = splits.map { |breakdown| [breakdown.split_label || "No split", url_for(action: :index, breakdown: breakdown.key, **breakdown_query)] }
+    current = options[splits.index(@breakdown)].last
+    tag.div(class: "mt-1") do
+      safe_join([
+        label_tag("breakdown-split", "Split #{splits.first.label.downcase} by", class: "sr-only"),
+        picker_select_tag(nil, options_for_select(options, current),
+          id: "breakdown-split", class: "h-7 max-w-48 rounded-md border border-slate-300 bg-white px-2 py-0 text-xs font-normal text-slate-900 shadow-sm " \
+            "focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none",
+          data: {controller: "visit-select", action: "visit-select#change"})
+      ])
+    end
+  end
+
   # Rates and averages are dashed and counts solid, so a count is told from
   # a rate by more than colour. The period compared with is dotted.
   def trend_measures(trend, metrics)

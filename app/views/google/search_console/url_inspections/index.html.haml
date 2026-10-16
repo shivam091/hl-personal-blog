@@ -1,0 +1,136 @@
+- content_for :title, "URL inspection"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} URL inspection
+    %p{class: "mt-1 text-sm text-slate-500"}
+      Google's latest index verdict on each crawled page.
+      - if @uninspected_count.positive?
+        #{pluralize(@uninspected_count, "crawled page")} not inspected yet.
+    = last_sync_status("url_inspections")
+  %div{class: "flex flex-wrap items-center gap-2"}
+    = link_to list_url(@filtering, @sorting, format: :csv),
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("download", size: 14)
+      Export CSV
+    = button_to sync_google_search_console_url_inspections_path, form_class: "inline-flex",
+      title: "Google allows 2,000 inspections a day, so pages are inspected in batches",
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("refresh", size: 14)
+      Inspect next #{Google::SearchConsole::UrlInspectionSyncService::DEFAULT_LIMIT}
+
+-# Above the list, since a new entry Google hasn't picked up is the one
+-# costing traffic now; posts, tutorials and snippets alike.
+- if @new_entries.any?
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "new-entries", title: "New entries not indexed yet", icon: "clock"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Published in the last #{Google::SearchConsole::NewEntries::DAYS} days and not indexed. Each is inspected the day
+        it's synced, then every #{Google::SearchConsole::NewEntries::RECHECK_AFTER.in_days.to_i} days until Google indexes
+        it.
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-sm"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Entry
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Type
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Published
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Status
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Inspected
+          %tbody
+            - @new_entries.each do |row|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "w-full px-3 py-1.5"}
+                  - if row.inspection
+                    = blog_page_link(row.entry.name, google_search_console_url_inspection_path(row.inspection), live: row.entry.url)
+                  - else
+                    %span{class: "block truncate font-medium", title: row.entry.url}= row.entry.name
+                %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= row.entry.type.capitalize
+                %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= l(row.entry.published_at.to_date)
+                %td{class: "px-3 py-1.5 whitespace-nowrap #{"text-amber-700" if row.page.nil?}"}= row.status
+                %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(row.inspection&.inspected_at)
+
+-# Beside new entries, since a page that left the index is losing traffic
+-# it had, which is costlier than traffic a new one hasn't won yet.
+- if @dropped.any?
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "dropped", title: "Dropped out of the index", icon: "alert-triangle"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Pages an earlier inspection found indexed that the latest doesn't, latest drop first.
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-sm"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Page
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Now
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Indexed since
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Dropped
+          %tbody
+            - @dropped.each do |row|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "w-full px-3 py-1.5"}
+                  = blog_page_link(row.inspection.to_s, google_search_console_url_inspection_path(row.inspection), live: row.page&.url)
+                %td{class: "px-3 py-1.5 whitespace-nowrap"}
+                  = verdict_badge(row.inspection.verdict)
+                  %span{class: "ml-1 text-xs text-slate-500"}= row.inspection.coverage_state
+                %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(row.indexed_since)
+                %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(row.dropped_at)
+
+- if @coverage_counts.any?
+  %div{class: "mb-6 grid gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "crawl-delays", title: "Days to first crawl", icon: "clock"} do
+      - median = @crawl_delays.median
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        How long after publishing Google first crawled each new entry.
+        - if median
+          Half were crawled within #{pluralize(number_with_precision(median, precision: 1, strip_insignificant_zeros: true), "day")}.
+      - if @crawl_delays.days.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"}
+          No new entry has been seen crawled yet. Entries are counted from their first inspection while new, so this fills in as posts go out.
+      - else
+        %div{class: "px-4 py-3"}
+          = time_chart(@crawl_delays.counts.to_a, x_title: "Days from publishing to first crawl", y_title: "Entries",
+            label: "New entries by how many days after publishing Google first crawled them")
+
+    = render layout: "shared/card", locals: {id: "coverage", title: "Pages by coverage", icon: "list"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        How many inspected pages are in each of Search Console's coverage states, coloured by verdict.
+      %div{class: "px-4 py-3"}
+        = swatch_legend(@coverage_counts.map(&:verdict).uniq.map { |verdict| [verdict_label(verdict),verdict_chart_color(verdict).last] })
+        = ranking_chart(@coverage_counts.map { |row| [row.coverage_state, row.count, *verdict_chart_color(row.verdict)] },
+          total: @coverage_counts.sum(&:count), x_title: "Pages", y_title: "Coverage", label: "Inspected pages by coverage state, coloured by verdict")
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
+    message: (@filtering.filtered? ? "No inspections match." : "No pages inspected yet. Inspect a batch to fetch Google's verdicts.")
+- else
+  %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+        %tr
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", aria: {label: "Row number"}} #
+          %th{scope: "col", class: "px-3 py-2.5 font-semibold"} URL
+          - sort_keep = [@filtering, @pagination]
+          = sort_header @sorting, "Verdict", "verdict", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          = sort_header @sorting, "Coverage", "coverage_state", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          = sort_header @sorting, "Last crawled", "last_crawled_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          = sort_header @sorting, "Inspected", "inspected_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+      %tbody
+        - @url_inspections.each.with_index(@pagination.first_item) do |inspection, number|
+          %tr{class: "border-b border-slate-100 last:border-b-0 hover:bg-slate-50"}
+            %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= number_with_delimiter(number)
+            %td{class: "px-3 py-2 whitespace-nowrap"}
+              = blog_page_link(inspection.to_s, google_search_console_url_inspection_path(inspection), live: inspection.crawled_page&.url)
+              - if inspection.canonical_mismatch?
+                %p{class: "mt-0.5 flex items-center gap-1 text-xs text-amber-700"}
+                  = icon("alert-triangle", size: 12)
+                  Google chose a different canonical
+            %td{class: "px-3 py-2"}= verdict_badge(inspection.verdict)
+            %td{class: "px-3 py-2 text-slate-600"}= inspection.coverage_state.presence || "—"
+            %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}= time_or_dash(inspection.last_crawled_at)
+            %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}= time_or_dash(inspection.inspected_at)
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]
