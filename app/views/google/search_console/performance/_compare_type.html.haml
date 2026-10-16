@@ -1,0 +1,39 @@
+-# Search Console's own compare, one type against another over the same
+-# dates; a type has to be picked first, since All already holds the other.
+- choices = Google::SearchConsole::PerformanceController::TABS.choices
+- tab = @filtering.tab
+- comparing = @period.is_a?(Google::SearchConsole::PerformanceController::TypeComparison)
+- states = [@filtering, @sorting, @chart&.plotting, @trend&.selection]
+- base = @period.query.merge(page: nil)
+- button_class = "group inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 shadow-sm hover:bg-slate-50 aria-expanded:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+- link_class = "flex items-center justify-between gap-3 rounded-md px-3 py-2 hover:bg-slate-100"
+
+%div{id: "compare-type", class: "mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm"}
+  %span{class: "font-medium text-slate-700"} Compare search type
+  - if tab.nil?
+    %span{class: "text-slate-500"} Pick a search type above to compare it with another.
+  - else
+    %span{class: "rounded-md bg-slate-900 px-2.5 py-1 text-white"}= choices.fetch(tab).first
+    %span{class: "text-slate-500"} vs.
+    %div{class: "relative inline-flex", data: {controller: "dropdown", action: "keydown->dropdown#closeWithKeyboard turbo:before-cache@document->dropdown#close"}}
+      %button{type: "button", class: button_class, aria: {expanded: "false", controls: "compare-type-menu", haspopup: "true"},
+        data: {action: "dropdown#toggle", dropdown_target: "button"}}
+        = comparing ? @period.previous.to_s : "Pick a type"
+        = icon("chevron-down", size: 14, class: "text-slate-400 transition-transform duration-150 group-aria-expanded:rotate-180")
+      %div{id: "compare-type-menu", hidden: true, data: {dropdown_target: "menu"}, class: "absolute top-full z-20 mt-2 w-56 rounded-lg border border-slate-200 bg-white p-1.5 text-sm shadow-lg"}
+        %ul
+          - choices.except(tab).each do |key, (label, _value)|
+            - current = comparing && @period.search_type == key
+            %li
+              = link_to list_url(*states, **base, vs: key), aria: {current: (current ? "true" : nil)},
+                class: [link_class, current ? "font-medium text-slate-900" : "text-slate-700"] do
+                = label
+                = icon("check", size: 14, class: "text-slate-500") if current
+          - if comparing
+            %li{class: "mt-1 border-t border-slate-100 pt-1"}
+              = link_to "Stop comparing", list_url(*states, **base, vs: nil), class: [link_class, "text-slate-700"]
+    - if @type_comparison_note
+      %p{class: "w-full text-slate-500", role: "status"}= @type_comparison_note
+    - elsif comparing
+      %p{class: "w-full text-xs text-slate-500"}
+        Every change on this page is #{choices.fetch(tab).first} against #{@period.previous} over the same dates, rather than against the period before.

@@ -15,7 +15,26 @@ class SyncRequest
     Kind.new(key: "feed", section: "Feed entries", source: "Atom feed", page: :feed_entries_path,
       enqueue: ->(request) { SyncFeedJob.perform_later(request_id: request.id.to_s) }),
     Kind.new(key: "sitemap", section: "Crawled pages", source: "Blog sitemap", page: :crawled_pages_path,
-      enqueue: ->(request) { SyncSitemapJob.perform_later(request_id: request.id.to_s) })
+      enqueue: ->(request) { SyncSitemapJob.perform_later(request_id: request.id.to_s) }),
+    Kind.new(key: "search_console_performance", section: "Search performance", source: "Search Console",
+      page: :google_search_console_performance_path,
+      enqueue: ->(request) {
+        Google::SearchConsole::SyncJob.perform_later(request.days, request.to_date.iso8601, only: ["performance"], request_id: request.id.to_s)
+      }),
+    Kind.new(key: "search_console_sitemaps", section: "Sitemaps", source: "Search Console", page: :google_search_console_sitemaps_path,
+      enqueue: ->(request) { Google::SearchConsole::SyncJob.perform_later(only: ["sitemaps"], request_id: request.id.to_s) }),
+    Kind.new(
+      key: "sitemap_submission",
+      section: "Sitemap submission",
+      source: "Search Console",
+      page: :google_search_console_sitemaps_path,
+      enqueue: ->(request) { Google::SearchConsole::SitemapSubmitJob.perform_later(request_id: request.id.to_s) }
+    ),
+    Kind.new(key: "url_inspections", section: "URL inspection", source: "Search Console", page: :google_search_console_url_inspections_path,
+      enqueue: ->(request) {
+        Google::SearchConsole::SyncJob.perform_later(only: ["url_inspections"],
+          limit: request.limit || Google::SearchConsole::UrlInspectionSyncService::DEFAULT_LIMIT, request_id: request.id.to_s)
+      })
   ].index_by(&:key).freeze
 
   TRIGGERS = {"admin" => "Admin", "resync" => "Resync", "rake" => "Rake task", "job" => "Background job"}.freeze
