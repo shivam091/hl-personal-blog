@@ -28,6 +28,18 @@ class PageLike
     end
   end
 
+  def likes_within(period)
+    countries_within(period).values.sum
+  end
+
+  # ISO days sort as dates, so the period is compared as strings.
+  def countries_within(period)
+    from, to = period.from.iso8601, period.to.iso8601
+    countries_by_day.each_with_object(Hash.new(0)) do |(day, counts), totals|
+      counts.each { |code, count| totals[code] += count.to_i } if day.between?(from, to)
+    end
+  end
+
   class << self
     # Likes were only dated from some day, so a period reaching back before
     # it shows none rather than few.
@@ -36,14 +48,15 @@ class PageLike
     end
 
     # Lets likes be analysed in a spreadsheet, beyond what the list page offers.
-    def to_csv(page_likes = order(like_count: :desc))
+    def to_csv(page_likes = order(like_count: :desc), period: nil)
       CSV.generate do |csv|
         csv << CSV_HEADERS
         page_likes.each do |page_like|
+          countries = period ? page_like.countries_within(period) : page_like.countries
           csv << [
             page_like.url,
-            page_like.like_count,
-            page_like.countries.sort_by { |_, count| -count }.map { |code, count| "#{code}: #{count}" }.join("; ").presence,
+            period ? page_like.likes_within(period) : page_like.like_count,
+            countries.sort_by { |_, count| -count }.map { |code, count| "#{code}: #{count}" }.join("; ").presence,
             page_like.created_at&.utc&.iso8601(3),
             page_like.updated_at&.utc&.iso8601(3)
           ]
