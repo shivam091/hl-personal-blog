@@ -1,9 +1,8 @@
 # Personal Blog
 
 Rails 8 backend for the blog: serves the blog's content API and pulls in
-external data for
-an admin dashboard. Full-stack app (HAML views, Hotwire/Turbo + Stimulus,
-Tailwind CSS).
+external data from Google's APIs for an admin dashboard. Full-stack app
+(HAML views, Hotwire/Turbo + Stimulus, Tailwind CSS).
 
 ## Stack
 
@@ -60,22 +59,12 @@ everyone out, and login attempts are limited to 10 per 3 minutes. See
 
 ## Crawled pages
 
-`/crawled-pages` tracks the blog's pages and whether Google has indexed
-them (`CrawledPage`, a backend-only collection keyed on URL). Pages come
-from the sitemap and can't be added or edited here; besides marking their
-indexed status, the list exports CSVs in the crawled-pages layout:
-
-```csv
-#,URL,Last modified,Status
-1,https://harshal-ladhe.vercel.app,2026-07-05T12:07:01.000Z,Yes
-```
-
-`Status` "Yes" means indexed; blank means not. The same export works from
-the command line:
-
-```bash
-bin/rails 'crawled_pages:export[path/to/out.csv]'   # or no path for stdout
-```
+The blog's pages and whether Google has indexed them (`CrawledPage`, a
+backend-only collection keyed on URL). Pages come from the sitemap and
+can't be added or edited; their indexed status follows each URL inspection.
+There's no list of its own: URL inspection shows every page with Google's
+verdict, and lists the pages not inspected yet with an **Inspect URL now**
+button.
 
 ### Sitemap sync
 
@@ -281,6 +270,9 @@ and the blog's address.
 |---|---|
 | MongoDB Atlas | [config/mongoid.yml](config/mongoid.yml) |
 | CORS (blog frontend origins) | [config/initializers/cors.rb](config/initializers/cors.rb) |
+
+Each service class has setup instructions (what credential to generate,
+where to grant access) in its file header.
 
 ## Tests
 

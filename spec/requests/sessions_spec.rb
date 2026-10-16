@@ -4,7 +4,7 @@ require "rails_helper"
 
 RSpec.describe "Sessions", type: :request, signed_out: true do
   it "sends signed-out requests to the login page, with no nav" do
-    [crawled_pages_path, crawled_pages_path(format: :csv), feed_entries_path].each do |path|
+    [google_search_console_url_inspections_path, google_search_console_url_inspections_path(format: :csv), feed_entries_path].each do |path|
       get path
       expect(response).to redirect_to(new_session_path), path
     end
@@ -12,16 +12,16 @@ RSpec.describe "Sessions", type: :request, signed_out: true do
     get new_session_path
     expect(response).to have_http_status(:ok)
     expect(response.body).to include("Sign in", "This application is for authorised users only.")
-    expect(response.body).not_to include("Crawled pages", "Sign out")
+    expect(response.body).not_to include("Search Console", "Sign out")
   end
 
   it "blocks writes too" do
     page = CrawledPage.create!(url: "https://example.com/a", last_modified_at: Time.utc(2026, 7, 5))
 
-    patch mark_indexed_crawled_page_path(page)
+    patch request_indexing_crawled_page_path(page)
 
     expect(response).to redirect_to(new_session_path)
-    expect(page.reload.indexed).to be_falsy
+    expect(page.reload.index_requested_at).to be_nil
   end
 
   it "keeps the health check public" do
@@ -38,10 +38,10 @@ RSpec.describe "Sessions", type: :request, signed_out: true do
   end
 
   it "returns to the page first asked for" do
-    get crawled_pages_path(q: "css")
+    get feed_entries_path(q: "css")
     sign_in
 
-    expect(response).to redirect_to(crawled_pages_path(q: "css"))
+    expect(response).to redirect_to(feed_entries_path(q: "css"))
   end
 
   it "rejects a wrong username or password" do

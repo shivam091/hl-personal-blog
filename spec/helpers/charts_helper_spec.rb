@@ -30,7 +30,7 @@ RSpec.describe ChartsHelper, type: :helper do
 
   describe "#world_map coverage" do
     it "draws every country the app knows, Antarctica included" do
-      known = YAML.load_file(Rails.root.join("config/countries.yml")).values
+      known = YAML.load_file(Rails.root.join("config/countries.yml")).keys
 
       expect(known - WorldMap.codes.to_a).to be_empty
       expect(WorldMap.height).to be >= WorldMap.countries.find { |country| country.code == "AQ" }.path.scan(/ (\d+\.?\d*)/).flatten.map(&:to_f).max

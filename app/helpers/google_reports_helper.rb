@@ -326,6 +326,13 @@ module GoogleReportsHelper
     end
   end
 
+  # A page's inspection says why it is or isn't indexed; one never
+  # inspected is listed for inspecting on URL inspection.
+  def crawled_page_target(page)
+    inspection = page.url_inspection
+    inspection ? google_search_console_url_inspection_path(inspection) : google_search_console_url_inspections_path(anchor: "not-inspected")
+  end
+
   def request_indexing_action(url)
     known = @inspections&.[](url)
     return if known.nil? || known[:indexed]
@@ -406,8 +413,17 @@ module GoogleReportsHelper
       ["Page fetch", humanize_state(inspection.page_fetch_state)],
       ["Crawled as", humanize_state(inspection.crawled_as)],
       ["Last crawled", time_or_dash(inspection.last_crawled_at)],
+      ["First indexed", first_indexed_detail(inspection)],
       ["Inspected", time_or_dash(inspection.inspected_at)]
     ]
+  end
+
+  # Shown with the check before it, since Google doesn't say when it got in.
+  def first_indexed_detail(inspection)
+    return time_or_dash(nil) unless inspection.first_indexed_at
+
+    detail = inspection.indexed_after ? safe_join([" (not indexed at ", time_tag(inspection.indexed_after), ")"]) : " (indexed when first inspected)"
+    safe_join([time_tag(inspection.first_indexed_at), tag.span(detail, class: "text-slate-500")])
   end
 
   def url_inspection_canonical_rows(inspection)

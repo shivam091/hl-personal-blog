@@ -7,12 +7,12 @@ RSpec.describe RequestLogger do
     it "logs each request once its response is sent, attributed to the admin" do
       RequestLog.delete_all
 
-      get crawled_pages_path(q: "css"), headers: {"User-Agent" => "RSpec", "X-Request-Id" => "spec-request-1"}
+      get feed_entries_path(q: "css"), headers: {"User-Agent" => "RSpec", "X-Request-Id" => "spec-request-1"}
 
       log = RequestLog.find("spec-request-1")
       expect(log).to have_attributes(
         request_method: "GET", status: 200, user: AuthenticationHelpers::ADMIN_USERNAME,
-        uri: "http://www.example.com/crawled-pages?q=css", query_params: {"q" => "css"},
+        uri: "http://www.example.com/feed-entries?q=css", query_params: {"q" => "css"},
         remote_address: "127.0.0.1", user_agent: "RSpec", response_size: response.body.bytesize
       )
       expect(log.session_id).to be_present

@@ -19,16 +19,4 @@ RSpec.describe "crawled_pages rake tasks" do
 
     expect(SyncRequest.first).to have_attributes(kind: "sitemap", trigger: "rake", status: "succeeded", created_count: 2)
   end
-
-  it "records an export to a file under the page's own export URL" do
-    CrawledPage.create!(url: "https://example.com/a", last_modified_at: Time.utc(2026, 10, 1))
-    path = Rails.root.join("tmp", "crawled-pages-spec.csv").to_s
-
-    run("crawled_pages:export", path)
-
-    expect(ExportRequest.first).to have_attributes(section: "Crawled pages", trigger: "rake", filename: "crawled-pages-spec.csv",
-      path: "/crawled-pages.csv", row_count: 1)
-  ensure
-    FileUtils.rm_f(path) if path
-  end
 end

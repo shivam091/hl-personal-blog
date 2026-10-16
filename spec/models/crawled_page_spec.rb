@@ -69,19 +69,4 @@ RSpec.describe CrawledPage, type: :model do
     expect(page.indexed).to be_falsy
     expect(page.to_s).to eq("https://example.com/a")
   end
-
-  describe ".to_csv" do
-    it "exports one row per page, in URL order" do
-      CrawledPage.create!(url: "https://harshal-ladhe.vercel.app/tutorials", last_modified_at: Time.utc(2026, 6, 29, 10, 59, 17))
-      CrawledPage.create!(url: "https://harshal-ladhe.vercel.app", last_modified_at: Time.utc(2026, 7, 5, 12, 7, 1), indexed: true)
-      CrawledPage.create!(url: "https://harshal-ladhe.vercel.app/about", last_modified_at: Time.utc(2026, 8, 23, 14, 42, 36), indexed: true)
-
-      expect(CrawledPage.to_csv).to eq(<<~CSV)
-        #,URL,Last modified,Status
-        1,https://harshal-ladhe.vercel.app,2026-07-05T12:07:01.000Z,Yes
-        2,https://harshal-ladhe.vercel.app/about,2026-08-23T14:42:36.000Z,Yes
-        3,https://harshal-ladhe.vercel.app/tutorials,2026-06-29T10:59:17.000Z,
-      CSV
-    end
-  end
 end

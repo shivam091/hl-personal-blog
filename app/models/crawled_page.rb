@@ -1,12 +1,8 @@
 # encoding: UTF-8
 
-require "csv"
-
 class CrawledPage
   include Mongoid::Document
   include StripAttribute
-
-  CSV_HEADERS = ["#", "URL", "Last modified", "Status"].freeze
 
   field :url, type: String
   field :last_modified_at, type: Time
@@ -50,17 +46,6 @@ class CrawledPage
 
     errors.add(:url, :taken)
     false
-  end
-
-  class << self
-    def to_csv(pages = order(url: :asc))
-      CSV.generate do |csv|
-        csv << CSV_HEADERS
-        pages.each.with_index(1) do |page, number|
-          csv << [number, page.url, page.last_modified_at&.utc&.iso8601(3), page.indexed ? "Yes" : nil]
-        end
-      end
-    end
   end
 
   private

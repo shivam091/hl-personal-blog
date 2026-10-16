@@ -1,0 +1,112 @@
+- content_for :title, "Ranking opportunities"
+- opportunities = @opportunities
+- table_class = "w-full border-collapse text-sm"
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+- export_class = "inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline"
+- target = Google::SearchConsole::Opportunities::TARGET_POSITION
+
+%div{class: "mb-6"}
+  %h1{class: page_title_class} Ranking opportunities
+  %p{class: subtitle_class}
+    Google Search, every search type: queries nearly on the first page, and pages losing the clicks they used to get.
+    The posts to rewrite or retitle.
+  = last_sync_status(Google::SearchConsole::PerformanceController::SYNC_KIND)
+
+= render "shared/period_bar", period: @period, keep: [], filtering: @filtering
+
+- if !opportunities.any?
+  = render "shared/empty_state", message: "No Search Console figures yet. Sync them from Search performance."
+- else
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "striking-distance", title: "Striking distance", icon: "target"} do
+      %p{class: lead_note_class}
+        Queries at average position 5–20 with #{Google::SearchConsole::Summary::MIN_IMPRESSIONS}+ impressions, most clicks to gain first.
+        The gain is what each would earn at this site's usual CTR for position #{target} (#{metric_value(opportunities.target_ctr, :percent)}),
+        less what it earns now. Low CTR means clicked well under the usual for its position: retitle the page; otherwise, improve the
+        post so it climbs.
+      - rows = opportunities.striking_distance
+      - if rows.empty?
+        %p{class: empty_note_class} No query near the first page in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Query
+                %th{scope: "col", class: "#{th_class} text-left"} Page
+                %th{scope: "col", class: "#{th_class} text-right"} Impressions
+                %th{scope: "col", class: "#{th_class} text-right"} Position
+                %th{scope: "col", class: "#{th_class} text-right"} CTR
+                %th{scope: "col", class: "#{th_class} text-right", title: "Clicks it would earn at position #{target}, less what it earns now"}
+                  To gain
+            %tbody
+              - rows.each do |row|
+                %tr{class: table_row_class}
+                  %td{class: name_cell_class}= row.query
+                  %td{class: "px-3 py-1.5"}
+                    - if row.page_path
+                      = blog_page_link(row.page_path, page_view_path(row.page_path))
+                    - else
+                      %span{class: "text-slate-400"} —
+                  %td{class: "#{cell_class} whitespace-nowrap"}
+                    = number_with_delimiter(row.impressions)
+                    = row_change(row.impressions, row.previous_impressions.to_i, DashboardHelper::HIGHER_IS_BETTER) if opportunities.compared?
+                  %td{class: "#{cell_class} whitespace-nowrap"}
+                    = metric_value(row.position, :position)
+                    - if opportunities.compared?
+                      %span{class: "block text-xs"}= position_change(row.position, row.previous_position)
+                  %td{class: "#{cell_class} whitespace-nowrap #{"text-amber-700" if row.low_ctr}",
+                    title: ("Usual at this position: #{metric_value(row.expected_ctr, :percent)}" if row.expected_ctr)}
+                    = metric_value(row.ctr, :percent)
+                    - if row.low_ctr
+                      %span{class: "text-xs"} low
+                  %td{class: "#{cell_class} font-medium"}
+                    = row.potential_clicks ? "+#{number_with_delimiter(row.potential_clicks)}" : "—"
+      = csv_footer(list_url(@period, @filtering, format: :csv, export: "striking"))
+
+  = render layout: "shared/card", locals: {id: "losing-pages", title: "Pages losing clicks", icon: "arrow-down"} do
+    %p{class: lead_note_class}
+      Pages with #{Google::SearchConsole::Opportunities::MIN_PREVIOUS_CLICKS}+ clicks in #{@period.previous} that lost
+      #{number_to_percentage(Google::SearchConsole::Opportunities::MIN_LOSS_SHARE * 100, precision: 0)}+ of them since,
+      most lost first, with the likeliest cause.
+      - if @stats.country
+        Every country, since Search Console doesn't split pages by country.
+    - if !@period.compare?
+      %p{class: empty_note_class}
+        A page loses clicks against an earlier period, so this shows once a comparison is picked.
+    - elsif @period.compare_countries?
+      %p{class: empty_note_class}
+        Search Console doesn't split pages by country, so there's no other country to compare with.
+    - elsif !opportunities.previous_synced?
+      %p{class: empty_note_class}
+        Search Console figures don't reach back to #{@period.previous}, so there's nothing to compare with.
+    - else
+      - rows = opportunities.losing_pages
+      - if rows.empty?
+        %p{class: empty_note_class} No page lost a meaningful share of its clicks in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Page
+                %th{scope: "col", class: "#{th_class} text-right"} Clicks
+                %th{scope: "col", class: "#{th_class} text-right"} Lost
+                %th{scope: "col", class: "#{th_class} text-right"} Position
+                %th{scope: "col", class: "#{th_class} text-right", title: "Change in average position from #{@period.previous}"} Change
+                %th{scope: "col", class: "#{th_class} text-left"} Likely cause
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row.page_path, page_view_path(row.page_path))
+                  %td{class: "px-3 py-1.5 text-right tabular-nums", title: "#{number_with_delimiter(row.previous_clicks)} before"}
+                    = number_with_delimiter(row.clicks)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums text-red-700"} −#{number_with_delimiter(row.lost)}
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.position, :position)
+                  %td{class: "px-3 py-1.5 text-right"}= position_change(row.position, row.previous_position)
+                  %td{class: "px-3 py-1.5 whitespace-nowrap"}= row.cause
+    %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+      = link_to list_url(@period, @filtering, format: :csv, export: "losing"), class: export_class do
+        = icon("download", size: 12)
+        CSV

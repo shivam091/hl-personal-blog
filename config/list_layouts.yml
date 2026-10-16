@@ -5,14 +5,4 @@
 # so a list can never be left without them. The list's own order here is
 # its default order. `tabs` names the constant holding the list's quick
 # filters, so its default tab can be chosen.
-shared:
-  crawled_pages:
-    label: Crawled pages
-    route: crawled_pages
-    tabs: CrawledPagesController::INDEXED_TABS
-    # URL order is the default because it's how pages are looked up.
-    sort: url
-    columns:
-      url: {label: URL, sort: asc, required: true}
-      last_modified_at: {label: Last modified, sort: desc}
-      indexed: {label: Indexed, sort: desc}
+shared: {}

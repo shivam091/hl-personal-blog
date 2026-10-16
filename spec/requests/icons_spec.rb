@@ -16,7 +16,7 @@ RSpec.describe "Icons", type: :request do
     CrawledPage.create!(url: "https://example.com/a", indexed: true, last_modified_at: Time.utc(2026, 7, 5))
     CrawledPage.create!(url: "https://example.com/b", last_modified_at: Time.utc(2026, 7, 5))
 
-    get crawled_pages_path
+    get google_search_console_url_inspections_path
 
     used = Nokogiri::HTML5(response.body).css("svg use").map { |use| use["href"].split("#").last }
     expect(used).not_to be_empty
@@ -24,15 +24,13 @@ RSpec.describe "Icons", type: :request do
   end
 
   it "shows table controls as icons only, still named for screen readers" do
-    page = CrawledPage.create!(url: "https://example.com/a", indexed: true, last_modified_at: Time.utc(2026, 7, 5))
+    page = CrawledPage.create!(url: "https://example.com/a", last_modified_at: Time.utc(2026, 7, 5))
 
-    get crawled_pages_path
+    get google_search_console_url_inspections_path
 
-    row = Nokogiri::HTML5(response.body).at_css("tbody tr")
+    row = Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=not-inspected] tbody tr")
     inspect = row.at_css("form[action='#{inspect_url_crawled_page_path(page)}'] button")
     expect(inspect.text.strip).to be_empty
     expect(inspect["aria-label"]).to eq("Inspect #{page.url} now")
-    expect(row.at_css("svg[role=img]")["aria-label"]).to eq("Indexed")
-    expect(row.text).not_to include("Yes")
   end
 end
