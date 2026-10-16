@@ -1,0 +1,80 @@
+- inspection = @url_inspection
+- content_for :title, "#{inspection} – URL inspection"
+
+= link_to google_search_console_url_inspections_path, class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
+  = icon("arrow-left")
+  URL inspection
+
+%div{class: page_header_class}
+  %div{class: "min-w-0"}
+    %h1{class: "text-xl font-semibold tracking-tight break-all"}= inspection
+    %p{class: "mt-1 flex flex-wrap items-center gap-x-2 text-sm text-slate-500"}
+      = verdict_badge(inspection.verdict)
+      %span= inspection.coverage_state
+  %div{class: toolbar_class}
+    - if inspection.crawled_page
+      = button_to inspect_url_crawled_page_path(inspection.crawled_page), form_class: "inline-flex",
+        class: outline_button_class do
+        = icon("refresh", size: 14)
+        Inspect again
+      - unless inspection.crawled_page.indexed
+        = button_to request_indexing_crawled_page_path(inspection.crawled_page), method: :patch, form_class: "inline-flex",
+          class: "inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-slate-700" do
+          = icon("clock", size: 14)
+          = inspection.crawled_page.index_requested_at ? "Mark as requested again" : "Mark as requested"
+    - if (link = http_url(inspection.inspection_link))
+      = link_to link, target: "_blank", rel: "noopener",
+        class: outline_button_class do
+        Open in Search Console
+        = icon("external-link", size: 14)
+
+%div{class: "grid items-start gap-6 lg:grid-cols-2"}
+  %div{class: "grid gap-6"}
+    = render "shared/details", id: "index-status", title: "Index status", icon: "search-check", rows: url_inspection_rows(inspection)
+    = render "shared/details", id: "canonical", title: "Canonical", icon: "file-search", rows: url_inspection_canonical_rows(inspection)
+  %div{class: "grid gap-6"}
+    = render layout: "shared/card", locals: {id: "rich-results", title: "Rich results", icon: "check-circle"} do
+      %div{class: "px-4 py-3 text-sm"}
+        - if inspection.rich_results.empty?
+          %p{class: "text-slate-500"} Google detected no rich results on this page.
+        - else
+          %p{class: "mb-2"}= verdict_badge(inspection.rich_results_verdict)
+          - inspection.rich_results.each do |result|
+            %h3{class: "mt-3 font-medium text-slate-700"}= result["type"]
+            %ul{class: "mt-1 space-y-1"}
+              - result["items"].each do |item|
+                %li
+                  %span= item["name"]
+                  - item["issues"].each do |issue|
+                    %p{class: ["text-xs", issue["severity"] == "ERROR" ? "text-red-700" : "text-amber-700"]} #{humanize_state(issue["severity"])}: #{issue["message"]}
+    = render "shared/details", id: "found-in", title: "Found in", icon: "map",
+      rows: [["Sitemaps", safe_join(inspection.sitemaps, tag.br).presence], ["Referring pages", safe_join(inspection.referring_urls, tag.br).presence]]
+
+= render layout: "shared/card", locals: {id: "timeline", title: "Timeline", icon: "calendar", class: "mt-6"} do
+  - if @timeline.empty?
+    %p{class: empty_note_class} No changes kept yet. Each inspection from now on that finds something new is added here.
+  - else
+    %p{class: lead_note_class}
+      Each inspection that found the verdict, coverage, indexing, fetch or robots.txt state changed, newest first.
+    %div{class: "overflow-x-auto"}
+      %table{class: table_class}
+        %thead{class: "text-slate-500"}
+          %tr
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Inspected
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Verdict
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Coverage
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Page fetch
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Last crawled
+        %tbody
+          - @timeline.each_with_index do |change, index|
+            - before = @timeline[index + 1]
+            - dropped = before&.indexed? && !change.indexed?
+            %tr{class: ["border-t border-slate-200", ("bg-red-50" if dropped)]}
+              %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(change.inspected_at)
+              %td{class: "px-3 py-1.5 whitespace-nowrap"}
+                = verdict_badge(change.verdict)
+                - if dropped
+                  %span{class: "ml-1 text-xs font-medium text-red-700"} Dropped out of the index
+              %td{class: "px-3 py-1.5 text-slate-600"}= change.coverage_state.presence || "—"
+              %td{class: "px-3 py-1.5 text-slate-600"}= humanize_state(change.page_fetch_state)
+              %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(change.last_crawled_at)

@@ -8,6 +8,8 @@ class PageView
   include DatedByDay
 
   CSV_HEADERS = ["URL", "Views", "Unique visitors", "Bot views", "Countries", "Created", "Last updated"].freeze
+  # Visitors and bots aren't counted by day, so a span has neither.
+  PERIOD_CSV_HEADERS = ["URL", "Views", "Countries", "Created", "Last updated"].freeze
   # Below this many hits, a page's bot share is mostly noise.
   MIN_HITS_FOR_BOT_SHARE = 20
 
@@ -39,6 +41,18 @@ class PageView
 
   def referrers
     all_time(legacy_referrers, referrers_by_day)
+  end
+
+  def views_within(period)
+    from, to = period.from.iso8601, period.to.iso8601
+    views_by_day.sum { |day, count| day.between?(from, to) ? count : 0 }
+  end
+
+  # Days from before countries were dated count as Unknown, so the countries add up
+  # to the span's views.
+  def countries_within(period)
+    within(legacy_views_by_day.transform_values { |count| {BlogStats::UNKNOWN_COUNTRY => count} }, period)
+      .merge(within(countries_by_day, period)) { |_, legacy, dated| legacy + dated }
   end
 
   def devices_within(period)
@@ -76,13 +90,14 @@ class PageView
       end.sort_by { |slug, bots, _, share| [-share, -bots, slug] }.first(limit)
     end
 
-    def to_csv(page_views = order(visitor_count: :desc))
+    def to_csv(page_views = order(visitor_count: :desc), period: nil)
       CSV.generate do |csv|
-        csv << CSV_HEADERS
+        csv << (period ? PERIOD_CSV_HEADERS : CSV_HEADERS)
         page_views.each do |page_view|
+          countries = period ? page_view.countries_within(period) : page_view.countries
           csv << [
-            page_view.url, page_view.visitor_count, page_view.unique_visitor_count, page_view.bot_count,
-            page_view.countries.sort_by { |_, count| -count }.map { |code, count| "#{code}: #{count}" }.join("; ").presence,
+            page_view.url, *(period ? [page_view.views_within(period)] : [page_view.visitor_count, page_view.unique_visitor_count, page_view.bot_count]),
+            countries.sort_by { |_, count| -count }.map { |code, count| "#{code}: #{count}" }.join("; ").presence,
             page_view.created_at&.utc&.iso8601(3), page_view.updated_at&.utc&.iso8601(3)
           ]
         end

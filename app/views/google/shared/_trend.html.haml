@@ -1,0 +1,39 @@
+- selection = trend.selection
+- metrics = metrics.select(&:color)
+%section{class: "mb-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm", aria: {label: "Figures over time"}}
+  %dl{class: "grid grid-cols-2 sm:grid-cols-4", data: {controller: "trend-metrics"}}
+    - metrics.each do |metric|
+      -# The label covers the whole tile, so the hint is lifted above it to stay
+      -# clickable.
+      %div{class: "group relative border-t-4 border-(--metric) px-4 py-3 has-checked:bg-(--metric) has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-slate-900",
+        style: "--metric: #{metric.color}"}
+        %dt{class: "flex items-center gap-1.5 text-xs font-medium text-slate-600 group-has-checked:text-white"}
+          = check_box_tag "trend[]", metric.field, selection.fields.include?(metric.field), id: "trend-#{metric.field}",
+            class: "size-3.5 rounded border-slate-400 accent-white focus-visible:outline-none",
+            data: {trend_metrics_target: "box", action: "trend-metrics#change"}
+          - tile_label = metric.tile_label || metric.label
+          = label_tag "trend-#{metric.field}", tile_label, class: "cursor-pointer after:absolute after:inset-0"
+          = render("shared/hint", label: tile_label, text: metric.hint, class: "relative group-has-checked:text-white/80") if metric.hint
+        %dd{class: "mt-1 text-2xl font-semibold tabular-nums text-(--metric) group-has-checked:text-white"}= metric_value(totals.value(metric.field), metric.format)
+        -# On a white chip, so the change keeps its own colour on any tile.
+        - if comparing?
+          %dd{class: "mt-1 inline-flex rounded bg-white px-1.5 py-0.5 text-xs", title: "Compared with #{previous_period}"}
+            = metric_change(totals.value(metric.field), previous_totals&.value(metric.field), metric)
+  %div{class: "border-t border-slate-200 px-4 py-3"}
+    -# Hours are stored for a few days only, so there's nothing to group.
+    - unless trend.per == "hour"
+      %div{class: "mb-2 flex justify-end"}
+        = label_tag "trend-by", "Show the figures by", class: "sr-only"
+        = picker_select_tag :chart_by, options_for_select([%w[Daily day], %w[Weekly week], %w[Monthly month]], selection.by), id: "trend-by",
+          class: "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none",
+          data: {controller: "chart-granularity", action: "chart-granularity#change"}
+    - measures = trend_measures(trend, metrics)
+    - if measures.any?
+      = measures_chart(trend.dates, measures, label: "#{measures.map(&:name).to_sentence} per #{trend.per}, each on its own scale", per: trend.per.to_sym,
+        unsettled: unsettled_from)
+      - if trend.previous
+        %p{class: "mt-2 flex items-center justify-end gap-1.5 text-xs text-slate-500"}
+          %span{class: "w-4 border-t-2 border-dotted border-slate-400", aria: {hidden: true}}
+          Dotted: #{previous_period}, lined up under these dates
+    - else
+      %p{class: "py-10 text-center text-sm text-slate-500"} Tick a figure above to chart it.

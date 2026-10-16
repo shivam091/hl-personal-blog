@@ -1,0 +1,119 @@
+- content_for :title, "Sitemaps"
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Sitemaps
+    %p{class: subtitle_class} Each sitemap as Search Console last processed it.
+    = last_sync_status("search_console_sitemaps")
+  %div{class: toolbar_class}
+    = link_to list_url(@filtering, format: :csv),
+      class: outline_button_class do
+      = icon("download", size: 14)
+      Export CSV
+    = button_to sync_google_search_console_sitemaps_path, form_class: "inline-flex",
+      class: outline_button_class do
+      = icon("refresh", size: 14)
+      Sync sitemaps
+    = button_to submit_google_search_console_sitemaps_path, form_class: "inline-flex", title: "Also sent after every daily blog sync",
+      class: outline_button_class do
+      = icon("send", size: 14)
+      Submit sitemap
+
+= search_panel @filtering
+= filter_tabs @filtering, counts: @tab_counts
+
+- if @history.size > 1
+  - dates = @history.keys
+  %div{class: split_grid_class}
+    = render layout: "shared/card", locals: {id: "sitemap-urls", title: "URLs over time", icon: "trending-up"} do
+      %p{class: lead_note_class}
+        URLs submitted in every sitemap at each day's last sync, against those URL inspection found indexed.
+      %div{class: "px-4 py-3"}
+        = line_chart(dates, [ChartsHelper::Series.new(name: "Submitted", values: @history.values.map { |day| day[:submitted] }),
+          ChartsHelper::Series.new(name: "Indexed", dashed: true, values: @history.values.map { |day| day[:indexed] })],
+          y_title: "URLs", label: "URLs submitted in the sitemaps and found indexed, by day")
+    = render layout: "shared/card", locals: {id: "sitemap-issues", title: "Errors and warnings over time", icon: "alert-triangle"} do
+      %p{class: lead_note_class}
+        Errors and warnings Search Console found across every sitemap, at each day's last sync.
+      %div{class: "px-4 py-3"}
+        = line_chart(dates, [ChartsHelper::Series.new(name: "Errors", values: @history.values.map { |day| day[:errors] }),
+          ChartsHelper::Series.new(name: "Warnings", dashed: true, values: @history.values.map { |day| day[:warnings] })],
+          y_title: "Issues", label: "Sitemap errors and warnings, by day")
+
+- if @sitemaps.empty?
+  = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
+    message: (@filtering.filtered? ? "No sitemaps match." : "No sitemaps yet. Sync to fetch them from Search Console.")
+- else
+  %div{class: table_card_class}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: table_head_class}
+        %tr
+          %th{scope: "col", class: "w-10 px-3 py-2.5"}
+            %span{class: "sr-only"} Expand
+          %th{scope: "col", class: list_heading_right_class, aria: {label: "Row number"}} #
+          %th{scope: "col", class: list_heading_class} Path
+          %th{scope: "col", class: list_heading_class} Last submitted
+          %th{scope: "col", class: list_heading_class} Last downloaded
+          %th{scope: "col", class: list_heading_right_class} Submitted URLs
+          %th{scope: "col", class: list_heading_right_class} Errors
+          %th{scope: "col", class: list_heading_right_class} Warnings
+
+      - @sitemaps.each.with_index(1) do |sitemap, number|
+        - details_id = dom_id(sitemap, :details)
+        %tbody{class: "border-b border-slate-100 last:border-b-0", data: {controller: "disclosure"}}
+          %tr{class: "hover:bg-slate-50"}
+            %td{class: "px-3 py-2"}
+              %button{type: "button",
+                class: "group inline-flex rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400",
+                aria: {expanded: "false", controls: details_id, label: "Show details for #{sitemap}"},
+                data: {action: "disclosure#toggle", disclosure_target: "button"}}
+                = icon("chevron-down", class: "transition-transform duration-150 group-aria-expanded:rotate-180")
+            %td{class: muted_number_cell_class}= number_with_delimiter(number)
+            %td{class: "px-3 py-2 whitespace-nowrap"}
+              = blog_page_link(sitemap.path, nil)
+              - if sitemap.pending
+                %span{class: "ml-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800"} Pending
+            %td{class: muted_cell_class}= time_or_dash(sitemap.last_submitted_at)
+            %td{class: muted_cell_class}= time_or_dash(sitemap.last_downloaded_at)
+            %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(sitemap.submitted_urls)
+            %td{class: ["px-3 py-2 text-right tabular-nums", sitemap.error_count.positive? ? "font-medium text-red-700" : "text-slate-500"]}
+              = number_with_delimiter(sitemap.error_count)
+            %td{class: ["px-3 py-2 text-right tabular-nums", sitemap.warning_count.positive? ? "font-medium text-amber-700" : "text-slate-500"]}
+              = number_with_delimiter(sitemap.warning_count)
+          %tr{id: details_id, hidden: true, class: "bg-slate-50", data: {disclosure_target: "panel"}}
+            %td{colspan: 2}
+            %td{colspan: 6, class: "px-3 pt-1 pb-4 whitespace-normal"}
+              %dl{class: "mb-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3"}
+                %div
+                  %dt{class: "text-slate-500"} Type
+                  %dd= sitemap.sitemap_type.presence || "—"
+                %div
+                  %dt{class: "text-slate-500"} Sitemap index
+                  %dd= yes_no(sitemap.sitemaps_index)
+                %div
+                  %dt{class: "text-slate-500"} Pending
+                  %dd= yes_no(sitemap.pending)
+              = render "shared/breakdown", counts: sitemap.contents.to_h { |content| [content["type"], content["submitted"]] },
+                heading: "Content", count_heading: "Submitted", empty: "Google listed no contents for this sitemap."
+              - changes = @changes.fetch(sitemap.path, [])
+              - if changes.any?
+                %h3{class: "mt-4 mb-2 text-sm font-medium text-slate-700"} Changes
+                %div{class: "inner-table"}
+                  %table{data: {sitemap_changes: sitemap.path}}
+                    %thead
+                      %tr
+                        %th{scope: "col", class: "text-left"} Synced
+                        %th{scope: "col", class: "text-right"} Submitted
+                        %th{scope: "col", class: "text-right", title: "Pages in this sitemap URL inspection found indexed"} Indexed
+                        %th{scope: "col", class: "text-right"} Errors
+                        %th{scope: "col", class: "text-right"} Warnings
+                    %tbody
+                      - changes.each do |change|
+                        %tr
+                          %td{class: "text-slate-500"}= time_or_dash(change.synced_at)
+                          %td{class: "text-right tabular-nums"}= number_with_delimiter(change.submitted)
+                          %td{class: "text-right tabular-nums"}= change.indexed ? number_with_delimiter(change.indexed) : "—"
+                          %td{class: ["text-right tabular-nums", (change.error_count.positive? ? "font-medium text-red-700" : "text-slate-500")]}
+                            = number_with_delimiter(change.error_count)
+                          %td{class: ["text-right tabular-nums", (change.warning_count.positive? ? "font-medium text-amber-700" : "text-slate-500")]}
+                            = number_with_delimiter(change.warning_count)

@@ -50,6 +50,24 @@ RSpec.describe "Page likes", type: :request do
     expect(rows.drop(1).map(&:first)).to eq((10..19).reverse_each.map { |n| "https://blog.example.com/post/#{n}" })
   end
 
+  it "counts likes in a picked span from each page's days, sorting by them" do
+    PageLike.collection.update_one({"_id" => "/post/01"}, {"$set" => {"countriesByDay" => {"2026-10-10" => {"IN" => 4, "US" => 1}}}})
+    PageLike.collection.update_one({"_id" => "/post/02"}, {"$set" => {"countriesByDay" => {"2026-10-10" => {"IN" => 2}, "2026-09-01" => {"IN" => 9}}}})
+
+    get page_likes_path(from: "2026-10-01", to: "2026-10-11")
+
+    expect(slugs.first(2)).to eq(%w[/post/01 /post/02])
+    page = Nokogiri::HTML5(response.body)
+    expect(page.at_css("tbody tr td:nth-child(4)").text).to eq("5")
+    expect(page.at_css("[aria-controls=period-menu]").text.squish).to eq("Period: Custom")
+
+    get page_likes_path(from: "2026-10-01", to: "2026-10-11", sort: "like_count", direction: "asc")
+    expect(slugs.first(2)).to eq(%w[/post/03 /post/04])
+
+    get page_likes_path(format: :csv, from: "2026-10-01", to: "2026-10-11", q: "/post/0")
+    expect(CSV.parse(response.body).second).to eq(["https://blog.example.com/post/01", "5", "IN: 4; US: 1", "2026-08-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z"])
+  end
+
   it "shows an empty state" do
     PageLike.delete_all
     get page_likes_path

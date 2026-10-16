@@ -219,6 +219,9 @@ RSpec.describe "Feed entries", type: :request do
 
     it "records a job's sync, or updates the request it was enqueued for" do
       allow(FeedSyncService).to receive(:call) { SyncResult.new(1, 0, 0, []) }
+      # A new entry is inspected too, which would otherwise depend on the
+      # Google credentials at hand.
+      allow_any_instance_of(Google::SearchConsole::UrlInspectionSyncService).to receive(:inspect_new_entries) { SyncResult.empty }
       request = SyncRequest.enqueue("feed")
 
       SyncFeedJob.perform_now(request_id: request.id.to_s)
