@@ -1,0 +1,34 @@
+- by = @breakdown.headings.join(" and ").downcase
+- label = chart.metric.label
+- total = chart.plotting.total
+- series = [(ChartsHelper::Series.new(name: "Total", values: chart.total, dotted: true, marker: ChartsHelper::TOTAL_MARKER) if total),
+  *chart.rows.zip(ChartsHelper::SHARE_COLORS, ChartsHelper::ROW_MARKERS).map { |row, color, marker| ChartsHelper::Series.new(name: row.label, values: row.daily, color: color, marker: marker) }].compact
+-# Dotted in each line's own colour, after the lines they belong to so the
+-# rows keep their positions for the ranking's highlighting.
+- if chart.previous_name
+  - series += [(ChartsHelper::Series.new(name: "Total, #{chart.previous_name}", values: chart.previous_total, dotted: true, marker: ChartsHelper::TOTAL_MARKER) if total),
+    *chart.rows.zip(ChartsHelper::SHARE_COLORS, ChartsHelper::ROW_MARKERS).map { |row, color, marker| ChartsHelper::Series.new(name: "#{row.label}, #{chart.previous_name}", values: row.previous_daily, color: color, marker: marker, dotted: true) }].compact
+- empty = "Tick rows in the table to chart them."
+- per = chart.plotting.by
+- granularity = capture do
+  = label_tag "chart-by", "Show #{label.downcase} by", class: "sr-only"
+  = picker_select_tag :chart_by, options_for_select([%w[Day day], %w[Week week], %w[Month month]], per), id: "chart-by",
+    class: "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none",
+    data: {controller: "chart-granularity", action: "chart-granularity#change"}
+%div{class: "mb-6 grid gap-4",
+  data: {controller: "series-highlight", action: "chart-tooltip:show->series-highlight#near chart-tooltip:hide->series-highlight#restore"}}
+  = render layout: "shared/card", locals: {id: "chart-over-time", title: "#{label} by #{by} over time", icon: "activity", actions: granularity} do
+    %div{class: "px-4 py-3"}
+      - if series.any?
+        = line_chart(chart.dates, series, y_title: label, label: "#{label} per #{per} for the charted rows#{" and in total" if total}", selectable: true, per: per.to_sym,
+          unsettled: unsettled_from)
+      - else
+        %p{class: "py-10 text-center text-sm text-slate-500"}= empty
+  = render layout: "shared/card", locals: {id: "chart-ranking", title: "#{label} by #{by}", icon: "bar-chart", class: "flex flex-col"} do
+    %div{class: "flex flex-1 flex-col px-4 py-3"}
+      - if chart.rows.any?
+        = ranking_chart(chart.rows.zip(ChartsHelper::SHARE_SWATCHES, ChartsHelper::SHARE_COLORS, ChartsHelper::ROW_MARKERS).map { |row, swatch, color, marker| [row.label, row.value, swatch, color, marker] },
+          x_title: label, y_title: @breakdown.headings.join(" · "), label: "#{label} of the charted rows, with each one's share of the total", total: @totals.value(chart.metric.field), first_series: total ? 1 : 0,
+          previous: (chart.rows.to_h { |row| [row.label, row.previous_value] } if chart.previous_name), previous_name: chart.previous_name)
+      - else
+        %p{class: "py-10 text-center text-sm text-slate-500"}= empty
