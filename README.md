@@ -1,9 +1,8 @@
 # Personal Blog
 
 Rails 8 backend for the blog: serves the blog's content API and pulls in
-external data for
-an admin dashboard. Full-stack app (HAML views, Hotwire/Turbo + Stimulus,
-Tailwind CSS).
+external data from Google's APIs for an admin dashboard. Full-stack app
+(HAML views, Hotwire/Turbo + Stimulus, Tailwind CSS).
 
 ## Stack
 
@@ -281,6 +280,9 @@ and the blog's address.
 |---|---|
 | MongoDB Atlas | [config/mongoid.yml](config/mongoid.yml) |
 | CORS (blog frontend origins) | [config/initializers/cors.rb](config/initializers/cors.rb) |
+
+Each service class has setup instructions (what credential to generate,
+where to grant access) in its file header.
 
 ## Tests
 

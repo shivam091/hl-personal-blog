@@ -1,0 +1,66 @@
+- select_class = "h-8 max-w-56 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+- actions = capture do
+  %div{class: toolbar_class}
+    = label_tag "indexing-pages", "Pages charted", class: "sr-only"
+    - sitemap_options = indexing.sitemaps.map { |url| [IndexCoverage.path_of(url) || url, url] }
+    - page_options = options_for_select(Google::SearchConsole::PageIndexing::PAGES.invert.to_a, indexing.pages)
+    - if sitemap_options.any?
+      - page_options += tag.optgroup(options_for_select(sitemap_options, indexing.pages), label: "Filter to sitemaps")
+    = picker_select_tag nil, page_options,
+      id: "indexing-pages", class: select_class,
+      data: {controller: "chart-granularity", chart_granularity_param_value: "indexing_pages", action: "chart-granularity#change"}
+    = label_tag "indexing-range", "Period charted", class: "sr-only"
+    = picker_select_tag nil, options_for_select(Google::SearchConsole::PageIndexing::RANGES.invert.to_a, indexing.range),
+      id: "indexing-range", class: select_class,
+      data: {controller: "chart-granularity", chart_granularity_param_value: "indexing_range", action: "chart-granularity#change"}
+
+= render layout: "shared/card", locals: {id: "page-indexing", title: "Page indexing", icon: "search-check", actions: actions} do
+  - if !indexing.any?
+    %p{class: empty_note_class}
+      No inspected pages
+      = indexing.pages == "all" ? "yet." : "in this pick."
+  - else
+    - reasons = indexing.reasons
+    - tiles = [["not_indexed", "Not indexed", indexing.not_indexed, "bg-[#72716c]", pluralize(reasons.size, "reason")],
+      ["indexed", "Indexed", indexing.indexed, "bg-[#13875e]", nil]]
+    %div{class: "flex flex-wrap gap-2 px-4 pt-3"}
+      - tiles.each do |series, name, count, color, note|
+        - on = indexing.shown?(series)
+        %button{type: "button", value: indexing.toggle(series), disabled: indexing.shown == [series],
+          aria: {pressed: on.to_s, label: "#{on ? "Hide" : "Show"} #{name.downcase} pages"},
+          class: ["flex min-w-36 flex-col items-start justify-start rounded-md px-3 py-2 text-left transition-colors disabled:cursor-default", on ? "#{color} text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"],
+          data: {controller: "chart-granularity", chart_granularity_param_value: "indexing_show", action: "chart-granularity#change", series: series}}
+          %span{class: "flex items-center gap-1.5 text-xs font-medium"}
+            = icon(on ? "square-check" : "square", size: 14)
+            = name
+          %span{class: "block text-2xl font-semibold tabular-nums"}= number_with_delimiter(count)
+          - if note
+            %span{class: ["block text-xs", on ? "text-white/80" : "text-slate-500"]}= note
+    %div{class: "px-4 pt-3"}
+      %label{class: "inline-flex cursor-pointer items-center gap-1.5 text-sm text-slate-700"}
+        = check_box_tag "indexing-impressions", indexing.toggle("impressions"), indexing.shown?("impressions"),
+          disabled: indexing.shown == ["impressions"], class: "size-3.5 rounded border-slate-400 accent-[#86198f]",
+          data: {controller: "chart-granularity", chart_granularity_param_value: "indexing_show", action: "chart-granularity#change"}
+        Impressions
+    %div{class: "px-4 py-3"}
+      - colors = {"not_indexed" => "#a8a7a1", "indexed" => "#1baf7a"}
+      - names = {"not_indexed" => "Not indexed", "indexed" => "Indexed"}
+      - series = (indexing.shown - ["impressions"]).map { |key| ChartsHelper::Series.new(name: names[key], values: indexing.daily[key], color: colors[key]) }
+      - impressions = ChartsHelper::Measure.new(name: "Impressions", values: indexing.impressions, color: "#86198f", whole: true,
+        tick: ->(value) { compact_number(value) }, reading: ->(value) { number_with_delimiter(value) })
+      - line = impressions if indexing.shown?("impressions")
+      = stacked_chart(indexing.dates, series, y_title: "Pages", line: line, label: "Pages indexed and not indexed each day, as the last inspection by then found them, and Google search impressions")
+      %p{class: "mt-2 text-xs text-slate-500"}
+        Each page counts from its first inspection, as its latest verdict by the end of that day. Sitemaps are as the latest inspection found them.
+        - if indexing.shown?("impressions")
+          Impressions are Google web search's, for the pages picked, on the scale at the right.
+    - if reasons.any?
+      %div{class: "border-t border-slate-200 px-4 py-3"}
+        %h3{class: "mb-1 flex justify-between text-xs font-medium text-slate-500"}
+          %span Why pages aren't indexed
+          %span Pages
+        %ul{class: "divide-y divide-slate-200 text-sm", aria: {label: "Why pages aren't indexed"}}
+          - reasons.each do |reason|
+            %li{class: "flex justify-between gap-3 py-1.5"}
+              = link_to reason.coverage_state, google_search_console_url_inspections_path(coverage: reason.coverage_state), class: "truncate hover:underline"
+              %span{class: "shrink-0 tabular-nums"}= number_with_delimiter(reason.count)

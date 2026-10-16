@@ -1,0 +1,121 @@
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class}= title
+    %p{class: subtitle_class}= description
+    = last_sync_status(sync_kind)
+  %div{class: toolbar_class}
+    = render "google/shared/export_menu", exports: report_exports
+    = render "google/shared/sync_dialog", **sync_dialog_locals
+
+- add_breadcrumb(@breakdown.label, url_for(action: :index, breakdown: @breakdown.key, **breakdown_query))
+%nav{class: "mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 text-sm [scrollbar-width:none]", aria: {label: "Breakdown"}}
+  - report_breakdowns.reject(&:parent).each do |breakdown|
+    - current = breakdown == @breakdown || breakdown.key == @breakdown.parent
+    = link_to breakdown.label, url_for(action: :index, breakdown: breakdown.key, **breakdown_query),
+      class: ["-mb-px border-b-2 px-3 py-2 whitespace-nowrap", current ? "border-slate-900 font-medium text-slate-900" : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900"],
+      aria: {current: (current ? "page" : nil)}
+
+- if @breakdown.note
+  %p{class: "mb-4 flex items-start gap-2 text-sm text-slate-500"}
+    = icon("info", size: 16, class: "mt-0.5 shrink-0 text-slate-400")
+    %span= @breakdown.note
+
+- kept = [@chart&.plotting, @trend&.selection, @event_choice]
+= render "google/shared/period", period: @period, keep: [@filtering, @sorting, @pagination, *kept]
+= render "shared/period_notes", notes: [@breakdown.caution]
+= search_panel @filtering, keep: [@period, @sorting, @pagination, *kept]
+= filter_tabs(@filtering, counts: @tab_counts, keep: [@period, @sorting, @pagination, *kept]) if @filtering.tabs
+
+- if @live_error
+  %p{class: "mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status"}
+    = icon("alert-triangle", size: 16, class: "mt-0.5 shrink-0 text-amber-600")
+    %span
+      Couldn't get users and sessions from Google Analytics (#{@live_error}), so they're added up from the stored days and pages,
+      and count a reader again on each day and page they were seen.
+
+- if @event_error
+  %p{class: "mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status"}
+    = icon("alert-triangle", size: 16, class: "mt-0.5 shrink-0 text-amber-600")
+    %span
+      Couldn't get the chosen event's figures from Google Analytics (#{@event_error}), so Event count and Key events count every event.
+
+- figures = {metrics: figure_metrics, totals: @totals, previous_totals: @previous_totals, previous_period: @period.previous}
+- if @trend
+  = render "google/shared/trend", trend: @trend, **figures
+- else
+  = render "google/shared/totals", **figures
+= local_assigns[:extra]
+
+- if unanswerable_search
+  = render "shared/empty_state", icon: "search", message: unanswerable_search
+- elsif @pagination.total_count.zero?
+  = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
+    message: (@filtering.filtered? ? "Nothing matches in #{@period}." : "No figures for #{@period}. Sync to fetch them from Google.")
+- else
+  = render "google/shared/charts", chart: @chart if @chart
+  -# Rows to chart are picked, as in GA, since a chart can only tell a few
+  -# lines apart.
+  %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm",
+    data: ({controller: "plot-rows", plot_rows_plotted_value: @chart.rows.map(&:values).to_json, plot_rows_limit_value: Google::DailyReport::CHART_ROWS} if @chart)}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+        %tr
+          - if @chart
+            %th{scope: "col", class: "w-px py-2.5 pl-3"}
+              = check_box_tag nil, nil, false, id: nil, title: "Chart the first #{Google::DailyReport::CHART_ROWS} rows, or none", class: "size-4 rounded border-slate-300 align-middle",
+                aria: {label: "Chart the first #{Google::DailyReport::CHART_ROWS} rows, or none"}, data: {plot_rows_target: "all", action: "plot-rows#toggleAll"}
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", aria: {label: "Row number"}} #
+          - sort_keep = [@period, @filtering, @pagination, *kept]
+          - splits = breakdown_splits
+          - @breakdown.headings.zip(@breakdown.keys).each_with_index do |(heading, key), index|
+            = sort_header @sorting, heading, key.to_s, keep: sort_keep, class: "px-3 py-2.5 align-top font-semibold" do
+              = split_select(splits) if splits && index.zero?
+          - table_metrics.each do |metric|
+            - event_filter = event_filters.find { |filter| filter.field == metric.field }
+            = sort_header @sorting, metric.label, metric.field.to_s, keep: sort_keep, title: metric.hint,
+              class: "px-3 py-2.5 text-right align-top font-semibold whitespace-nowrap" do
+              = event_select(event_filter, metric.label) if event_filter
+        - if report_shares?
+          -# Above the rows, as in GA, so each share is read against it.
+          -# No border of its own: a collapsed one stays behind when the head
+          -# sticks, leaving a gap rows show through, and the header cells
+          -# already draw the line above it.
+          %tr{class: "bg-white text-slate-900"}
+            - if @chart
+              %td{class: "py-2 pl-3"}
+                = check_box_tag nil, nil, @chart.plotting.total, id: nil, class: "size-4 rounded border-slate-300 align-middle",
+                  aria: {label: "Chart the total"}, data: {plot_rows_target: "total", action: "plot-rows#change"}
+            %td
+            %th{scope: "row", colspan: @breakdown.keys.size, class: "px-3 py-2 font-semibold"} Total
+            - table_metrics.each do |metric|
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums"}
+                %div{class: "font-semibold", style: ("color: #{metric.color}" if metric.color)}= metric_value(@totals.value(metric.field), metric.format)
+                - if metric.row_change
+                  - if @previous_totals
+                    %div{class: "text-xs font-normal"}= row_change(@totals.value(metric.field), @previous_totals.value(metric.field), metric)
+                - elsif metric.format == :count && @totals.value(metric.field).to_i.positive?
+                  %div{class: "text-xs font-normal text-slate-500"} 100% of total
+      %tbody
+        - @rows.each.with_index(@pagination.first_item) do |row, number|
+          %tr{class: "group/row border-b border-slate-100 last:border-b-0 hover:bg-slate-50"}
+            - if @chart
+              - values = @breakdown.keys.map { |key| row[key] }
+              %td{class: "py-2 pl-3"}
+                = check_box_tag nil, values.to_json, @chart.plotted?(values), id: nil, class: "size-4 rounded border-slate-300 align-middle disabled:opacity-40",
+                  aria: {label: "Chart #{values.compact.join(" · ")}"}, data: {plot_rows_target: "row", action: "plot-rows#change"}
+            %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= number_with_delimiter(number)
+            - @breakdown.keys.each do |key|
+              -# Out of the way until the row is pointed at, as in Search
+              -# Console; always there on a touch screen, which can't point.
+              %td{class: "px-3 py-2"}
+                - actions = breakdown_actions(row, key)
+                %div{class: "flex items-center justify-between gap-4"}
+                  %span= breakdown_value(row, key)
+                  - if actions
+                    %span{class: "-my-1 flex shrink-0 gap-0.5 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100"}= actions
+            - table_metrics.each do |metric|
+              -# In its line's colour, so a column is found from the chart.
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums"}= safe_join([tag.span(metric_value(row.value(metric.field), metric.format),
+                style: ("color: #{metric.color}" if metric.color)), report_cell_aside(row, metric)].compact, " ")
+
+= pagination_nav @pagination, keep: [@period, @filtering, @sorting, *kept]
