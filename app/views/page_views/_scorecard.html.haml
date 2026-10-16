@@ -2,6 +2,7 @@
 - dates = (period.from..period.to).to_a
 - views_by_day = page_view.views_by_day
 - likes_by_day = page_like&.likes_by_day || {}
+- search_totals = search.page_totals(slug)
 - rows_class = "flex justify-between gap-3 px-4 py-2 text-sm"
 
 = render "google/shared/period", period: period, keep: []
@@ -20,6 +21,12 @@
         %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}= note
 
   %div{class: "grid gap-6"}
+    = render layout: "shared/card", locals: {id: "page-search", title: "Google search", icon: "search"} do
+      %ul{class: "divide-y divide-slate-100"}
+        - google_search_metrics.each do |metric|
+          %li{class: rows_class}
+            %span{class: "text-slate-500"}= metric.label
+            %span{class: "font-medium tabular-nums"}= metric_value(search_totals.value(metric.field), metric.format)
     = render layout: "shared/card", locals: {id: "page-status", title: "Feed and index", icon: "search-check"} do
       %ul{class: "divide-y divide-slate-100"}
         %li{class: rows_class}
@@ -38,4 +45,42 @@
         - if crawled_page
           %li{class: rows_class}
             %span{class: "text-slate-500"} Indexed
-            %span= crawled_page.indexed ? "Yes" : "No"
+            %span
+              - if (inspection = crawled_page.url_inspection)
+                = link_to verdict_badge(inspection.verdict), google_search_console_url_inspection_path(inspection)
+              - else
+                = crawled_page.indexed ? "Yes" : "No"
+
+-# Clicks, impressions and position together, as Search Console charts
+-# them, so a drop in clicks can be told from a drop in ranking.
+= render layout: "shared/card", locals: {id: "page-search-trend", title: "Google search over time", icon: "trending-up", class: "mb-6"} do
+  - daily = search.page_daily(slug)
+  - if daily[:impressions].compact.sum.zero?
+    %p{class: "px-4 py-3 text-sm text-slate-500"} Google didn't show this page in the period.
+  - else
+    %div{class: "px-4 py-3"}
+      = measures_chart dates, page_search_measures(daily),
+        label: "Clicks, impressions and average position of #{slug} per day, each on its own scale"
+
+= render layout: "shared/card", locals: {id: "page-queries", title: "Search queries for this page", icon: "search", class: "mb-6"} do
+  - queries = search.page_queries(slug)
+  - if queries.empty?
+    %p{class: "px-4 py-3 text-sm text-slate-500"} No queries brought this page up in the period.
+  - else
+    %div{class: "overflow-x-auto"}
+      %table{class: "w-full border-collapse text-sm"}
+        %thead{class: "text-slate-500"}
+          %tr
+            %th{scope: "col", class: "px-4 py-1.5 text-left font-medium"} Query
+            %th{scope: "col", class: "px-3 py-1.5 text-right font-medium"} Clicks
+            %th{scope: "col", class: "px-3 py-1.5 text-right font-medium"} Impressions
+            %th{scope: "col", class: "px-3 py-1.5 text-right font-medium"} CTR
+            %th{scope: "col", class: "px-4 py-1.5 text-right font-medium"} Position
+        %tbody
+          - queries.each do |row|
+            %tr{class: "border-t border-slate-200"}
+              %td{class: "px-4 py-1.5 font-medium"}= row[:query]
+              %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.clicks)
+              %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.impressions)
+              %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.ctr, :percent)
+              %td{class: "px-4 py-1.5 text-right tabular-nums"}= metric_value(row.position, :position)
