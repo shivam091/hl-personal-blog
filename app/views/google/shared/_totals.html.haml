@@ -1,0 +1,11 @@
+%dl{class: "mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"}
+  - metrics.each do |metric|
+    %div{class: "relative rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"}
+      %dt{class: "flex items-center gap-1.5 text-xs font-medium text-slate-500"}
+        = icon(metric.icon, size: 14, class: "text-slate-400")
+        = metric.label
+        = render("shared/hint", label: metric.label, text: metric.hint) if metric.hint
+      %dd{class: "mt-1 text-lg font-semibold tabular-nums text-slate-900"}= metric_value(totals.value(metric.field), metric.format)
+      - if comparing?
+        %dd{class: "mt-0.5 text-xs", title: "Compared with #{previous_period}"}
+          = metric_change(totals.value(metric.field), previous_totals&.value(metric.field), metric)
