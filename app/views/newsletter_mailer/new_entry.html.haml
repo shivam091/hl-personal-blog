@@ -1,0 +1,33 @@
+- emoji = {"tutorial" => "📘", "snippet" => "✂️"}.fetch(@type, "✍️")
+- content_for :preheader, @entry.description.presence || "A new #{@type} was just published."
+- content_for :hero, "#{emoji} New #{@type} just published"
+- content_for :footer_note do
+  You're getting this because you subscribed to the newsletter on
+  = succeed "." do
+    %a{href: campaign_url(blog_url, "footer") || "#", style: "color:#4f46e5;text-decoration:none;white-space:nowrap;"}= blog_url.to_s.sub(%r{\Ahttps?://}, "")
+
+%h1.mail-h1{style: "margin:0 0 14px;font-size:26px;line-height:1.3;font-weight:800;letter-spacing:-0.4px;color:#0f172a;"} Something new on the blog 🚀
+%p{style: "margin:0 0 28px;font-size:17px;line-height:1.65;color:#334155;"}
+  Hi there! A new #{@type} just went live, and I think you'll enjoy it. Here's a quick look:
+
+-# A card of its own, so the entry stands apart from the note around it,
+-# with the gradient strip tying it to the header.
+%table{role: "presentation", width: "100%", cellpadding: 0, cellspacing: 0, style: "border:1px solid #e2e8f0;border-radius:16px;border-collapse:separate;"}
+  %tr
+    %td{style: "height:6px;line-height:6px;font-size:0;background:#4f46e5;background-image:linear-gradient(90deg,#4f46e5 0%,#7c3aed 100%);border-radius:16px 16px 0 0;"} &nbsp;
+  %tr
+    %td{style: "padding:24px 26px 26px;"}
+      %p{style: "margin:0 0 12px;"}
+        %span{style: "display:inline-block;padding:4px 12px;border-radius:999px;background:#eef2ff;color:#4f46e5;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;"}= @type
+        %span{style: "display:inline-block;padding:4px 0 4px 8px;font-size:13px;color:#94a3b8;"}= @entry.published_at.in_time_zone.strftime("%B %-d, %Y")
+      %a{href: campaign_url(@entry.url, "title"), style: "display:block;font-size:22px;line-height:1.35;font-weight:800;letter-spacing:-0.3px;color:#0f172a;text-decoration:none;"}= @entry.name
+      - if @entry.description.present?
+        %p{style: "margin:10px 0 0;font-size:16px;line-height:1.65;color:#475569;"}= @entry.description
+      - topics = (@entry.category_names + @entry.tag_names).uniq.first(6)
+      - if topics.any?
+        %p{style: "margin:16px 0 0;line-height:2.3;"}
+          - topics.each do |topic|
+            %span{style: "display:inline-block;margin:0 6px 0 0;padding:3px 10px;border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;font-size:12px;font-weight:600;color:#64748b;"} ##{topic}
+
+= render "mailers/button", url: campaign_url(@entry.url, "button"), label: "Read the #{@type} →"
+= render "mailers/signature", sign_off: "Thanks for reading,"
