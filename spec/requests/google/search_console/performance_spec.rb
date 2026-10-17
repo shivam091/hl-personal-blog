@@ -255,7 +255,7 @@ RSpec.describe "Search Console performance", type: :request do
       site_stat(date: Date.new(2026, 10, 5), clicks: 9, impressions: 90, position: 12.0)
       site_stat(date: Date.new(2026, 10, 11), clicks: 5, impressions: 5, position: 1.0)
 
-      get google_search_console_performance_breakdown_path("pages", trend: "ctr,position", chart_by: "week",
+      get google_search_console_performance_breakdown_path("pages", trend: "ctr,position", by: "week",
         from: "2026-10-04", to: "2026-10-12")
 
       readouts = Nokogiri::HTML5(response.body).css("figure [data-tip]").map { |hit| JSON.parse(hit["data-tip"]) }

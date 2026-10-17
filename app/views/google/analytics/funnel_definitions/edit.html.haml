@@ -1,0 +1,5 @@
+- content_for :title, "Edit #{@definition.title_was.presence || @definition.title}"
+- add_breadcrumb("Manage funnels", google_analytics_funnel_definitions_path)
+- add_breadcrumb(@definition.title_was.presence || @definition.title)
+
+= render "form", definition: @definition
