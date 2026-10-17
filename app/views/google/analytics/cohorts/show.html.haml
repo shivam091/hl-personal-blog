@@ -1,0 +1,72 @@
+- content_for :title, "Analytics cohorts"
+- result = @result
+
+- service = Google::Analytics::CohortService
+- select_class = "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Analytics cohorts
+    %p{class: "mt-1 text-sm text-slate-500"}
+      Readers grouped by the week of their first visit, and the share who came back in each week after.
+      Read live from Google Analytics and kept for a few hours.
+  = link_to google_analytics_cohorts_path(format: :csv, weeks: result.weeks, country: @country, device: @device),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
+
+-# Each pick reloads the grid in place, as a report's chart options do, so
+-# readers from one country or device are compared week by week.
+%div{class: "mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"}
+  - [["cohort-weeks", "Weeks", :weeks, service::WEEK_CHOICES.map { |weeks| ["#{weeks} weeks", weeks] }, result.weeks, nil],
+     ["cohort-country", "Country", :country, @countries.map { |code| [country_label(code), code] }, @country, "Every country"],
+     ["cohort-device", "Device", :device, service::DEVICES.map { |device| [device.capitalize, device] }, @device, "Every device"]].each do |id, label, param, choices, chosen, blank|
+    %div{class: "flex items-center gap-2"}
+      = label_tag id, label, class: "text-xs font-medium text-slate-500"
+      = picker_select_tag param, options_for_select(choices, chosen), include_blank: blank, id: id, class: select_class,
+        data: {controller: "chart-granularity", chart_granularity_param_value: param, action: "chart-granularity#change"}
+
+- if result.cohorts.any?
+  = render "shared/period_notes", notes: [counted_from_note(result.cohorts.first.start, Google::Analytics::TrackedSince::ANALYTICS_NOTE)]
+
+- if result.errors.any?
+  %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+    = icon("alert-circle", size: 18, class: "text-red-500")
+    %ul
+      - result.errors.each do |error|
+        %li= error
+- elsif result.cohorts.sum(&:users).zero?
+  = render "shared/empty_state", message: "No new readers in the last #{result.weeks} weeks."
+- else
+  -# Weeks after the first across, darker for more of the cohort back, so a
+  -# cohort that holds on reads along its row and a later one that holds on
+  -# better reads down its column. Week 0 is everyone, so it isn't shaded.
+  = render layout: "shared/card", locals: {id: "cohorts", title: "Coming back, week by week", icon: "grid"} do
+    - max = result.cohorts.flat_map { |cohort| (1...result.weeks).filter_map { |week| cohort.retention(week) } }.max.to_f
+    = chart_tooltip(label: "Share of each weekly cohort of new readers who came back in each later week", class: "px-4 py-3") do
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-xs"}
+          %thead{class: "text-slate-500"}
+            %tr
+              -# w-px keeps the labels tight so the spare width goes to the weeks.
+              %th{scope: "col", class: "w-px pr-3 pb-1 text-left font-medium whitespace-nowrap"} First visit
+              %th{scope: "col", class: "w-px pr-3 pb-1 text-right font-medium"} Readers
+              - (1...result.weeks).each do |week|
+                %th{scope: "col", class: "px-0.5 pb-1 text-center font-medium whitespace-nowrap"} Week #{week}
+          %tbody
+            - result.cohorts.each do |cohort|
+              %tr
+                %th{scope: "row", class: "pr-3 text-left font-medium whitespace-nowrap text-slate-600"}
+                  = "Week of #{l(cohort.start, format: "%-d %b")}"
+                %td{class: "pr-3 text-right tabular-nums"}= number_with_delimiter(cohort.users)
+                - (1...result.weeks).each do |week|
+                  - share = cohort.retention(week)
+                  %td{class: "p-0.5"}
+                    - if share.nil?
+                      %div{class: "h-6 min-w-11 rounded bg-slate-50"}
+                    - else
+                      %div{class: "h-6 min-w-11 rounded px-1 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(share * 100, max * 100)}",
+                        data: chart_tip("Week of #{l(cohort.start)}, week #{week}", [{value: number_with_delimiter(cohort.active[week]), name: "of #{number_with_delimiter(cohort.users)} came back"}])}
+                        = number_to_percentage(share * 100, precision: 0)
+    %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+      Weeks run from Sunday, as in GA. Blank weeks haven't finished yet for that cohort.
