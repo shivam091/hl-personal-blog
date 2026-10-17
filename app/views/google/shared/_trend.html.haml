@@ -23,10 +23,7 @@
     -# Hours are stored for a few days only, so there's nothing to group.
     - unless trend.per == "hour"
       %div{class: "mb-2 flex justify-end"}
-        = label_tag "trend-by", "Show the figures by", class: "sr-only"
-        = picker_select_tag :chart_by, options_for_select([%w[Daily day], %w[Weekly week], %w[Monthly month]], selection.by), id: "trend-by",
-          class: "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none",
-          data: {controller: "chart-granularity", action: "chart-granularity#change"}
+        = chart_granularity_picker(selection, "the figures", "trend-by")
     - measures = trend_measures(trend, metrics)
     - if measures.any?
       = measures_chart(trend.dates, measures, label: "#{measures.map(&:name).to_sentence} per #{trend.per}, each on its own scale", per: trend.per.to_sym,

@@ -1,0 +1,23 @@
+- content_for :title, "Analytics engagement"
+
+- interactions = capture do
+  - if @interactions
+    = render layout: "shared/card", locals: {id: "reader-interactions", title: "Reader interactions", icon: "mouse-pointer", class: "mb-6"} do
+      - if @interactions.empty?
+        %p{class: empty_note_class} None of the blog's reader events in this period.
+      - else
+        - rows = Google::Analytics::EngagementController::READER_INTERACTIONS.filter_map { |event, label| [event, label, @interactions[event]] if @interactions[event] }.sort_by { |_, label, count| [-count, label] }
+        - per_hundred = lambda do |event, count|
+          - rate = tag.span("(#{number_with_precision(count * 100.0 / @interaction_views, precision: 1)})", class: "text-slate-500", title: "Per 100 views")
+          - @previous_interactions ? safe_join([rate, row_change(count, @previous_interactions.fetch(event, 0), DashboardHelper::HIGHER_IS_BETTER, stacked: false)], " ") : rate
+        %div{class: "px-4 py-3"}
+          = ranking_chart(rows.map { |_, label, count| [label, count, "bg-slate-600", ChartsHelper::BAR_COLOR] }, total: rows.sum(&:last),
+            previous: (rows.to_h { |event, label, _| [label, @previous_interactions.fetch(event, 0)] } if @previous_interactions), previous_name: @period.previous.to_s,
+            links: rows.to_h { |event, label, _| [label, google_analytics_event_path(event, **@period.query)] },
+            changes: @interaction_views.positive? ? rows.to_h { |event, label, count| [label, per_hundred.(event, count)] } : {},
+            x_title: "Events", y_title: "Interaction", label: "Reader interactions in #{@period}, most first")
+      %p{class: footnote_class}
+        Events the blog sends as readers use a page, with how many per 100 views. Event labels splits each by what was clicked or copied.
+
+= render "google/shared/report", title: "Analytics engagement", extra: interactions,
+  description: "Scrolls, outbound clicks, downloads and other events from Google Analytics, counted per event rather than per visit, key events, the links readers follow off the site, the pages and titles they see, and the pages they land on."

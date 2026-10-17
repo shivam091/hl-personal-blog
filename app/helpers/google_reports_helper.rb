@@ -70,12 +70,25 @@ module GoogleReportsHelper
     ]
   end
 
-  # Shares as percentages, so a line reads as one; each in its own hue,
-  # since three lines are more than two shades can tell apart.
+  STICKINESS_SHARES = [[:wau_per_mau, "Week / month"], [:dau_per_wau, "Day / week"], [:dau_per_mau, "Day / month"]].freeze
+
+  # Shares as percentages, so a line reads as one; each in its own hue and
+  # shape, since three lines are more than two shades can tell apart.
   def stickiness_series(result)
-    [[:wau_per_mau, "Week / month"], [:dau_per_wau, "Day / week"], [:dau_per_mau, "Day / month"]].each_with_index.map do |(metric, name), index|
+    STICKINESS_SHARES.each_with_index.map do |(metric, name), index|
       ChartsHelper::Series.new(name: name, values: result.days.map { |day| day[metric] && (day[metric] * 100).round(1) },
-        color: ChartsHelper::SHARE_COLORS[index])
+        color: ChartsHelper::SHARE_COLORS[index], marker: ChartsHelper::ROW_MARKERS[index + 1])
+    end
+  end
+
+  def stickiness_latest(result, previous = nil)
+    series = stickiness_series(result)
+    STICKINESS_SHARES.each_with_index.map do |(metric, name), index|
+      current = result.latest(metric)
+      before = previous&.latest(metric)
+      {name: name, marker: series[index].marker, color: series[index].color,
+       value: (number_to_percentage(current * 100, precision: 1) if current),
+       change: (row_change(current, before, DashboardHelper::HIGHER_IS_BETTER, stacked: false) if current)}
     end
   end
 

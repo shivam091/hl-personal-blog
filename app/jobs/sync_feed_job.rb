@@ -11,6 +11,7 @@ class SyncFeedJob < ApplicationJob
 
     # A new entry is in the sitemap too, so Google is told it changed.
     Google::SearchConsole::SitemapSubmitJob.perform_later
+    Google::Analytics::AnnotationJob.perform_later
     inspect_new_entries
   end
 

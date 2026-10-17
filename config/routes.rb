@@ -68,6 +68,40 @@ Rails.application.routes.draw do
         constraints: {breakdown: /pages|countries|devices|dates/}
       post "generative-ai", to: "generative_ai#create"
     end
+
+    # Paths named after GA's own report sections, so a page is found where it
+    # would be in GA.
+    namespace :analytics do
+      get "acquisition", to: "acquisition#index", defaults: {breakdown: "user-acquisition"}, as: :acquisition
+      get "acquisition/:breakdown", to: "acquisition#index", as: :acquisition_breakdown
+      post "acquisition/:breakdown/sync", to: "acquisition#sync", as: :acquisition_sync
+      get "engagement", to: "engagement#index", defaults: {breakdown: "events"}, as: :engagement
+      # Under Engagement, as GA opens an event from its Events report. Any
+      # character but a slash, since GA's names can hold dots.
+      get "engagement/events/:event_name", to: "event_details#show", as: :event, constraints: {event_name: %r{[^/]+}}, format: false
+      get "engagement/:breakdown", to: "engagement#index", as: :engagement_breakdown
+      post "engagement/:breakdown/sync", to: "engagement#sync", as: :engagement_sync
+      get "users", to: "users#index", defaults: {breakdown: "countries"}, as: :users
+      get "users/:breakdown", to: "users#index", as: :users_breakdown
+      post "users/:breakdown/sync", to: "users#sync", as: :users_sync
+      get "retention", to: "retention#index", defaults: {breakdown: "new-vs-returning"}, as: :retention
+      # Apart from Retention's breakdowns, since a cohort is asked of GA live.
+      get "cohorts", to: "cohorts#show", as: :cohorts
+      get "retention/:breakdown", to: "retention#index", as: :retention_breakdown
+      post "retention/:breakdown/sync", to: "retention#sync", as: :retention_sync
+      get "funnels", to: "funnels#show", as: :funnels
+      resources :funnel_definitions, except: :show, path: "funnels/definitions"
+      # Apart from the stored reports, since each is asked of GA live.
+      get "page-flow", to: "page_flows#show", as: :page_flow
+      get "stickiness", to: "stickiness#show", as: :stickiness
+      get "cross-tab", to: "cross_tabs#show", as: :cross_tab
+      get "site-search", to: "site_searches#show", as: :site_search
+      get "settings", to: "settings#show", as: :settings
+      # Custom metrics too, since GA names both by their parameter.
+      post "settings/custom-dimensions", to: "settings#register_dimension", as: :settings_custom_dimensions
+      post "settings/annotations", to: "settings#annotate", as: :settings_annotations
+      get "quota", to: "quotas#show", as: :quota
+    end
   end
 
   resources :request_logs, only: %i[index show destroy], path: "request-logs" do

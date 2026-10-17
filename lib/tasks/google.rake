@@ -47,4 +47,14 @@ namespace :google do
       end)
     end
   end
+
+  namespace :analytics do
+    desc "Create and update Google Analytics stats for the last N days (default 7, credentials google.*): bin/rails 'google:analytics:sync[days]'"
+    task :sync, [:days] => :environment do |_task, args|
+      days = args[:days].presence || Google::Analytics::SyncService::DEFAULT_DAYS
+      report_sync.call("Analytics sync", SyncRequest.track("analytics", trigger: "rake", **SyncRequest.range(days)) do
+        Google::Analytics::SyncService.call(days: days)
+      end)
+    end
+  end
 end

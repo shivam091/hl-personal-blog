@@ -1,0 +1,25 @@
+- if @device_sessions&.values&.any?(&:positive?)
+  = render layout: "shared/card", locals: {id: "device-share", title: "Sessions by device", icon: "users", class: "mb-6"} do
+    %div{class: "px-4 py-3"}
+      = donut_chart(@device_sessions, label: "Each device category's share of the period's sessions", unit: "session", empty: "No sessions in this period.")
+
+- if @weekly_hours&.values&.any?(&:positive?)
+  - cells = @weekly_hours
+  - max = cells.values.max
+  - days = %w[1 2 3 4 5 6 0]
+  = render layout: "shared/card", locals: {id: "weekly-hours", title: "Views by day and hour", icon: "clock", class: "mb-6"} do
+    = chart_tooltip(label: "Views for each day of the week and hour of the day", class: "px-4 py-3") do
+      -# Not a table, so a report's own rows stay the only ones on the page.
+      %div{class: "overflow-x-auto"}
+        %div{class: "grid min-w-xl gap-0.5 text-xs", style: "grid-template-columns: max-content repeat(24, minmax(0, 1fr))"}
+          %span{class: "py-1 pr-3 font-medium text-slate-500"} Day
+          - 24.times do |hour|
+            %span{class: "px-0.5 py-1 text-center text-slate-500"}= hour
+          - days.each do |day|
+            - name = Google::DailyReport.value_label(:day_of_week, day)
+            %span{class: "py-0.5 pr-3 font-medium whitespace-nowrap"}= name
+            - 24.times do |hour|
+              - value = cells.fetch([day, format("%02d", hour)], 0)
+              = heat_cell("", value, max, class: "h-5", tip: chart_tip("#{name}, #{format("%02d", hour)}:00", [{value: number_with_delimiter(value), name: "Views"}]))
+    %p{class: footnote_class}
+      In the Google Analytics property's time zone, shaded on a log scale so the busiest hours don't leave the rest looking empty. Weeks start on Monday.

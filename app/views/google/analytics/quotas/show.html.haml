@@ -1,0 +1,46 @@
+- content_for :title, "Analytics quota"
+
+%div{class: "mb-6"}
+  %h1{class: page_title_class} Analytics quota
+  %p{class: subtitle_class}
+    What's left of the Google Analytics Data API's quota after the latest request of each kind, against a
+    standard property's limits. Daily tokens reset at midnight Pacific time, hourly ones on the hour.
+
+- low = @quotas.values.select(&:low?)
+- if low.any?
+  %div{class: "mb-6 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "alert"}
+    = icon("alert-triangle", size: 18, class: "text-amber-500")
+    %p
+      Under #{number_to_percentage(Google::Analytics::Quota::LOW_SHARE * 100, precision: 0)} left of a
+      limit for #{low.map { |quota| Google::Analytics::Quota::CATEGORIES[quota.category] }.to_sentence}:
+      the next Analytics sync may be refused until it resets.
+
+%div{class: "grid gap-6"}
+  - Google::Analytics::Quota::CATEGORIES.each do |category, title|
+    - quota = @quotas[category]
+    = render layout: "shared/card", locals: {id: "quota-#{category}", title: title, icon: "gauge"} do
+      - if quota.nil?
+        %p{class: empty_note_class}
+          No #{title.downcase} requested since quota tracking began.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                = report_th "Limit"
+                %th{scope: "col", class: "#{th_class} text-right", title: "What the latest request cost"}
+                  Last cost
+                = report_th "Left", :right
+            %tbody
+              - quota.usages.each do |usage|
+                %tr{class: table_row_class}
+                  %td{class: "px-3 py-1.5"}
+                    = usage.label
+                    - if usage.remaining
+                      %div{class: "mt-1"}= meter(usage.remaining, usage.limit, label: "#{usage.label} left")
+                  %td{class: cell_class}
+                    = usage.consumed ? number_with_delimiter(usage.consumed) : "—"
+                  %td{class: "#{cell_class} #{"font-medium text-amber-700" if usage.low?}"}
+                    = usage.remaining ? "#{number_with_delimiter(usage.remaining)} of #{number_with_delimiter(usage.limit)}" : "—"
+        %p{class: footnote_class} As of #{l(quota.recorded_at, format: :long)}.
+      %p{class: footnote_class} Used by #{Google::Analytics::Quota::USED_BY[category].sub(/\A\w/, &:downcase)}
