@@ -49,10 +49,8 @@ Rails.application.routes.draw do
     end
   end
 
-  # Read-only copies of Google's data: the only writes are syncs from Google.
-  # A report's breakdown is a required segment, since url_for only carries
-  # required ones into sort and page links. The bare path shows the first
-  # breakdown in place, so a menu link lands without a redirect.
+  # A report's breakdown is a required segment because url_for only carries
+  # required ones into sort and page links.
   namespace :google do
     namespace :search_console, path: "search-console" do
       get "performance", to: "performance#index", defaults: {breakdown: "pages"}, as: :performance
@@ -65,6 +63,10 @@ Rails.application.routes.draw do
       resources :url_inspections, only: %i[index show], path: "url-inspections" do
         post :sync, on: :collection
       end
+      get "generative-ai", to: "generative_ai#index", defaults: {breakdown: "pages"}, as: :generative_ai
+      get "generative-ai/:breakdown", to: "generative_ai#index", as: :generative_ai_breakdown,
+        constraints: {breakdown: /pages|countries|devices|dates/}
+      post "generative-ai", to: "generative_ai#create"
     end
   end
 

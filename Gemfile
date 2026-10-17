@@ -33,6 +33,10 @@ gem "csv", "~> 3.3"
 
 gem "faraday", "~> 2.15"
 
+# Search Console exports its generative AI report only as a spreadsheet, so
+# there is no API to read it from.
+gem "roo", "~> 4.0"
+
 group :development, :test do
   gem "rspec-rails", "~> 8.0"
   gem "database_cleaner-mongoid", "~> 2.0"
