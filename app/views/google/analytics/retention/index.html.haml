@@ -1,0 +1,6 @@
+- content_for :title, "Analytics retention"
+
+- extra = render("google/analytics/shared/visitor_weeks")
+
+= render "google/shared/report", title: "Analytics retention", extra: extra,
+  description: "How many readers are new and how many come back, from Google Analytics. GA keeps processing late hits for up to two days."
