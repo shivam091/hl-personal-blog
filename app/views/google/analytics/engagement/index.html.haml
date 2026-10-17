@@ -1,0 +1,30 @@
+- content_for :title, "Analytics engagement"
+
+-# Bars rather than a table, so it reads apart from the report's rows; the
+-# rate per 100 views sits by each name, as it's what compares across periods.
+- interactions = capture do
+  - if @interactions
+    = render layout: "shared/card", locals: {id: "reader-interactions", title: "Reader interactions", icon: "mouse-pointer", class: "mb-6"} do
+      - if @interactions.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} None of the blog's reader events in this period.
+      - else
+        - rows = Google::Analytics::EngagementController::READER_INTERACTIONS.filter_map { |event, label| [event, label, @interactions[event]] if @interactions[event] }.sort_by { |_, label, count| [-count, label] }
+        - per_hundred = lambda do |event, count|
+          - rate = tag.span("(#{number_with_precision(count * 100.0 / @interaction_views, precision: 1)})", class: "text-slate-500", title: "Per 100 views")
+          - @previous_interactions ? safe_join([rate, row_change(count, @previous_interactions.fetch(event, 0), DashboardHelper::HIGHER_IS_BETTER, stacked: false)], " ") : rate
+        %div{class: "px-4 py-3"}
+          = ranking_chart(rows.map { |_, label, count| [label, count, "bg-slate-600", ChartsHelper::BAR_COLOR] }, total: rows.sum(&:last),
+            previous: (rows.to_h { |event, label, _| [label, @previous_interactions.fetch(event, 0)] } if @previous_interactions), previous_name: @period.previous.to_s,
+            links: rows.to_h { |event, label, _| [label, google_analytics_event_path(event, **@period.query)] },
+            changes: @interaction_views.positive? ? rows.to_h { |event, label, count| [label, per_hundred.(event, count)] } : {},
+            x_title: "Events", y_title: "Interaction", label: "Reader interactions in #{@period}, most first")
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Events the blog sends as readers use a page, with how many per 100 views. Event labels splits each by what was clicked or copied.
+        - if @interactions_since.any?
+          - labels = Google::Analytics::EngagementController::READER_INTERACTIONS
+          - since = @interactions_since.sort_by { |event, date| [date, labels[event]] }.map { |event, date| "#{labels[event]} from #{l(date)}" }
+          Counted only since the blog began sending each, so their rate per 100 views reads low over this period:
+          #{since.to_sentence}.
+
+= render "google/shared/report", title: "Analytics engagement", extra: interactions,
+  description: "Scrolls, outbound clicks, downloads and other events from Google Analytics, counted per event rather than per visit, key events, the links readers follow off the site, the pages and titles they see, and the pages they land on."
