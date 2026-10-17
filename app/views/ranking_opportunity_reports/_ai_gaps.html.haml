@@ -1,0 +1,34 @@
+-# Over the latest upload's days, whatever period is picked, since that's
+-# all Google's page totals for AI answers cover.
+- if gaps.any?
+  - range = "#{l(gaps.period.from)} – #{l(gaps.period.to)}"
+  - lists = [["ai-shown-not-clicked", "Shown in AI answers, seldom clicked", "sparkles", gaps.shown_not_clicked,
+    "Pages with #{Google::SearchConsole::AiGaps::MIN_AI_IMPRESSIONS}+ AI impressions in #{range}, fewest search clicks per AI impression first. The answer may be all a reader needs, so these are the pages worth giving a reason to click.",
+    "No page was shown in AI answers often enough to judge."],
+    ["ai-missing", "In search, missing from AI answers", "eye-off", gaps.missing_from_ai,
+    "Pages search showed #{Google::SearchConsole::Summary::MIN_IMPRESSIONS}+ times in #{range} that no AI answer did, most shown first.",
+    "Every page search showed often was in an AI answer too."]]
+  %div{class: "mt-6 grid items-start gap-6 lg:grid-cols-2"}
+    - lists.each do |id, title, card_icon, rows, note, empty|
+      = render layout: "shared/card", locals: {id: id, title: title, icon: card_icon} do
+        %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          = note
+          Every country, from the latest Generative AI upload (#{gaps.ai.search_type}).
+        - if rows.empty?
+          %p{class: "px-4 py-3 text-sm text-slate-500"}= empty
+        - else
+          %div{class: "overflow-x-auto"}
+            %table{class: table_class}
+              %thead{class: "text-slate-500"}
+                %tr
+                  = report_th "Page"
+                  = report_th "AI impressions", :right
+                  = report_th "Search impressions", :right
+                  = report_th "Clicks", :right
+              %tbody
+                - rows.each do |row|
+                  %tr{class: "border-t border-slate-200"}
+                    %td{class: "w-full px-3 py-1.5"}= blog_page_link(row.page_path, page_view_path(row.page_path))
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.ai_impressions)
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.impressions)
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.clicks)
