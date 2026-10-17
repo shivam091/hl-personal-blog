@@ -48,6 +48,10 @@ shared:
               full_label: URL inspection
               icon: file-search
               route: google_search_console_url_inspections
+            - label: Generative AI
+              full_label: Generative AI performance
+              icon: sparkles
+              route: google_search_console_generative_ai
 
     - label: Monitoring
       icon: activity

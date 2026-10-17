@@ -213,7 +213,7 @@ module ChartsHelper
   end
 
   # One shared axis so series are only ever compared in the same unit.
-  def line_chart(keys, series, label:, y_title:, x_title: nil, unit: "", selectable: false, per: :day, events: {}, event_name: nil, unsettled: nil)
+  def line_chart(keys, series, label:, y_title:, x_title: nil, unit: "", selectable: false, per: :day, events: {}, event_name: nil, unsettled: nil, precision: nil)
     unit = reading_unit(unit)
     skip = leading_empty(keys, series.map(&:values))
     keys, series = keys.drop(skip), trimmed_series(series, skip)
@@ -223,7 +223,7 @@ module ChartsHelper
       (chart_legend(series, selectable: selectable, events: (event_name if events.any?)) if series.size > 1 || events.any?),
       chart_frame(keys, max, label, x_title: x_title, y_title: y_title, crosshair: true, lines: true, per: per,
         overlay: ->(top) { safe_join([line_end_markers(keys, series, top), event_markers(keys, events)]) }) do |top|
-        line_marks(keys, series, top, unit, per, events, event_name, unsettled: unsettled, y_title: y_title)
+        line_marks(keys, series, top, unit, per, events, event_name, unsettled: unsettled, y_title: y_title, precision: precision)
       end
     ].compact)
   end
@@ -1294,7 +1294,7 @@ module ChartsHelper
 
   # The first series is filled beneath, so the main figure stands out from
   # the ones it's compared against.
-  def line_marks(keys, series, max, unit, per, events = {}, event_name = nil, unsettled: nil, y_title: nil)
+  def line_marks(keys, series, max, unit, per, events = {}, event_name = nil, unsettled: nil, y_title: nil, precision: nil)
     x = ->(index) { point_x(index, keys.size) }
     y = ->(value) { (CHART_HEIGHT - value.to_f / max * CHART_HEIGHT).round(2) }
     lines = series.each_with_index.flat_map do |line, index|
@@ -1327,7 +1327,7 @@ module ChartsHelper
     hits = keys.each_with_index.map do |key, index|
       rows = series.each_with_index.map do |line, line_index|
         value = line.values[index]
-        {value: value.nil? ? "No data" : "#{number_with_delimiter(value)}#{unit}",
+        {value: value.nil? ? "No data" : "#{precision ? number_with_precision(value, precision: precision, delimiter: ",") : number_with_delimiter(value)}#{unit}",
          **compared_name(metric.(line), (earlier[line_index] || keys)[index], per, compared, (previous_period_name || line.name if line.against)),
          color: line.color || LINE_COLORS.fetch(line_index, LINE_COLORS.last), dashed: (true if line.dashed), dotted: (true if line.dotted),
          marker: line.marker, earlier: (true if line.against), y: (y.(value) unless value.nil?)}.compact
