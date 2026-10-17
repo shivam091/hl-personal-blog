@@ -1,0 +1,95 @@
+- content_for :title, "Analytics cross-tab"
+- service = Google::Analytics::PivotService
+- result = @result
+- table = result.table
+- metric_label = service::METRICS.dig(result.metric, :label)
+- label = ->(key, value) { key == "country" ? country_label(value) : value }
+- select_class = "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+- earlier = @previous&.table
+- higher = DashboardHelper::HIGHER_IS_BETTER
+-# Only the top rows and columns of the period before are kept, so one
+-# missing from a full list may only have ranked lower rather than had none.
+- known = ->(list, key, limit) { list.include?(key) || list.size < limit }
+- row_before = ->(row) { earlier.row_totals[row].to_i if earlier && known.(earlier.rows, row, service::ROW_LIMIT) }
+- column_before = ->(column) { earlier.column_totals[column].to_i if earlier && known.(earlier.columns, column, service::COLUMN_LIMIT) }
+- cell_before = ->(row, column) { earlier[row, column].to_i if earlier && known.(earlier.rows, row, service::ROW_LIMIT) && known.(earlier.columns, column, service::COLUMN_LIMIT) }
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Analytics cross-tab
+    %p{class: subtitle_class}
+      One split against another, as a GA free-form exploration lays them out. Read live from Google Analytics and kept
+      for an hour; totals count each reader once, so they can be less than their cells added up.
+  = link_to list_url(@period, @choice, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "google/shared/period", period: @period, keep: [@choice]
+
+%div{class: "mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"}
+  - dimensions = service::DIMENSIONS.map { |key, value| [value[:label], key] }
+  - [["cross-tab-rows", "Rows", :rows, dimensions, result.rows],
+     ["cross-tab-columns", "Columns", :columns, dimensions.reject { |_, key| key == result.rows }, result.columns],
+     ["cross-tab-metric", "Count", :metric, service::METRICS.map { |key, value| [value[:label], key] }, result.metric]].each do |id, text, param, choices, chosen|
+    %div{class: "flex items-center gap-2"}
+      = label_tag id, text, class: "text-xs font-medium text-slate-500"
+      = picker_select_tag param, options_for_select(choices, chosen), id: id, class: select_class,
+        data: {controller: "chart-granularity", chart_granularity_param_value: param, action: "chart-granularity#change"}
+
+- if result.errors.any?
+  %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+    = icon("alert-circle", size: 18, class: "text-red-500")
+    %ul
+      - result.errors.each do |error|
+        %li= error
+- elsif table.empty?
+  = render "shared/empty_state", message: "No #{metric_label.downcase} in #{@period}."
+- else
+  - rows_label = service::DIMENSIONS.dig(result.rows, :label)
+  - columns_label = service::DIMENSIONS.dig(result.columns, :label)
+  = render layout: "shared/card", locals: {id: "cross-tab", title: "#{metric_label} by #{rows_label.downcase} and #{columns_label.downcase}", icon: "columns"} do
+    - max = table.cells.values.max.to_f
+    = chart_tooltip(label: "#{metric_label} for each #{rows_label.downcase} and #{columns_label.downcase}", class: "px-4 py-3") do
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-xs"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "#{th_class} pl-0 text-left"}= rows_label
+              - table.columns.each do |column|
+                %th{scope: "col", class: "#{th_class} text-center"}= label.(result.columns, column)
+              %th{scope: "col", class: "#{th_class} text-right"} Total
+          %tbody
+            - table.rows.each do |row|
+              - row_total = table.row_totals[row]
+              %tr
+                %th{scope: "row", class: "max-w-56 truncate py-0.5 pr-3 text-left font-medium text-slate-600"}= label.(result.rows, row)
+                - table.columns.each do |column|
+                  - value = table[row, column].to_i
+                  %td{class: "p-0.5"}
+                    %div{class: "h-6 min-w-14 rounded px-1 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(value, max)}",
+                      data: chart_tip("#{label.(result.rows, row)} · #{label.(result.columns, column)}",
+                        [{value: number_with_delimiter(value), name: metric_label.downcase},
+                         ({value: number_to_percentage(value * 100.0 / row_total, precision: 1), name: "of the row"} if row_total.to_i.positive?),
+                         ({value: CompareChange.label(value, cell_before.(row, column)), name: "vs #{@period.previous}"} if cell_before.(row, column))].compact)}
+                      = number_with_delimiter(value)
+                %td{class: "px-3 text-right font-medium tabular-nums"}
+                  = number_with_delimiter(row_total)
+                  - if row_before.(row)
+                    = row_change(row_total.to_i, row_before.(row), higher)
+          %tfoot
+            %tr{class: table_row_class}
+              %th{scope: "row", class: "py-1.5 pr-3 text-left font-medium"} Total
+              - table.columns.each do |column|
+                %td{class: "px-1 text-center font-medium tabular-nums"}
+                  = number_with_delimiter(table.column_totals[column])
+                  - if column_before.(column)
+                    = row_change(table.column_totals[column].to_i, column_before.(column), higher)
+              %td{class: "px-3 text-right font-semibold tabular-nums"}
+                = number_with_delimiter(table.total)
+                - if earlier && table.total && earlier.total
+                  = row_change(table.total.to_i, earlier.total.to_i, higher)
+    %p{class: footnote_class}
+      The top #{service::ROW_LIMIT} #{rows_label.downcase.pluralize} and #{service::COLUMN_LIMIT} #{columns_label.downcase.pluralize}
+      by #{metric_label.downcase}; the totals still count the rest.

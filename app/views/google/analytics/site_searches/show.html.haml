@@ -1,0 +1,74 @@
+- content_for :title, "Analytics site search"
+- search = @search
+- before = search.previous
+- higher = DashboardHelper::HIGHER_IS_BETTER
+- lower = DashboardHelper::Kpi.new(lower_is_better: true)
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Analytics site search
+    %p{class: subtitle_class}
+      What readers type into the blog's search, and what they look for but don't find.
+    = last_sync_status("analytics")
+  = link_to list_url(@period, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "google/shared/period", period: @period, keep: []
+
+- if !search.any?
+  = render "shared/empty_state",
+    message: "No search terms yet. The blog sends them to Analytics as readers search; they arrive with the next Analytics sync."
+- else
+  %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+    = render "dashboard/tile", label: "Searches", tile_icon: "search",
+      hint: "Every search readers ran on the blog in the period, whether it found anything or not.",
+      value: number_with_delimiter(search.searches), change: metric_change(search.searches, before&.searches, higher), compared_with: @period.previous
+    = render "dashboard/tile", label: "Terms", tile_icon: "list",
+      hint: "Different words or phrases searched for; a term searched many times counts once.",
+      value: number_with_delimiter(search.terms.size), change: metric_change(search.terms.size, before&.terms&.size, higher), compared_with: @period.previous
+    = render "dashboard/tile", label: "Found nothing", tile_icon: "alert-circle",
+      hint: "The share of searches that showed no results, so readers didn't find what they looked for.",
+      value: metric_value(search.not_found_share, :percent), change: metric_change(search.not_found_share, before&.not_found_share, lower, format: :percent), compared_with: @period.previous
+
+  %div{class: "grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "top-terms", title: "Top search terms", icon: "text-search"} do
+      - rows = search.top_terms
+      - if rows.empty?
+        %p{class: empty_note_class} No searches in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                = report_th "Term"
+                = report_th "Searches", :right
+                %th{scope: "col", class: "#{th_class} text-right", title: "Share of this term's searches that found nothing"}
+                  Found nothing
+            %tbody
+              - rows.each do |row|
+                %tr{class: table_row_class}
+                  %td{class: name_cell_class}= row.term
+                  %td{class: cell_class}
+                    = number_with_delimiter(row.searches)
+                    - if before
+                      = row_change(row.searches, search.previous_terms[row.term]&.searches.to_i, higher)
+                  %td{class: "#{cell_class} #{"text-amber-700" if row.not_found.positive?}"}
+                    = metric_value(row.not_found_share, :percent)
+
+    = render layout: "shared/card", locals: {id: "not-found-terms", title: "Searched for but not found", icon: "alert-circle"} do
+      %p{class: lead_note_class}
+        Terms that found nothing, most searched first: posts worth writing, or words worth adding to existing ones.
+      - rows = search.not_found_terms
+      - if rows.empty?
+        %p{class: empty_note_class} Every search found something in this period.
+      - else
+        = report_table([report_th("Term"), report_th("Found nothing", :right, title: "Searches for this term that found nothing")]) do
+          - rows.each do |row|
+            %tr{class: table_row_class}
+              %td{class: name_cell_class}= row.term
+              %td{class: cell_class}
+                = number_with_delimiter(row.not_found)
+                - if before
+                  = row_change(row.not_found, search.previous_terms[row.term]&.not_found.to_i, lower)

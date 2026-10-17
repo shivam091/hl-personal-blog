@@ -1,0 +1,5 @@
+- content_for :title, "New funnel"
+- add_breadcrumb("Manage funnels", google_analytics_funnel_definitions_path)
+- add_breadcrumb("New funnel")
+
+= render "form", definition: @definition
