@@ -19,6 +19,18 @@ module GoogleReportsHelper
     "FAIL" => ["bg-[#eb6834]", "#eb6834"], "NEUTRAL" => ["bg-[#a8a7a1]", "#a8a7a1"]
   }.freeze
 
+  SEARCH_CONSOLE_URL = "https://search.google.com/search-console"
+
+  # So a figure can be checked, or a new export taken, where it's made. Nil
+  # until a property is configured.
+  def search_console_generative_ai_url(search_type)
+    site = Rails.application.credentials.dig(:google, :search_console_site).presence
+    return unless site
+
+    view = search_type.to_s.start_with?("Discover") ? "discover" : "search-analytics"
+    "#{SEARCH_CONSOLE_URL}/performance/#{view}/ai?#{{resource_id: site}.to_query}"
+  end
+
   # Totals answer most questions; the daily rows are there for the ones a
   # spreadsheet answers better.
   def report_exports

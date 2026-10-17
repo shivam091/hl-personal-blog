@@ -1,8 +1,5 @@
 - content_for :title, "Ranking opportunities"
 - opportunities = @opportunities
-- table_class = "w-full border-collapse text-sm"
-- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
-- export_class = "inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline"
 - target = Google::SearchConsole::Opportunities::TARGET_POSITION
 
 %div{class: "mb-6"}
@@ -32,11 +29,11 @@
           %table{class: table_class}
             %thead{class: "text-slate-500"}
               %tr
-                %th{scope: "col", class: "#{th_class} text-left"} Query
-                %th{scope: "col", class: "#{th_class} text-left"} Page
-                %th{scope: "col", class: "#{th_class} text-right"} Impressions
-                %th{scope: "col", class: "#{th_class} text-right"} Position
-                %th{scope: "col", class: "#{th_class} text-right"} CTR
+                = report_th "Query"
+                = report_th "Page"
+                = report_th "Impressions", :right
+                = report_th "Position", :right
+                = report_th "CTR", :right
                 %th{scope: "col", class: "#{th_class} text-right", title: "Clicks it would earn at position #{target}, less what it earns now"}
                   To gain
             %tbody
@@ -92,12 +89,12 @@
           %table{class: table_class}
             %thead{class: "text-slate-500"}
               %tr
-                %th{scope: "col", class: "#{th_class} text-left"} Page
-                %th{scope: "col", class: "#{th_class} text-right"} Clicks
-                %th{scope: "col", class: "#{th_class} text-right"} Lost
-                %th{scope: "col", class: "#{th_class} text-right"} Position
-                %th{scope: "col", class: "#{th_class} text-right", title: "Change in average position from #{@period.previous}"} Change
-                %th{scope: "col", class: "#{th_class} text-left"} Likely cause
+                = report_th "Page"
+                = report_th "Clicks", :right
+                = report_th "Lost", :right
+                = report_th "Position", :right
+                = report_th "Change", :right, title: "Change in average position from #{@period.previous}"
+                = report_th "Likely cause"
             %tbody
               - rows.each do |row|
                 %tr{class: "border-t border-slate-200"}
@@ -113,3 +110,5 @@
       = link_to list_url(@period, @filtering, format: :csv, export: "losing"), class: export_class do
         = icon("download", size: 12)
         CSV
+
+  = render "ranking_opportunity_reports/ai_gaps", gaps: @ai_gaps
