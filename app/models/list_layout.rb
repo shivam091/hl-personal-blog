@@ -45,7 +45,7 @@ class ListLayout
     @route = definition.fetch(:route)
     @default_sort = definition[:sort].to_s
     @tabs_constant = definition[:tabs]
-    @definitions = definition.fetch(:columns).to_h do |column_key, column|
+    @definitions = columns_definition(definition).to_h do |column_key, column|
       column_key = column_key.to_s
       [column_key, Column.new(key: column_key, label: column.fetch(:label), sort: column[:sort], required: column[:required] == true, align: column[:align])]
     end
@@ -159,6 +159,12 @@ class ListLayout
   end
 
   private
+
+  # A report's figures are defined beside its breakdowns, so the file names
+  # the report rather than repeating them.
+  def columns_definition(definition)
+    definition[:columns_from] ? definition[:columns_from].constantize.layout_columns : definition.fetch(:columns)
+  end
 
   def defaults
     column = @definitions[@default_sort] || sortable_columns.first
