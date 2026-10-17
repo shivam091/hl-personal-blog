@@ -1,0 +1,66 @@
+- content_for :title, "#{@event_name} – Analytics engagement"
+-# The period before is dashed, as in GA, so a figure is read against it.
+- over_time = ->(current, previous) { [ChartsHelper::Series.new(name: @period.to_s, values: current),
+  (ChartsHelper::Series.new(name: @period.previous.to_s, values: previous, dashed: true) if previous)].compact }
+- dates = (@period.from..@period.to).to_a
+
+= link_to google_analytics_engagement_path(**@period.query), class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
+  = icon("arrow-left")
+  Analytics engagement
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight break-all"}= @event_name
+  %p{class: "mt-1 text-sm text-slate-500"}
+    How often the event was triggered and by how many users, where and when, and in the last 30 minutes, from Google Analytics.
+
+= render "google/shared/period", period: @period, keep: []
+= render "shared/period_notes", notes: [counted_from_note(@period.from, @counted_since || Google::Analytics::TrackedSince::ANALYTICS_NOTE)]
+
+- if @live_error
+  %p{class: "mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status"}
+    = icon("alert-triangle", size: 16, class: "mt-0.5 shrink-0 text-amber-600")
+    %span
+      Couldn't get the event's users, sessions and countries from Google Analytics (#{@live_error}), so users are added up from the stored
+      days and pages, counting a reader again on each, and the figures only GA has are left out.
+
+= render "google/shared/totals", metrics: Google::Analytics::EventDetailsController::METRICS, totals: @totals,
+  previous_totals: @previous_totals, previous_period: @period.previous
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
+  = render layout: "shared/card", locals: {id: "event-count-over-time", title: "Event count over time", icon: "activity", class: "lg:col-span-2"} do
+    %div{class: "px-4 py-3"}
+      - if @totals.event_count.positive?
+        = line_chart(dates, over_time.(@event_counts, (@previous_event_counts if @previous_totals)), y_title: "Event count",
+          label: "#{@event_name} events per day")
+      - else
+        %p{class: "py-10 text-center text-sm text-slate-500"} No #{@event_name} events in #{@period}.
+  = render layout: "shared/card", locals: {id: "realtime", title: "Events in the last 30 minutes", icon: "clock"} do
+    %div{class: "px-4 py-3"}
+      - if @realtime.errors.any?
+        %p{class: "text-sm text-red-700", role: "alert"}= @realtime.errors.to_sentence
+      - else
+        %p{class: "mb-3 text-2xl font-semibold tabular-nums text-slate-900"}= number_with_delimiter(@realtime.event_count)
+        = render "shared/breakdown", counts: @realtime.countries.transform_keys { |code| country_label(code) }, heading: "Country",
+          count_heading: "Events", empty: "Not triggered in the last 30 minutes.", limit: Google::Analytics::EventDetailsController::COUNTRIES_SHOWN
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+  = render layout: "shared/card", locals: {id: "pages", title: "Event count by page", icon: "file"} do
+    %div{class: "px-4 py-3"}
+      = render "shared/breakdown", counts: @pages, heading: "Page path", count_heading: "Events",
+        empty: "No #{@event_name} events in #{@period}.", limit: Google::Analytics::EventDetailsController::PAGES_SHOWN
+  = render layout: "shared/card", locals: {id: "events-per-session-over-time", title: "Events per session over time", icon: "activity"} do
+    %div{class: "px-4 py-3"}
+      - if @events_per_session
+        = line_chart(dates, over_time.(@events_per_session, @previous_events_per_session), y_title: "Events per session",
+          label: "#{@event_name} events per session that had it, per day")
+      - else
+        %p{class: "py-10 text-center text-sm text-slate-500"} Only Google Analytics can count sessions, and it couldn't be asked.
+
+= render layout: "shared/card", locals: {id: "countries", title: "Event count by country", icon: "globe"} do
+  %div{class: "grid items-start gap-6 px-4 py-3 lg:grid-cols-2"}
+    - if @countries
+      = world_map(@countries, label: "#{@event_name} events by country", unit: "event")
+      = render "shared/breakdown", counts: @countries.transform_keys { |code| country_label(code) }, heading: "Country", count_heading: "Events",
+        empty: "No #{@event_name} events in #{@period}.", limit: Google::Analytics::EventDetailsController::COUNTRIES_SHOWN
+    - else
+      %p{class: "py-10 text-center text-sm text-slate-500 lg:col-span-2"} Only Google Analytics knows where each event came from, and it couldn't be asked.

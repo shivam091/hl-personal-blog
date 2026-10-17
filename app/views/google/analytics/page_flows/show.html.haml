@@ -1,0 +1,92 @@
+- content_for :title, "Analytics page flow"
+- service = Google::Analytics::PageFlowService
+- flow = @result.flow
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+- follow = ->(path) { google_analytics_page_flow_path(**@period.query, path: path) }
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} Analytics page flow
+  %p{class: "mt-1 text-sm text-slate-500"}
+    Where a page's readers came from and which page they read next, as GA's path exploration follows them. Read live
+    from Google Analytics and kept for an hour. Pick one of the blog's pages to follow readers on from there.
+
+= render "google/shared/period", period: @period, keep: [@choice], compare: false
+= render "shared/period_notes", notes: [counted_from_note(@period.from, Google::Analytics::TrackedSince::ANALYTICS_NOTE)]
+
+-# A typed path as well as the most read, so any page can be followed.
+= form_with url: google_analytics_page_flow_path, method: :get, class: "mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm" do
+  - @period.query.each do |name, value|
+    = hidden_field_tag name, value, id: nil
+  = label_tag "page-flow-path", "Page", class: "text-xs font-medium text-slate-500"
+  = text_field_tag :path, @path, id: "page-flow-path", list: "page-flow-pages", spellcheck: false,
+    class: "h-8 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none sm:max-w-md"
+  %datalist{id: "page-flow-pages"}
+    - @pages.each do |page|
+      %option{value: page}
+  = button_tag "Follow", type: "submit", name: nil,
+    class: "inline-flex h-8 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+
+- if @result.errors.any?
+  %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+    = icon("alert-circle", size: 18, class: "text-red-500")
+    %ul
+      - @result.errors.each do |error|
+        %li= error
+- elsif flow.views.zero?
+  = render "shared/empty_state", message: "No views of #{flow.path} in #{@period}."
+- else
+  = render "shared/stats", stats: page_flow_stats(flow)
+
+  -# The page sits between its two sides, so a reader's way through it reads
+  -# left to right; the blog's own pages can be followed on in turn.
+  %div{class: "grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "came-from", title: "Came from", icon: "log-in"} do
+      - if flow.previous.empty?
+        %p{class: "px-4 py-6 text-center text-sm text-slate-500"} No referrers recorded.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: "w-full border-collapse text-sm"}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Page or site
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+                %th{scope: "col", class: "#{th_class} w-1/3"}
+                  %span{class: "sr-only"} Share
+            %tbody
+              - flow.previous.each do |source|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "max-w-64 truncate px-3 py-1.5", title: source.value}
+                    - if source.kind == :page
+                      = link_to source.value, follow.(source.value), class: "font-medium text-slate-900 hover:underline"
+                    - else
+                      %span{class: ("text-slate-500" if source.kind == :none)}= source.value
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(source.views)
+                  %td{class: "px-3 py-1.5"}= meter(source.views, flow.views, label: source.value)
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Views of #{flow.path} by the page or site before it. #{service::NO_REFERRER} is a link typed, bookmarked or opened
+        from an app.
+    = render layout: "shared/card", locals: {id: "went-to", title: "Went to next", icon: "log-out"} do
+      - if flow.next_pages.empty?
+        %p{class: "px-4 py-6 text-center text-sm text-slate-500"} No reader went on to another page.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: "w-full border-collapse text-sm"}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Page
+                %th{scope: "col", class: "#{th_class} text-right"} Readers
+                %th{scope: "col", class: "#{th_class} w-1/3"}
+                  %span{class: "sr-only"} Share
+            %tbody
+              - flow.next_pages.each do |path, users|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "max-w-64 truncate px-3 py-1.5", title: path}
+                    - if path.start_with?("/")
+                      = link_to path, follow.(path), class: "font-medium text-slate-900 hover:underline"
+                    - else
+                      %span{class: "text-slate-500"}= path
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(users)
+                  %td{class: "px-3 py-1.5"}= meter(users, flow.readers, label: path)
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Readers of #{flow.path} by the page they viewed next, against everyone who read it; the rest left or read no
+        other page.

@@ -1,22 +1,39 @@
 - slug = page_view.slug
-- dates = (period.from..period.to).to_a
+- days = (period.from..period.to).to_a
+- dates = granularity.dates(days)
+- per = granularity.by
+- previous = period.previous
+- before_days = (previous.from..previous.to).to_a
 - views_by_day = page_view.views_by_day
 - likes_by_day = page_like&.likes_by_day || {}
+- counts = ->(by_day, within) { within.map { |date| by_day[date.iso8601].to_i } }
 - search_totals = search.page_totals(slug)
+- search_before = search.page_totals(slug, previous) if search.previous_synced?
+- ga_totals = analytics.page_totals(slug)
+- ga_before = analytics.page_totals(slug, previous) if analytics.previous?
 - rows_class = "flex justify-between gap-3 px-4 py-2 text-sm"
+-# Only once a comparison is picked, as on the dashboard, so every change on
+-# the page answers the same question.
+- change = ->(current, before, metric = DashboardHelper::HIGHER_IS_BETTER) { tag.span(metric_change(current, before, metric), class: "ml-2 text-xs", title: "Compared with #{previous}") if comparing? }
 
-= render "google/shared/period", period: period, keep: []
+= render "google/shared/period", period: period, keep: [granularity]
 
 %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
   %div{class: "lg:col-span-2"}
-    = render layout: "shared/card", locals: {id: "period-views", title: "Views and likes in the period", icon: "activity"} do
+    = render layout: "shared/card", locals: {id: "period-views", title: "Views and likes in the period", icon: "activity",
+      actions: render("shared/chart_granularity", granularity: granularity, label: "Views and likes")} do
       %div{class: "space-y-4 px-4 py-3"}
-        %div
-          %p{class: "mb-1 text-xs font-medium text-slate-500"} Views per day
-          = time_chart(dates.map { |date| [date, views_by_day[date.iso8601].to_i] }, y_title: "Views", label: "Views of #{slug} per day", style: :line)
-        %div
-          %p{class: "mb-1 text-xs font-medium text-slate-500"} Likes per day
-          = time_chart(dates.map { |date| [date, likes_by_day[date.iso8601].to_i] }, y_title: "Likes", label: "Likes of #{slug} per day")
+        - [[views_by_day, "Views", :line], [likes_by_day, "Likes", :bars]].each do |by_day, name, style|
+          - daily = counts.(by_day, days)
+          %div
+            %p{class: "mb-1 flex justify-between text-xs font-medium text-slate-500"}
+              %span #{name} per #{per}
+              %span
+                %span{class: "text-slate-900 tabular-nums"}= number_with_delimiter(daily.sum)
+                in the period
+                = change.(daily.sum, counts.(by_day, before_days).sum)
+            = time_chart(dates.zip(granularity.sums(days, daily)), y_title: name, label: "#{name} of #{slug} per #{per}", style: style,
+              per: granularity.per)
       - if (note = counted_since_note(period, views: views_since, likes: likes_since))
         %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}= note
 
@@ -26,7 +43,9 @@
         - google_search_metrics.each do |metric|
           %li{class: rows_class}
             %span{class: "text-slate-500"}= metric.label
-            %span{class: "font-medium tabular-nums"}= metric_value(search_totals.value(metric.field), metric.format)
+            %span{class: "font-medium tabular-nums"}
+              = metric_value(search_totals.value(metric.field), metric.format)
+              = change.(search_totals.value(metric.field), search_before&.value(metric.field), metric)
         -# Google's total over the latest upload's range rather than the
         -# period's, since it gives pages no days, so the range is named.
         - if ai.covered
@@ -34,6 +53,21 @@
             %span{class: "text-slate-500", title: "From the latest upload of Search Console's Generative AI report (#{ai.search_type})"}
               AI impressions, #{l(ai.covered.begin)} – #{l(ai.covered.end)}
             %span{class: "font-medium tabular-nums"}= number_with_delimiter(ai.pages.fetch(slug, 0))
+    = render layout: "shared/card", locals: {id: "page-analytics", title: "Google Analytics", icon: "bar-chart"} do
+      %ul{class: "divide-y divide-slate-100"}
+        %li{class: rows_class}
+          %span{class: "text-slate-500"} GA views
+          %span{class: "font-medium tabular-nums"}
+            = number_with_delimiter(ga_totals.views)
+            = change.(ga_totals.views, ga_before&.views)
+        %li{class: rows_class}
+          %span{class: "text-slate-500", title: "Engagement time on this page divided by its GA views"} Time per view
+          %span{class: "font-medium tabular-nums"}= ga_totals.views.positive? ? engagement_duration(ga_totals.engagement_seconds / ga_totals.views) : "—"
+        %li{class: rows_class}
+          %span{class: "text-slate-500"} Key events
+          %span{class: "font-medium tabular-nums"}
+            = number_with_delimiter(ga_totals.key_events)
+            = change.(ga_totals.key_events, ga_before&.key_events)
     = render layout: "shared/card", locals: {id: "page-status", title: "Feed and index", icon: "search-check"} do
       %ul{class: "divide-y divide-slate-100"}
         %li{class: rows_class}
@@ -66,7 +100,7 @@
     %p{class: "px-4 py-3 text-sm text-slate-500"} Google didn't show this page in the period.
   - else
     %div{class: "px-4 py-3"}
-      = measures_chart dates, page_search_measures(daily),
+      = measures_chart days, page_search_measures(daily),
         label: "Clicks, impressions and average position of #{slug} per day, each on its own scale"
 
 = render layout: "shared/card", locals: {id: "page-queries", title: "Search queries for this page", icon: "search", class: "mb-6"} do
