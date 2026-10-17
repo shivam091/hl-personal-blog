@@ -1,0 +1,67 @@
+- adding = definition.new_record?
+- label_class = "mb-1 block text-sm font-medium text-slate-700"
+- input_class = "block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"}= adding ? "New funnel" : "Edit funnel"
+  %p{class: "mt-1 text-sm text-slate-500"}
+    GA counts a reader at a step only if they took every step before it, in order, within the period.
+
+= form_with model: definition, html: {novalidate: true}, class: "max-w-3xl space-y-6" do |form|
+  - if definition.errors.any?
+    = render "shared/error_summary", record: definition
+
+  %div{class: "grid gap-4 sm:grid-cols-2"}
+    %div
+      = form.label :title, class: label_class
+      = form.text_field :title, placeholder: "Reading to subscribing", class: input_class
+    %div
+      = form.label :key, class: label_class
+      = form.text_field :key, placeholder: "newsletter", class: "#{input_class} font-mono"
+    %div
+      = form.label :position, "Order on the page", class: label_class
+      = form.number_field :position, min: 0, class: input_class
+    %div
+      = form.label :counted_since, "Last step counted since", class: label_class
+      = form.date_field :counted_since, class: input_class
+      %p{class: "mt-1 text-xs text-slate-500"} For a step tracked only lately, so earlier periods are marked as missing it.
+
+  -# Every step's fields in one row, so the funnel reads top to bottom.
+  %fieldset{class: "space-y-3"}
+    %legend{class: "mb-2 text-sm font-semibold text-slate-900"} Steps, in order
+    - if definition.errors[:steps].any?
+      %p{class: "text-sm text-red-700"}= definition.errors.full_messages_for(:steps).to_sentence
+    = form.fields_for :steps do |step_form|
+      - step = step_form.object
+      %div{class: "grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2"}
+        %div
+          = step_form.label :name, "Step name", class: label_class
+          = step_form.text_field :name, placeholder: "Read an entry", class: input_class
+        %div
+          = step_form.label :event, "GA event", class: label_class
+          = step_form.text_field :event, placeholder: "page_view", class: "#{input_class} font-mono"
+        %div
+          = step_form.label :path, "On the page", class: label_class
+          = step_form.text_field :path, placeholder: "/contact", class: "#{input_class} font-mono"
+        %div
+          = step_form.label :paths_list, "Or on pages starting with", class: label_class
+          = step_form.text_field :paths_list, placeholder: "/post/, /tutorial/", class: "#{input_class} font-mono"
+        %div{class: "flex flex-wrap items-center gap-x-2"}
+          = step_form.check_box :site, class: "size-4 rounded border-slate-300 accent-slate-900"
+          = step_form.label :site, "Only on the live site", class: "text-sm font-medium text-slate-700",
+            title: "Leave off for events the blog's server sends, which GA records without a hostname"
+        - if step.persisted?
+          %div{class: "flex flex-wrap items-center gap-x-2"}
+            = step_form.check_box :_destroy, class: "size-4 rounded border-slate-300 accent-red-700"
+            = step_form.label :_destroy, "Remove this step", class: "text-sm font-medium text-red-700"
+    %p{class: "text-xs text-slate-500"} Leave a step blank to skip it; save to get more blank steps.
+
+  %div{class: "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"}
+    = link_to google_analytics_funnel_definitions_path,
+      class: "inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("x", size: 14)
+      Cancel
+    = form.button type: "submit", name: nil,
+      class: "inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900" do
+      = icon(adding ? "plus" : "save", size: 14)
+      = adding ? "Add funnel" : "Save changes"

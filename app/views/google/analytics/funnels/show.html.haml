@@ -1,0 +1,168 @@
+- content_for :title, "Analytics funnels"
+- table_class = "w-full border-collapse text-sm"
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+
+- button_class = "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+- breakdown = @result.breakdown
+- breakdown_label = Google::Analytics::FunnelService::BREAKDOWNS.dig(breakdown, :label)
+- choice = @choice
+- select_class = "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+- next_label = Google::Analytics::FunnelService::NEXT_ACTIONS.dig(@result.next_action, :label)
+- dates = (@period.from..@period.to).to_a
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Analytics funnels
+    %p{class: "mt-1 text-sm text-slate-500"}
+      How many readers reach each step on the way to each conversion, read live from Google Analytics and kept for an
+      hour. Each reader counts once, and only if they took the steps in order.
+  %div{class: "flex flex-wrap items-center gap-2"}
+    = link_to list_url(@period, choice, format: :csv), class: button_class do
+      = icon("download", size: 14)
+      Export CSV
+    = link_to google_analytics_funnel_definitions_path, class: button_class do
+      = icon("settings", size: 14)
+      Manage funnels
+
+= render "google/shared/period", period: @period, keep: [choice]
+= render "shared/period_notes", notes: [counted_from_note(@period.from, Google::Analytics::TrackedSince::ANALYTICS_NOTE)]
+
+-# Split as GA's funnel exploration splits, so where readers on one device
+-# or from one channel drop out is told apart from the rest. Next steps as
+-# its next action, so where readers went instead of on is seen too.
+%div{class: "mb-4 flex flex-wrap items-center gap-x-4 gap-y-2"}
+  - [["funnel-breakdown", "Split by", :breakdown, Google::Analytics::FunnelService::BREAKDOWNS, breakdown],
+     ["funnel-next", "What readers did next", :next, Google::Analytics::FunnelService::NEXT_ACTIONS, @result.next_action]].each do |id, label, param, choices, chosen|
+    %div{class: "flex items-center gap-2"}
+      = label_tag id, label, class: "text-xs font-medium text-slate-500"
+      = picker_select_tag param, options_for_select(choices.map { |key, value| [value[:label], key] }, chosen),
+        include_blank: "Nothing", id: id, class: select_class,
+        data: {controller: "chart-granularity", chart_granularity_param_value: param, action: "chart-granularity#change"}
+
+- if @errors.any?
+  %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+    = icon("alert-circle", size: 18, class: "text-red-500")
+    %ul
+      - @errors.each do |error|
+        %li= error
+
+-# A bar per step against the first, so the steepest drop is where readers
+-# are lost; the table gives GA's own completion and abandonment figures.
+%div{class: "grid items-start gap-6 lg:grid-cols-2"}
+  - @result.funnels.each do |funnel|
+    = render layout: "shared/card", locals: {id: "funnel-#{funnel.key}", title: funnel.title, icon: "funnel"} do
+      - first = funnel.steps.first&.users.to_i
+      - previous = @previous_funnels&.[](funnel.key)
+      - against = ", against #{metric_value(previous.conversion_rate, :percent)} in #{@period.previous}" if previous
+      -# A conversion the blog's server sends is counted even when the
+      -# browser blocks Analytics; one the browser sends isn't counted at all.
+      - server_sent = funnel.server_sent
+      %ol{class: "space-y-2 px-4 py-3 text-sm"}
+        - funnel.steps.each do |step|
+          %li
+            %div{class: "mb-1 flex justify-between gap-3"}
+              %span{class: "font-medium"}= step.name
+              %span{class: "tabular-nums"}
+                = number_with_delimiter(step.users)
+                -# Readers count each person once; times count every go, so
+                -# a reader who shared five posts is one reader, five times.
+                - if step.events
+                  %span{class: "text-slate-500", title: "Every time the step's event happened, by anyone"}
+                    · #{number_with_delimiter(step.events)} #{"time".pluralize(step.events)}
+            = meter(step.users, first, label: step.name)
+            - if step.labels.any?
+              %table{class: "mt-2 w-full text-xs", aria: {label: "#{step.name}, by kind"}}
+                %thead{class: "text-slate-500"}
+                  %tr
+                    %th{scope: "col", class: "py-0.5 text-left font-medium"} Kind
+                    %th{scope: "col", class: "py-0.5 text-right font-medium"} Times
+                    %th{scope: "col", class: "py-0.5 text-right font-medium"} Readers
+                %tbody
+                  - step.labels.each do |kind|
+                    %tr{class: "border-t border-slate-100"}
+                      %td{class: "py-0.5 text-slate-700"}= kind.label
+                      %td{class: "py-0.5 text-right tabular-nums"}= number_with_delimiter(kind.events)
+                      %td{class: "py-0.5 text-right tabular-nums"}= number_with_delimiter(kind.users)
+              %p{class: "mt-1 text-xs text-slate-500"}
+                One reader can take several kinds, so readers here can add up to more than the step's.
+      -# A line per step, so a day readers stopped going on shows as the
+      -# lines parting. Past five steps the hues repeat dashed.
+      - if dates.size > 1 && funnel.trend.any?
+        - colors = ChartsHelper::SHARE_COLORS
+        %div{class: "border-t border-slate-200 px-4 py-3"}
+          = line_chart(dates, funnel.steps.each_with_index.map { |step, index| ChartsHelper::Series.new(name: step.name,
+            values: dates.map { |date| funnel.trend[date]&.[](index) || 0 }, color: colors[index % colors.size], dashed: (true if index >= colors.size)) },
+            y_title: "Readers", label: "#{funnel.title}: readers at each step per day")
+      %div{class: "overflow-x-auto border-t border-slate-200"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "#{th_class} text-left"} Step
+              %th{scope: "col", class: "#{th_class} text-right"} Readers
+              %th{scope: "col", class: "#{th_class} text-right", title: "Share of this step's readers who went on to the next"}
+                Went on
+              %th{scope: "col", class: "#{th_class} text-right", title: "Readers who stopped at this step"}
+                Dropped
+              - if @previous_funnels
+                %th{scope: "col", class: "#{th_class} text-right", title: "Readers against #{@period.previous}"} Change
+          %tbody
+            - funnel.steps.each_with_index do |step, index|
+              - last = index == funnel.steps.size - 1
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "px-3 py-1.5"}= step.name
+                %td{class: "px-3 py-1.5 text-right tabular-nums"}
+                  = number_with_delimiter(step.users)
+                %td{class: "px-3 py-1.5 text-right tabular-nums"}
+                  = last ? "—" : metric_value(step.completion_rate, :percent)
+                %td{class: "px-3 py-1.5 text-right tabular-nums"}
+                  = last ? "—" : number_with_delimiter(step.abandonments)
+                - if @previous_funnels
+                  %td{class: "px-3 py-1.5 text-right"}
+                    = metric_change(step.users, previous&.steps&.[](index)&.users, DashboardHelper::HIGHER_IS_BETTER)
+      - if funnel.next_actions.any?
+        -# GA's next action is the next page or event after reaching a step,
+        -# so for every step but the last it includes readers who went on.
+        %div{class: "overflow-x-auto border-t border-slate-200"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Step
+                %th{scope: "col", class: "#{th_class} text-left"}= "Next #{next_label.downcase}"
+                %th{scope: "col", class: "#{th_class} text-right"} Readers
+            %tbody
+              - funnel.steps.each_with_index do |step, index|
+                - actions = funnel.next_actions[index].presence || [["—", nil]]
+                - actions.each_with_index do |(value, users), position|
+                  %tr{class: ("border-t border-slate-200" if position.zero?)}
+                    - if position.zero?
+                      %td{class: "px-3 py-1.5 align-top", rowspan: actions.size}= step.name
+                    %td{class: "max-w-56 truncate px-3 py-1.5", title: value}= value
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= users && number_with_delimiter(users)
+      - if funnel.segments.any?
+        -# Readers at each step across, so a segment's drop is read along its
+        -# row and set against the others' down each column.
+        %div{class: "overflow-x-auto border-t border-slate-200"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"}= breakdown_label
+                - funnel.steps.each_with_index do |step, index|
+                  %th{scope: "col", class: "#{th_class} text-right", title: step.name}= "Step #{index + 1}"
+                %th{scope: "col", class: "#{th_class} text-right", title: "Share who went from the first step to the last"} All the way
+            %tbody
+              - funnel.segments.each do |segment|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5"}= breakdown == "country" ? country_label(segment.value) : segment.value
+                  - segment.steps.each do |step|
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(step.users)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(segment.conversion_rate, :percent)
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        #{metric_value(funnel.conversion_rate, :percent)} of readers who visited went all the way#{against}.
+        - if server_sent
+          A reader whose browser blocks Analytics can't be tied to the earlier steps, so their conversion is missing
+          here; Analytics engagement's Events counts every one.
+      - counted_since = funnel.counted_since
+      - if counted_since && [@period, (@period.previous if @previous_funnels)].compact.map(&:from).min < counted_since
+        %p{class: "border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800"}
+          The last step only counts from #{l(counted_since, format: "%-d %b %Y")}, when it began to be tracked, so
+          earlier days show readers who never had the chance to take it.

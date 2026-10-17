@@ -48,4 +48,26 @@ namespace :google do
       end)
     end
   end
+
+  namespace :analytics do
+    desc "Create and update Google Analytics stats for the last N days (default 7, credentials google.*): bin/rails 'google:analytics:sync[days]'"
+    task :sync, [:days] => :environment do |_task, args|
+      days = args[:days].presence || Google::Analytics::SyncService::DEFAULT_DAYS
+      report_sync.call("Analytics sync", SyncRequest.track("analytics", trigger: "rake", **SyncRequest.range(days)) do
+        Google::Analytics::SyncService.call(days: days)
+      end)
+    end
+
+    desc "Show who is on the blog right now, from GA's realtime report (credentials google.*)"
+    task realtime: :environment do
+      snapshot = Google::Analytics::RealtimeService.call
+      abort snapshot.errors.join("\n") if snapshot.errors.any?
+
+      puts "Active users in the last 30 minutes: #{snapshot.active_users}"
+      {"Pages" => snapshot.pages, "Countries" => snapshot.countries, "Devices" => snapshot.devices}.each do |heading, counts|
+        puts "#{heading}:"
+        counts.each { |name, users| puts "  #{users.to_s.rjust(4)}  #{name}" }
+      end
+    end
+  end
 end

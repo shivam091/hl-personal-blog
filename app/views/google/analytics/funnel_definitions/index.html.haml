@@ -1,0 +1,55 @@
+- content_for :title, "Manage funnels"
+- add_breadcrumb("Manage funnels")
+- button_class = "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Manage funnels
+    %p{class: "mt-1 text-sm text-slate-500"}
+      The steps each funnel on Analytics funnels asks GA for, in the order a reader must take them.
+  %div{class: "flex flex-wrap items-center gap-2"}
+    = link_to google_analytics_funnels_path, class: button_class do
+      = icon("funnel", size: 14)
+      Funnels
+    = link_to new_google_analytics_funnel_definition_path, class: button_class do
+      = icon("plus", size: 14)
+      Add funnel
+
+%div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"}
+  %table{class: "w-full border-collapse text-left text-sm"}
+    %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+      %tr
+        %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold"} Order
+        %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Funnel
+        %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Steps
+        %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Counted since
+        %th{scope: "col", class: "px-3 py-2.5"}
+          %span{class: "sr-only"} Actions
+    %tbody
+      - @definitions.each do |definition|
+        %tr{id: "funnel-definition-#{definition.key}", class: "border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50"}
+          %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= definition.position
+          %td{class: "px-3 py-2"}
+            %div{class: "font-medium"}= definition.title
+            %div{class: "font-mono text-xs text-slate-500"}= definition.key
+          %td{class: "px-3 py-2"}
+            %ol{class: "list-decimal space-y-0.5 pl-5"}
+              - definition.steps.each do |step|
+                %li
+                  = step.name
+                  %span{class: "font-mono text-xs text-slate-500"}= step.event
+                  - if step.path.present? || step.paths.any?
+                    %span{class: "text-xs text-slate-500"} on #{[step.path.presence, *step.paths.map { |prefix| "#{prefix}…" }].compact.join(", ")}
+          %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}= definition.counted_since ? l(definition.counted_since) : "—"
+          %td{class: "px-3 py-2 text-right whitespace-nowrap"}
+            = link_to edit_google_analytics_funnel_definition_path(definition), title: "Edit",
+              class: "inline-flex rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900", aria: {label: "Edit #{definition}"} do
+              = icon("pencil")
+            = button_to google_analytics_funnel_definition_path(definition), method: :delete, title: "Delete", form_class: "inline-flex",
+              form: {data: {turbo_confirm: "Delete the funnel “#{definition}”? This can't be undone."}},
+              class: "inline-flex rounded-md p-1.5 text-red-600 hover:bg-red-50 hover:text-red-700",
+              aria: {label: "Delete #{definition}"} do
+              = icon("trash")
+
+%p{class: "mt-4 text-xs text-slate-500"}
+  With every funnel deleted, the four the blog started with come back.
