@@ -170,6 +170,58 @@ RSpec.describe "Page views", type: :request do
       expect(response.body).to include("No device data in this period.", "Not dated for this page yet; see the all-time totals below.")
     end
 
+    it "scores the page with its search, Analytics, feed and index status over the period" do
+      travel_to(Time.zone.parse("2026-10-12 12:00")) do
+        PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a",
+          "countriesByDay" => {"2026-10-10" => {"IN" => 3}})
+        FeedEntry.create!(url: "https://blog.example.com/post/a", name: "A post", type: "tutorial",
+          published_at: Time.zone.parse("2026-09-01"), last_modified_at: Time.zone.parse("2026-09-02"))
+        CrawledPage.create!(url: "https://blog.example.com/post/a/", last_modified_at: Time.zone.parse("2026-09-02"), indexed: true)
+        Google::SearchConsole::Stat.create!(search_type: "web", date: Date.new(2026, 10, 10), page: "https://blog.example.com/post/a",
+          page_path: "/post/a", query: "a query", clicks: 2, impressions: 20, position: 3.0)
+        Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: "/post/a", views: 4, engagement_seconds: 120)
+
+        get page_view_path("/post/a")
+
+        page = Nokogiri::HTML5(response.body)
+        expect(page.at_css("#page-queries ~ div table tbody td").text).to eq("a query")
+        expect(page.at_css("#page-analytics ~ ul").text.squish).to include("GA views 4", "Time per view 30s")
+        expect(page.at_css("#page-status ~ ul").text.squish).to include("Tutorial: A post", "In the sitemap Yes", "Indexed Yes")
+      end
+    end
+
+    it "shows the page's AI impressions from the latest upload, naming the range Google totalled them over" do
+      PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
+      get page_view_path("/post/a")
+      expect(Nokogiri::HTML5(response.body).at_css("#page-ai-impressions")).to be_nil
+
+      Google::SearchConsole::GenerativeAiRow.create!(search_type: "Web", from: Date.new(2026, 9, 1), to: Date.new(2026, 9, 30),
+        breakdown: "pages", label: "https://blog.example.com/post/a", impressions: 7)
+      Google::SearchConsole::GenerativeAiStat.create!(search_type: "Web", date: Date.new(2026, 9, 1), impressions: 7)
+      get page_view_path("/post/a")
+
+      expect(Nokogiri::HTML5(response.body).at_css("#page-ai-impressions").text.squish)
+        .to eq("AI impressions, #{I18n.l(Date.new(2026, 9, 1))} – #{I18n.l(Date.new(2026, 9, 30))} 7")
+    end
+
+    it "sets the period's views, likes and search figures against the period before, in buckets once picked" do
+      travel_to(Time.zone.parse("2026-10-12 12:00")) do
+        PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a",
+          "countriesByDay" => {"2026-10-10" => {"IN" => 30}, "2026-09-10" => {"IN" => 10}})
+
+        get page_view_path("/post/a", chart_by: "week")
+
+        card = Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=period-views]")
+        expect(card.at_css("p").text.squish).to eq("Views per week 30 in the period 200.0%")
+        expect(card.at_css("p span[title]")["title"]).to eq("Compared with 17 Aug, 2026 – 13 Sep, 2026")
+        expect(card.at_css("select#chart-by option[selected]")["value"]).to eq("week")
+
+        get page_view_path("/post/a", compare: "off")
+
+        expect(Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=period-views] p").text.squish).to eq("Views per day 30 in the period")
+      end
+    end
+
     it "charts the page's clicks, impressions and position, with no data on days not synced" do
       PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
       [Date.new(2026, 10, 10), Date.new(2026, 10, 11)].each do |date|

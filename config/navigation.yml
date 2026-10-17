@@ -60,6 +60,47 @@ shared:
               full_label: Generative AI performance
               icon: sparkles
               route: google_search_console_generative_ai
+        # Named after GA's own report sections, so a page here is found where
+        # it would be in GA.
+        - label: Analytics
+          icon: bar-chart
+          items:
+            - label: Acquisition
+              icon: bar-chart
+              route: google_analytics_acquisition
+            - label: Engagement
+              icon: mouse-pointer
+              route: google_analytics_engagement
+            - label: Users
+              icon: users
+              route: google_analytics_users
+            - label: Retention
+              icon: rotate-ccw
+              route: google_analytics_retention
+            - label: Cohorts
+              icon: grid
+              route: google_analytics_cohorts
+            - label: Realtime
+              icon: radio
+              route: google_analytics_realtime
+            - label: Funnels
+              icon: funnel
+              route: google_analytics_funnels
+            - label: Page flow
+              icon: map
+              route: google_analytics_page_flow
+            - label: Stickiness
+              icon: heart
+              route: google_analytics_stickiness
+            - label: Cross-tab
+              icon: columns
+              route: google_analytics_cross_tab
+            - label: Site search
+              icon: text-search
+              route: google_analytics_site_search
+            - label: Settings
+              icon: settings
+              route: google_analytics_settings
 
     - label: Monitoring
       icon: activity
@@ -76,6 +117,9 @@ shared:
         - label: External calls
           icon: send
           route: external_calls
+        - label: Analytics quota
+          icon: gauge
+          route: google_analytics_quota
 
     - label: Settings
       icon: settings

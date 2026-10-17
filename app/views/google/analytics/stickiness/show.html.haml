@@ -1,0 +1,41 @@
+- content_for :title, "Analytics stickiness"
+- result = @result
+- dates = result.days.map(&:date)
+- colors = ChartsHelper::SHARE_COLORS
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} Analytics stickiness
+  %p{class: "mt-1 text-sm text-slate-500"}
+    How many readers each day, week and month, and how many of the month's readers come back on a given day, as GA's
+    User activity over time card shows them. Read live from Google Analytics and kept for an hour.
+
+= render "google/shared/period", period: @period, keep: [], compare: false
+= render "shared/period_notes", notes: [counted_from_note(@period.from, Google::Analytics::TrackedSince::ANALYTICS_NOTE)]
+
+- if result.errors.any?
+  %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+    = icon("alert-circle", size: 18, class: "text-red-500")
+    %ul
+      - result.errors.each do |error|
+        %li= error
+- elsif !result.any?
+  = render "shared/empty_state", message: "No readers in #{@period}."
+- else
+  = render "shared/stats", stats: stickiness_stats(result)
+
+  -# Each day's figure counts readers over the days to it, so the weekly and
+  -# monthly lines move slowly and a lasting change shows as them turning.
+  %div{class: "grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "active-readers", title: "Active readers", icon: "users"} do
+      %div{class: "px-4 py-3"}
+        = line_chart(dates, [ChartsHelper::Series.new(name: "Last 28 days", values: result.days.map(&:monthly), color: colors[0]),
+          ChartsHelper::Series.new(name: "Last 7 days", values: result.days.map(&:weekly), color: colors[1]),
+          ChartsHelper::Series.new(name: "That day", values: result.days.map(&:daily), color: colors[2])],
+          y_title: "Readers", label: "Readers active over the 28 days, 7 days and day to each date")
+    = render layout: "shared/card", locals: {id: "stickiness", title: "Coming back", icon: "heart"} do
+      %div{class: "px-4 py-3"}
+        = line_chart(dates, stickiness_series(result), y_title: "Share", unit: "%",
+          label: "Share of the longer span's readers who also read in the shorter one, each date")
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Day / month is the share of the last 30 days' readers who read that day; a blog read now and then sits low, one
+        read as a habit higher.
