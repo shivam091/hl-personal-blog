@@ -144,6 +144,26 @@ RSpec.describe "Page views", type: :request do
       expect(response.body).to include("No device data in this period.", "Not dated for this page yet; see the all-time totals below.")
     end
 
+    it "scores the page with its search, Analytics, feed and index status over the period" do
+      travel_to(Time.zone.parse("2026-10-12 12:00")) do
+        PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a",
+          "countriesByDay" => {"2026-10-10" => {"IN" => 3}})
+        FeedEntry.create!(url: "https://blog.example.com/post/a", name: "A post", type: "tutorial",
+          published_at: Time.zone.parse("2026-09-01"), last_modified_at: Time.zone.parse("2026-09-02"))
+        CrawledPage.create!(url: "https://blog.example.com/post/a/", last_modified_at: Time.zone.parse("2026-09-02"), indexed: true)
+        Google::SearchConsole::Stat.create!(search_type: "web", date: Date.new(2026, 10, 10), page: "https://blog.example.com/post/a",
+          page_path: "/post/a", query: "a query", clicks: 2, impressions: 20, position: 3.0)
+        Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: "/post/a", views: 4, engagement_seconds: 120)
+
+        get page_view_path("/post/a")
+
+        page = Nokogiri::HTML5(response.body)
+        expect(page.at_css("#page-queries ~ div table tbody td").text).to eq("a query")
+        expect(page.at_css("#page-analytics ~ ul").text.squish).to include("GA views 4", "Time per view 30s")
+        expect(page.at_css("#page-status ~ ul").text.squish).to include("Tutorial: A post", "In the sitemap Yes", "Indexed Yes")
+      end
+    end
+
     it "charts the page's clicks, impressions and position, with no data on days not synced" do
       PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
       [Date.new(2026, 10, 10), Date.new(2026, 10, 11)].each do |date|

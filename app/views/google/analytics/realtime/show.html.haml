@@ -1,0 +1,32 @@
+- content_for :title, "Analytics realtime"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Analytics realtime
+    %p{class: "mt-1 text-sm text-slate-500"} Who is on the blog in the last 30 minutes, read live from Google Analytics. Refreshed at most once a minute.
+  = link_to google_analytics_realtime_path,
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("refresh", size: 14)
+    Refresh
+
+- if @snapshot.errors.any?
+  %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+    = icon("alert-circle", size: 18, class: "text-red-500")
+    %ul
+      - @snapshot.errors.each do |error|
+        %li= error
+- else
+  = render "shared/stats", stats: realtime_stats(@snapshot)
+
+  %div{class: "grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "pages", title: "Pages", icon: "file"} do
+      %div{class: "px-4 py-3"}
+        = render "shared/breakdown", counts: @snapshot.pages, heading: "Page title", count_heading: "Users", empty: "Nobody is reading right now."
+    %div{class: "grid gap-6"}
+      = render layout: "shared/card", locals: {id: "countries", title: "Countries", icon: "globe"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @snapshot.countries.transform_keys { |code| country_label(code) },
+            heading: "Country", count_heading: "Users", empty: "Nobody is reading right now."
+      = render layout: "shared/card", locals: {id: "devices", title: "Devices", icon: "cpu"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @snapshot.devices, heading: "Device", count_heading: "Users", empty: "Nobody is reading right now."

@@ -1,0 +1,15 @@
+- content_for :title, "Analytics acquisition"
+
+- extra = capture do
+  - if @channel_mix
+    = render layout: "shared/card", locals: {id: "channel-mix", title: "Channel mix by #{@channel_mix[:unit]}", icon: "bar-chart", class: "mb-6"} do
+      %div{class: "px-4 py-3"}
+        = share_chart @channel_mix, key_label: ->(channel) { channel.presence || "(not set)" },
+          count_name: "session", empty: "No sessions in this period.", y_title: "Share of sessions",
+          label: "Each #{@channel_mix[:unit]}'s sessions split by channel, as a share of that #{@channel_mix[:unit]}"
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        The period's five busiest channels keep the same colour in every bar, so a channel growing or shrinking shows
+        even when sessions overall don't change.
+
+= render "google/shared/report", title: "Analytics acquisition", extra: extra,
+  description: "Where readers come from: what first brought them, and the channels, sources and sites behind each visit, from Google Analytics. GA keeps processing late hits for up to two days."

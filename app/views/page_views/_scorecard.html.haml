@@ -3,6 +3,7 @@
 - views_by_day = page_view.views_by_day
 - likes_by_day = page_like&.likes_by_day || {}
 - search_totals = search.page_totals(slug)
+- ga_totals = analytics.page_totals(slug)
 - rows_class = "flex justify-between gap-3 px-4 py-2 text-sm"
 
 = render "google/shared/period", period: period, keep: []
@@ -27,6 +28,17 @@
           %li{class: rows_class}
             %span{class: "text-slate-500"}= metric.label
             %span{class: "font-medium tabular-nums"}= metric_value(search_totals.value(metric.field), metric.format)
+    = render layout: "shared/card", locals: {id: "page-analytics", title: "Google Analytics", icon: "bar-chart"} do
+      %ul{class: "divide-y divide-slate-100"}
+        %li{class: rows_class}
+          %span{class: "text-slate-500"} GA views
+          %span{class: "font-medium tabular-nums"}= number_with_delimiter(ga_totals.views)
+        %li{class: rows_class}
+          %span{class: "text-slate-500", title: "Engagement time on this page divided by its GA views"} Time per view
+          %span{class: "font-medium tabular-nums"}= ga_totals.views.positive? ? engagement_duration(ga_totals.engagement_seconds / ga_totals.views) : "—"
+        %li{class: rows_class}
+          %span{class: "text-slate-500"} Key events
+          %span{class: "font-medium tabular-nums"}= number_with_delimiter(ga_totals.key_events)
     = render layout: "shared/card", locals: {id: "page-status", title: "Feed and index", icon: "search-check"} do
       %ul{class: "divide-y divide-slate-100"}
         %li{class: rows_class}
