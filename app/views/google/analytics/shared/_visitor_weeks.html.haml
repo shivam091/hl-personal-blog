@@ -1,0 +1,14 @@
+- weeks = @visitor_weeks
+= render layout: "shared/card", locals: {id: "new-and-returning", title: "New and returning readers by week", icon: "users", class: "mb-6"} do
+  - if weeks[:views].values.flatten.sum.zero?
+    %p{class: empty_note_class} No views in this period.
+  - else
+    - known = {"new" => ["New", ChartsHelper::SHARE_COLORS[0]], "returning" => ["Returning", ChartsHelper::SHARE_COLORS[1]]}
+    - types = weeks[:views].keys.sort_by { |type| [known.keys.index(type) || known.size, type] }
+    %div{class: "px-4 py-3"}
+      = stacked_chart(weeks[:weeks], types.map { |type| ChartsHelper::Series.new(name: known.dig(type, 0) || type.humanize,
+          values: weeks[:views][type], color: known.dig(type, 1) || ChartsHelper::SHARE_OTHER_COLOR) },
+        per: :week, y_title: "Views", label: "Each week's views from new and returning readers",
+        previous: @previous_visitor_weeks, previous_name: (@period.previous.to_s if @previous_visitor_weeks))
+    %p{class: footnote_class}
+      Views rather than readers, since GA's readers can't be added up across days. Every reader in the period, whichever breakdown is open.
