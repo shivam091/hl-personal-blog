@@ -1,0 +1,148 @@
+- content_for :title, "Generative AI performance"
+- controller_class = Google::SearchConsole::GenerativeAiController
+- covered = @covered
+- type = @search_type.value
+- dates = @breakdown == "dates"
+- tab_label, heading = controller_class::BREAKDOWNS.fetch(@breakdown)
+- metric = Google::DailyReport::Metric.new(field: :impressions, label: "AI impressions", format: :count, icon: "sparkles",
+  hint: "How often the blog appeared in an AI Overview or AI Mode answer, as Search Console's Generative AI report counts it for the whole site.")
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Generative AI performance
+    %p{class: "mt-1 max-w-3xl text-sm text-slate-500"}
+      How often the blog appeared in Google's AI Overviews and AI Mode, which Search Console counts together and without clicks.
+      Google offers no API for it, so its figures come from the Generative AI report's Export, uploaded here.
+    - if covered
+      %p{class: "mt-1 text-xs text-slate-500"}
+        The latest upload's pages, countries and devices cover #{l(covered.begin)} – #{l(covered.end)}.
+  - if (search_console_url = search_console_generative_ai_url(type))
+    = link_to search_console_url, target: "_blank", rel: "noopener",
+      class: outline_button_class do
+      Open in Search Console
+      = icon("external-link", size: 14)
+
+= form_with url: google_search_console_generative_ai_path, multipart: true,
+  class: "mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm" do |form|
+  = form.label :file, "Upload export", class: "text-sm font-medium text-slate-700"
+  = form.file_field :file, accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", required: true,
+    class: "text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+  = form.button type: "submit", name: nil,
+    class: "inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-slate-700" do
+    = icon("upload", size: 14)
+    Upload
+  %p{class: "w-full text-xs text-slate-500"}
+    The .xlsx file from Search Console › Performance › Generative AI › Export › Download Excel, exported without filters other than date and search type.
+    Days already uploaded are replaced with this file's figures; pages, countries and devices show the latest upload.
+
+- if type.nil?
+  = render "shared/empty_state", icon: "sparkles", message: "No figures yet. Upload an export of Search Console's Generative AI report to see them here."
+- else
+  - add_breadcrumb(tab_label, google_search_console_generative_ai_breakdown_path(@breakdown, **@search_type.query))
+  %nav{class: "mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 text-sm [scrollbar-width:none]", aria: {label: "Breakdown"}}
+    - controller_class::BREAKDOWNS.each do |key, (label, _)|
+      - current = key == @breakdown
+      = link_to label, google_search_console_generative_ai_breakdown_path(key, **@search_type.query, **@period.query),
+        class: ["-mb-px border-b-2 px-3 py-2 whitespace-nowrap", current ? "border-slate-900 font-medium text-slate-900" : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900"],
+        aria: {current: (current ? "page" : nil)}
+
+  - if @search_types.size > 1
+    %nav{class: "mb-4 flex flex-wrap gap-2", aria: {label: "Search type"}}
+      - @search_types.each do |search_type|
+        - current = search_type == type
+        = link_to search_type, list_url(@period, @sorting, controller_class::SearchType.new(search_type, @search_types.first)),
+          aria: {current: (current ? "page" : nil)},
+          class: "rounded-full border px-3 py-1 text-sm font-medium #{current ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}"
+
+  - unless dates
+    -# Google totals these over the export's whole range and gives no days,
+    -# so they can't follow the period picked below.
+    %p{class: "mb-4 flex items-start gap-2 text-sm text-slate-500"}
+      = icon("info", size: 16, class: "mt-0.5 shrink-0 text-slate-400")
+      %span
+        - if covered
+          #{tab_label} are Google's totals for the latest upload, #{l(covered.begin)} – #{l(covered.end)}, whatever period is picked, so they're not compared either; only the figures and chart follow the period and its comparison.
+          - if @breakdown == "pages"
+            Google counts each page on its own, so pages can add up to more than the site's impressions when one answer links several of them.
+        - else
+          No upload of #{type} has #{tab_label.downcase}.
+
+  = render "google/shared/period", period: @period, keep: [@search_type, @sorting]
+
+  = render "google/shared/totals", totals: @total, previous_totals: @previous_total, previous_period: @period.previous, metrics: [metric]
+
+  - days = (@period.from..@period.to).to_a
+  - before = @period.previous if @previous_daily
+  = render layout: "shared/card", locals: {id: "generative-ai-impressions", title: "Impressions per day", icon: "trending-up", class: "mb-6"} do
+    %div{class: "px-4 py-3"}
+      = line_chart(days, [ChartsHelper::Series.new(name: "This period", values: days.map { |day| @daily[day] }),
+        (ChartsHelper::Series.new(name: before.to_s, values: (before.from..before.to).map { |day| @previous_daily[day] }.first(days.size), dashed: true) if before)].compact,
+        y_title: "Impressions", label: "AI Overviews and AI Mode impressions per day#{", against #{before}" if before}")
+
+  -# Over the days both reports hold, since a day only one was uploaded or
+  -# synced for would read as a share of nothing.
+  - shared_days = days.select { |day| @daily[day] && @organic_daily[day].to_i.positive? }
+  - if shared_days.any?
+    = render layout: "shared/card", locals: {id: "generative-ai-share", title: "AI impressions as a share of all impressions", icon: "trending-up", class: "mb-6"} do
+      %div{class: "px-4 py-3"}
+        = line_chart(shared_days, [ChartsHelper::Series.new(name: "AI share", values: shared_days.map { |day| @daily[day] * 100.0 / @organic_daily[day] })],
+          y_title: "Share of impressions", unit: "%", precision: 1, label: "AI Overviews and AI Mode impressions as a share of the day's search impressions")
+      %p{class: footnote_class}
+        Against Search Console's own #{type} impressions for the same day, which count the blog's AI appearances too.
+
+  - if @top_pages&.any?
+    = render layout: "shared/card", locals: {id: "generative-ai-top-pages", title: "Pages most seen in AI answers", icon: "bar-chart", class: "mb-6"} do
+      %div{class: "px-4 py-3"}
+        = ranking_chart(@top_pages.map { |row| [row.label.sub(%r{\Ahttps?://[^/]+}i, "").presence || "/", row.impressions, "bg-slate-600", ChartsHelper::BAR_COLOR] },
+          total: @row_total.to_i, x_title: "Impressions", y_title: "Page", label: "The ten pages with the most AI impressions in the latest upload")
+
+  - if @country_impressions&.any?
+    = render layout: "shared/card", locals: {id: "generative-ai-countries", title: "Impressions by country", icon: "globe", class: "mb-6"} do
+      %div{class: "px-4 py-3"}
+        = world_map(@country_impressions, label: "AI Overviews and AI Mode impressions by country", unit: "impression")
+
+  - if @pagination.total_count.zero?
+    = render "shared/empty_state", icon: "inbox",
+      message: (dates ? "No days uploaded in #{@period}." : (covered ? "No #{tab_label.downcase} in the latest upload." : "No #{tab_label.downcase} uploaded yet."))
+  - else
+    - sort_keep = [@period, @search_type, @pagination]
+    - offset = @period.from - @period.previous.from
+    - total = @row_total.to_i
+    %div{class: list_container_class(nil)}
+      %table{class: list_table_class(nil)}
+        %thead{class: list_head_class(nil)}
+          %tr
+            %th{scope: "col", class: list_heading_right_class, aria: {label: "Row number"}} #
+            = sort_header @sorting, heading, {"dates" => "date", "countries" => "country"}.fetch(@breakdown, "label"), keep: sort_keep, class: "px-3 py-2.5 align-top font-semibold"
+            = sort_header @sorting, "Impressions", "impressions", keep: sort_keep, title: metric.hint,
+              class: "px-3 py-2.5 text-right align-top font-semibold whitespace-nowrap"
+            %th{scope: "col", class: "px-3 py-2.5 text-right align-top font-semibold"} Share
+          %tr{class: "bg-white text-slate-900"}
+            %td
+            %th{scope: "row", class: "px-3 py-2 font-semibold"} Total
+            %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums"}
+              %div{class: "font-semibold"}= number_with_delimiter(total)
+              - if dates && @previous_total
+                %div{class: "text-xs font-normal"}= row_change(total, @previous_total.value(:impressions), metric)
+            %td{class: "px-3 py-2 text-right text-xs text-slate-500 tabular-nums"}= "100%" if total.positive?
+        %tbody
+          - @rows.each.with_index(@pagination.first_item) do |row, number|
+            %tr{class: "border-b border-slate-100 last:border-b-0 hover:bg-slate-50"}
+              %td{class: muted_number_cell_class}= number_with_delimiter(number)
+              %td{class: "px-3 py-2"}
+                - if dates
+                  = time_tag row.date, l(row.date)
+                - elsif @breakdown == "pages"
+                  = blog_page_link(row.label.sub(%r{\Ahttps?://[^/]+}i, "").presence || "/", nil, live: row.label)
+                - elsif @breakdown == "countries"
+                  %span{title: row.label}= row.country ? country_label(row.country) : row.label
+                - else
+                  = row.label
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums"}
+                = number_with_delimiter(row.impressions)
+                - if dates && @previous_daily
+                  = row_change(row.impressions, @previous_daily[row.date - offset], metric)
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums text-slate-500"}
+                = number_to_percentage(total.positive? ? row.impressions.to_f * 100 / total : 0, precision: 1)
+
+  = pagination_nav @pagination, keep: [@period, @search_type, @sorting]
