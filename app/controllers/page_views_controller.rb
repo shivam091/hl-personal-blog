@@ -36,8 +36,10 @@ class PageViewsController < ApplicationController
   def show
     @page_view = PageView.find(params[:id])
     @period = Period.new(params)
+    @granularity = ChartGranularity.new(params)
     @page_like = PageLike.where(_id: @page_view.slug).first
     @search = Google::SearchConsole::Summary.new(@period)
+    @analytics = Google::Analytics::Summary.new(@period)
     @views_since = PageView.first_day
     @likes_since = PageLike.first_day
     # Stored as full URLs, so they're matched on the path whatever the host.

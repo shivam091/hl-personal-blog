@@ -1,0 +1,51 @@
+- content_for :title, "Analytics realtime"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3", data: {controller: "auto-refresh", auto_refresh_interval_value: Google::Analytics::RealtimeService::CACHE_TTL.to_i}}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Analytics realtime
+    %p{class: "mt-1 text-sm text-slate-500"} What's happening on the blog in the last 30 minutes (who's reading, what they view and which events fire), read live from Google Analytics. Updates every minute while you're on this tab.
+  = link_to google_analytics_realtime_path,
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("refresh", size: 14)
+    Refresh
+
+- if @snapshot.errors.any?
+  %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+    = icon("alert-circle", size: 18, class: "text-red-500")
+    %ul
+      - @snapshot.errors.each do |error|
+        %li= error
+- else
+  = render "shared/stats", stats: realtime_stats(@snapshot)
+
+  = render layout: "shared/card", locals: {id: "per-minute", title: "Active users per minute", icon: "bar-chart", class: "mb-6"} do
+    %div{class: "px-4 py-3"}
+      = swatch_legend([["Active users", ChartsHelper::BAR_COLOR]])
+      = time_chart(@snapshot.per_minute.to_a, label: "Active users per minute, last #{Google::Analytics::RealtimeService::MINUTES} minutes",
+        y_title: "Active users", per: :minute)
+
+  %div{class: "grid items-start gap-6 lg:grid-cols-2"}
+    %div{class: "grid gap-6"}
+      = render layout: "shared/card", locals: {id: "pages", title: "Views by page title and screen name", icon: "file"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @snapshot.pages, heading: "Page title and screen name", count_heading: "Views", empty: "Nobody is reading right now."
+      = render layout: "shared/card", locals: {id: "events", title: "Event count by event name", icon: "zap"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @snapshot.events, heading: "Event name", count_heading: "Event count", empty: "No events right now."
+      = render layout: "shared/card", locals: {id: "key-events", title: "Key events by event name", icon: "target"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @snapshot.key_events, heading: "Event name", count_heading: "Key events", empty: "No key events right now."
+    %div{class: "grid gap-6"}
+      = render layout: "shared/card", locals: {id: "countries", title: "Active users by country", icon: "globe"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @snapshot.countries.transform_keys { |code| country_label(code) },
+            heading: "Country", count_heading: "Users", empty: "Nobody is reading right now."
+      = render layout: "shared/card", locals: {id: "cities", title: "Active users by city", icon: "map-pin"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @snapshot.cities, heading: "City", count_heading: "Users", empty: "Nobody is reading right now."
+      = render layout: "shared/card", locals: {id: "devices", title: "Active users by device category", icon: "cpu"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @snapshot.devices, heading: "Device", count_heading: "Users", empty: "Nobody is reading right now."
+      = render layout: "shared/card", locals: {id: "platforms", title: "Active users by platform", icon: "server"} do
+        %div{class: "px-4 py-3"}
+          = render "shared/breakdown", counts: @snapshot.platforms, heading: "Platform", count_heading: "Users", empty: "Nobody is reading right now."
