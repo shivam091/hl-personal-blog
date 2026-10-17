@@ -33,9 +33,12 @@ class PageViewsController < ApplicationController
   def show
     @page_view = PageView.find(params[:id])
     @period = Period.new(params)
+    @granularity = ChartGranularity.new(params, period: @period)
     @page_like = PageLike.where(_id: @page_view.slug).first
     @search = Google::SearchConsole::Summary.new(@period)
+    @analytics = Google::Analytics::Summary.new(@period)
     @ai = Google::SearchConsole::GenerativeAiSummary.new(@period)
+    @assistants = Google::Analytics::AiAssistants.new(@period)
     # Stored as full URLs, so they're matched on the path whatever the host.
     same_path = /\Ahttps?:\/\/[^\/]+#{Regexp.escape(@page_view.slug == "/" ? "" : @page_view.slug)}\/?\z/
     @feed_entry = FeedEntry.where(_id: same_path).first

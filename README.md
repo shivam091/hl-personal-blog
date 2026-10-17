@@ -135,6 +135,11 @@ than through Active Job, because the process exits when it's done. A run with no
 synced and errors exits non-zero, so it shows as failed; the logs list each
 skipped entry.
 
+Each sync then marks its new entries on Google Analytics' charts as
+annotations ([`AnnotationService`](app/services/google/analytics/annotation_service.rb)).
+For that, the service account must be an Editor of the property (Admin →
+Property access management).
+
 ## Request logs
 
 Every request (except `/up` and assets) is saved as a

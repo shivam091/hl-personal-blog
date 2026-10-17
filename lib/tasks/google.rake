@@ -47,4 +47,50 @@ namespace :google do
       end)
     end
   end
+
+  namespace :analytics do
+    desc "Create and update Google Analytics stats for the last N days (default 7, credentials google.*): bin/rails 'google:analytics:sync[days]'"
+    task :sync, [:days] => :environment do |_task, args|
+      days = args[:days].presence || Google::Analytics::SyncService::DEFAULT_DAYS
+      report_sync.call("Analytics sync", SyncRequest.track("analytics", trigger: "rake", **SyncRequest.range(days)) do
+        Google::Analytics::SyncService.call(days: days)
+      end)
+    end
+
+    # Once, after GA reports that repeated each other were merged: campaigns
+    # into sources, first-user campaigns into user acquisition, landing
+    # pages into landing page + source, page titles and new vs returning into
+    # page traffic, content groups' daily rows into one per page, devices,
+    # countries, places and referrers into one audience report, finished
+    # reads into events, and event methods into event labels. Rows
+    # stored before it are keyed without the new splits, so they'd be added
+    # to the new ones. GA keeps its standard reports for good, so every day
+    # since tracking began is fetched again. Safe to run again if it fails.
+    desc "Drop the GA collections merged away, and refill the merged ones from the first tracked day (credentials google.*)"
+    task rebuild_merged_reports: :environment do
+      db = Mongoid.default_client
+      %w[
+        google_analytics_campaign_stats google_analytics_first_campaign_stats google_analytics_landing_page_stats
+        google_analytics_page_title_stats google_analytics_visitor_type_stats google_analytics_device_stats
+        google_analytics_country_stats google_analytics_location_stats google_analytics_referrer_stats
+        google_analytics_article_read_stats google_analytics_event_method_stats
+      ].each do |name|
+        db[name].drop
+        puts "Dropped #{name}"
+      end
+      models = [
+        Google::Analytics::Stat, Google::Analytics::SourceStat, Google::Analytics::UserAcquisitionStat, Google::Analytics::ContentGroupStat,
+        Google::Analytics::AudienceStat, Google::Analytics::EventStat, Google::Analytics::EventLabelStat
+      ]
+      models.each do |model|
+        model.collection.drop
+        model.create_indexes
+        puts "Emptied #{model.collection.name} and created its indexes"
+      end
+      days = (Date.current - Google::Analytics::TrackedSince::ANALYTICS).to_i + 1
+      report_sync.call("Analytics rebuild", SyncRequest.track("analytics", trigger: "rake", **SyncRequest.range(days)) do
+        Google::Analytics::SyncService.call(days: days, only: models)
+      end)
+    end
+  end
 end

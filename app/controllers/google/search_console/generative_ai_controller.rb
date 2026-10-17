@@ -32,6 +32,7 @@ module Google
         @search_type = SearchType.new(params[:type].presence_in(types) || types.first, types.first)
         @breakdown = params[:breakdown].presence_in(BREAKDOWNS.keys) || BREAKDOWNS.keys.first
         @period = Period.new(params)
+        @granularity = ChartGranularity.new(params, period: @period)
         stats = GenerativeAiStat.where(search_type: @search_type.value)
 
         @daily = @period.apply(stats).pluck(:date, :impressions).to_h
@@ -55,6 +56,7 @@ module Google
         @organic_daily = (@period.from..@period.to).zip(Summary.new(@period).daily(:impressions)).to_h
         @top_pages = top_pages if @breakdown == "pages"
         @search_impressions = search_impressions if @covered && SEARCH_BREAKDOWNS.include?(@breakdown)
+        @assistants = Google::Analytics::AiAssistants.new(@period)
       end
 
       def create

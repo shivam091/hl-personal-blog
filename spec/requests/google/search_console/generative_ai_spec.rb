@@ -29,7 +29,7 @@ RSpec.describe "Search Console generative AI performance", type: :request do
 
     page = Nokogiri::HTML5(response.body)
     expect(page.css("dl dd").first.text.squish).to eq("8")
-    expect(page.css("#generative-ai-impressions ~ div [data-tip]")).not_to be_empty
+    expect(page.css("section[aria-labelledby=generative-ai-impressions] [data-tip]")).not_to be_empty
     expect(table_rows).to eq([["1", "/post/grid", "6", "60.0%"], ["2", "/", "4", "40.0%"]])
     expect(page.css("thead tr:last-child").text.squish).to include("Total 10 100%")
     expect(response.body).to include("whatever period is picked")
@@ -98,6 +98,24 @@ RSpec.describe "Search Console generative AI performance", type: :request do
     get google_search_console_generative_ai_breakdown_path("countries")
 
     expect(table_rows.map { |row| row.drop(1) }).to eq([["🇮🇳 IN", "6", "75.0%", "24", "25.0%"], ["🇺🇸 US", "2", "25.0%", "—", "—"]])
+  end
+
+  it "counts visits from AI assistants, from GA, whether or not anything was uploaded" do
+    Google::Analytics::Stat.create!(date: Date.new(2026, 10, 5), page_path: "/post/grid", views: 9)
+    Google::Analytics::LandingSourceStat.create!(date: Date.new(2026, 10, 5), page_path: "/post/grid", channel_group: "Referral",
+      source: "chatgpt.com", medium: "referral", sessions: 3, engaged_sessions: 3)
+    Google::Analytics::LandingSourceStat.create!(date: Date.new(2026, 10, 5), page_path: "/post/grid", channel_group: "Organic Search",
+      source: "google", medium: "organic", sessions: 40)
+
+    get google_search_console_generative_ai_path(from: "2026-10-01", to: "2026-10-11")
+
+    expect(section("ai-assistant-visits").at_css("#ai-assistant-totals").text.squish).to start_with("3 visits")
+    expect(section("ai-assistant-visits").text).to include("ChatGPT")
+
+    post google_search_console_generative_ai_path, params: {file: generative_ai_upload}
+    get google_search_console_generative_ai_path(from: "2026-10-01", to: "2026-10-11")
+
+    expect(section("ai-assistant-visits").at_css("#ai-assistant-totals").text.squish).to start_with("3 visits")
   end
 
   it "says when an upload leaves days uncovered beside those already kept" do

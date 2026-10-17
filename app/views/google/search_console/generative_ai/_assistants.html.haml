@@ -1,0 +1,29 @@
+-# From GA rather than the upload, so it follows the period whether or not
+-# anything was uploaded for it.
+- period = assistants.period
+- days = (period.from..period.to).to_a
+- totals = assistants.totals
+- before = assistants.previous_totals if comparing?
+= render layout: "shared/card", locals: {id: "ai-assistant-visits", title: "Visits from AI assistants", icon: "message-square", class: "mb-6"} do
+  %div{class: "px-4 py-3"}
+    - if !assistants.any?
+      %p{class: "text-sm text-slate-500"} Google Analytics hasn't synced any days in #{period}.
+    - elsif totals.sessions.zero?
+      %p{class: "text-sm text-slate-500"} No visits from AI assistants in #{period}.
+    - else
+      %p{class: "mb-3 text-sm text-slate-600", id: "ai-assistant-totals"}
+        %span{class: "text-lg font-semibold tabular-nums text-slate-900"}= number_with_delimiter(totals.sessions)
+        = "visit".pluralize(totals.sessions)
+        = metric_change(totals.sessions, before&.sessions, DashboardHelper::HIGHER_IS_BETTER)
+        ·
+        #{number_to_percentage(totals.engagement_rate * 100, precision: 0)} engaged
+        ·
+        #{number_with_delimiter(totals.key_events)} key #{"event".pluralize(totals.key_events)}
+      = line_chart(granularity.dates(days), [ChartsHelper::Series.new(name: "Visits", values: granularity.sums(days, assistants.daily))],
+        y_title: "Visits", per: granularity.per, label: "Visits from AI assistants per #{granularity.by}")
+      %div{class: "mt-4"}
+        = ranking_chart(assistants.by_assistant.map { |name, figures| [name, figures.sessions, "bg-slate-600", ChartsHelper::BAR_COLOR] },
+          total: totals.sessions, x_title: "Visits", y_title: "Assistant", label: "Visits by AI assistant")
+  %p{class: footnote_class}
+    Sessions Google Analytics credits to ChatGPT, Perplexity, Gemini, Copilot, Claude and other assistants, by the site or utm_source they came from.
+    These are clicks, which the Generative AI report above doesn't give; assistants that strip the referrer arrive as direct visits and can't be told apart.
