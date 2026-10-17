@@ -1,8 +1,5 @@
 - content_for :title, "Ranking opportunities"
 - opportunities = @opportunities
-- table_class = "w-full border-collapse text-sm"
-- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
-- export_class = "inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline"
 - target = Google::SearchConsole::Opportunities::TARGET_POSITION
 
 %div{class: "mb-6"}
@@ -32,11 +29,11 @@
           %table{class: table_class}
             %thead{class: "text-slate-500"}
               %tr
-                %th{scope: "col", class: "#{th_class} text-left"} Query
-                %th{scope: "col", class: "#{th_class} text-left"} Page
-                %th{scope: "col", class: "#{th_class} text-right"} Impressions
-                %th{scope: "col", class: "#{th_class} text-right"} Position
-                %th{scope: "col", class: "#{th_class} text-right"} CTR
+                = report_th "Query"
+                = report_th "Page"
+                = report_th "Impressions", :right
+                = report_th "Position", :right
+                = report_th "CTR", :right
                 %th{scope: "col", class: "#{th_class} text-right", title: "Clicks it would earn at position #{target}, less what it earns now"}
                   To gain
             %tbody
@@ -85,28 +82,22 @@
       - if rows.empty?
         %p{class: empty_note_class} No page lost a meaningful share of its clicks in this period.
       - else
-        %div{class: "overflow-x-auto"}
-          %table{class: table_class}
-            %thead{class: "text-slate-500"}
-              %tr
-                %th{scope: "col", class: "#{th_class} text-left"} Page
-                %th{scope: "col", class: "#{th_class} text-right"} Clicks
-                %th{scope: "col", class: "#{th_class} text-right"} Lost
-                %th{scope: "col", class: "#{th_class} text-right"} Position
-                %th{scope: "col", class: "#{th_class} text-right", title: "Change in average position from #{@period.previous}"} Change
-                %th{scope: "col", class: "#{th_class} text-left"} Likely cause
-            %tbody
-              - rows.each do |row|
-                %tr{class: "border-t border-slate-200"}
-                  %td{class: "w-full px-3 py-1.5"}
-                    = blog_page_link(row.page_path, page_view_path(row.page_path))
-                  %td{class: "px-3 py-1.5 text-right tabular-nums", title: "#{number_with_delimiter(row.previous_clicks)} before"}
-                    = number_with_delimiter(row.clicks)
-                  %td{class: "px-3 py-1.5 text-right tabular-nums text-red-700"} −#{number_with_delimiter(row.lost)}
-                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.position, :position)
-                  %td{class: "px-3 py-1.5 text-right"}= position_change(row.position, row.previous_position)
-                  %td{class: "px-3 py-1.5 whitespace-nowrap"}= row.cause
-    %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
-      = link_to list_url(@period, @filtering, format: :csv, export: "losing"), class: export_class do
-        = icon("download", size: 12)
-        CSV
+        = report_table([report_th("Page"),
+          report_th("Clicks", :right),
+          report_th("Lost", :right),
+          report_th("Position", :right),
+          report_th("Change", :right, title: "Change in average position from #{@period.previous}"),
+          report_th("Likely cause")]) do
+          - rows.each do |row|
+            %tr{class: table_row_class}
+              %td{class: title_cell_class}
+                = blog_page_link(row.page_path, page_view_path(row.page_path))
+              %td{class: cell_class, title: "#{number_with_delimiter(row.previous_clicks)} before"}
+                = number_with_delimiter(row.clicks)
+              %td{class: "#{cell_class} text-red-700"} −#{number_with_delimiter(row.lost)}
+              %td{class: cell_class}= metric_value(row.position, :position)
+              %td{class: "px-3 py-1.5 text-right"}= position_change(row.position, row.previous_position)
+              %td{class: "px-3 py-1.5 whitespace-nowrap"}= row.cause
+    = csv_footer(list_url(@period, @filtering, format: :csv, export: "losing"))
+
+  = render "ranking_opportunity_reports/ai_gaps", gaps: @ai_gaps
