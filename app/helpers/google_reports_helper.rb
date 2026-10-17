@@ -17,6 +17,16 @@ module GoogleReportsHelper
     "FAIL" => ["bg-[#eb6834]", "#eb6834"], "NEUTRAL" => ["bg-[#a8a7a1]", "#a8a7a1"]
   }.freeze
 
+  SEARCH_CONSOLE_URL = "https://search.google.com/search-console"
+
+  def search_console_generative_ai_url(search_type)
+    site = Rails.application.credentials.dig(:google, :search_console_site).presence
+    return unless site
+
+    view = search_type.to_s.start_with?("Discover") ? "discover" : "search-analytics"
+    "#{SEARCH_CONSOLE_URL}/performance/#{view}/ai?#{{resource_id: site}.to_query}"
+  end
+
   def report_exports
     query = [@period, @filtering, @sorting, @event_choice].compact.map(&:query).reduce(:merge)
     [
