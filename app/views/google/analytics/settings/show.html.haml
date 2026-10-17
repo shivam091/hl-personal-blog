@@ -1,0 +1,173 @@
+- content_for :title, "Analytics settings"
+- settings = @result.settings
+- service = Google::Analytics::SettingsService
+- table_class = "w-full border-collapse text-sm"
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} Analytics settings
+  %p{class: "mt-1 text-sm text-slate-500"} The Google Analytics property's settings that shape every report here, read live from GA's Admin API and kept for an hour.
+
+- if @result.errors.any?
+  %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+    = icon("alert-circle", size: 18, class: "text-red-500")
+    %ul
+      - @result.errors.each do |error|
+        %li= error
+- else
+  - warnings = []
+  - if settings.short_retention?
+    - warnings << "Event data is kept for only 2 months, GA's default, which also limits Explorations to 2 months. Raise it in GA → Admin → Data collection and modification → Data retention."
+  - if settings.missing_key_events.any?
+    - warnings << "#{settings.missing_key_events.to_sentence} #{settings.missing_key_events.one? ? "isn't" : "aren't"} marked as #{settings.missing_key_events.one? ? "a key event" : "key events"}, so #{settings.missing_key_events.one? ? "it doesn't" : "they don't"} count as conversions. Mark them in GA → Admin → Events once they've arrived."
+  - if settings.missing_custom_dimensions.any?
+    - warnings << "#{settings.missing_custom_dimensions.to_sentence} #{settings.missing_custom_dimensions.one? ? "isn't" : "aren't"} registered as an event-scoped custom dimension, so GA leaves #{settings.missing_custom_dimensions.one? ? "it" : "them"} out of every report, Event labels included. Register below; GA only reports events sent after that."
+  - if settings.missing_custom_metrics.any?
+    - warnings << "#{settings.missing_custom_metrics.to_sentence} #{settings.missing_custom_metrics.one? ? "isn't" : "aren't"} registered as an event-scoped custom metric, so finished reads have no reading time. Register below; GA only reports events sent after that."
+  - if settings.google_signals_off?
+    - warnings << "Google signals is off, so GA reports no age or gender. Switch it on in GA → Admin → Data collection and modification → Data collection."
+  - settings.data_streams.each do |stream|
+    - missing = stream.missing_enhanced_measurement
+    - if missing.any?
+      - warnings << "Enhanced measurement on #{stream.display_name} doesn't send #{missing.map { |event| service::EXPECTED_ENHANCED_MEASUREMENT[event] }.to_sentence}, so those reports stay empty. Switch #{missing.one? ? "it" : "them"} on in GA → Admin → Data streams → #{stream.display_name} → Enhanced measurement."
+  - if warnings.any?
+    %div{class: "mb-6 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "alert"}
+      = icon("alert-triangle", size: 18, class: "text-amber-500")
+      %ul{class: "space-y-1"}
+        - warnings.each do |warning|
+          %li= warning
+
+  %div{class: "grid items-start gap-6 lg:grid-cols-3"}
+    = render layout: "shared/card", locals: {id: "property", title: "Property", icon: "settings"} do
+      %dl{class: "grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 px-4 py-3 text-sm"}
+        %dt{class: "text-slate-500"} Name
+        %dd= settings.display_name || "—"
+        %dt{class: "text-slate-500"} Time zone
+        %dd= settings.time_zone || "—"
+        %dt{class: "text-slate-500"} Event data kept
+        %dd{class: ("font-medium text-amber-700" if settings.short_retention?)}= settings.retention_label
+        %dt{class: "text-slate-500"} Reset on new activity
+        %dd= settings.reset_on_new_activity ? "Yes" : "No"
+        %dt{class: "text-slate-500"} Google signals
+        %dd{class: ("font-medium text-amber-700" if settings.google_signals_off?)}
+          = {"GOOGLE_SIGNALS_ENABLED" => "On", "GOOGLE_SIGNALS_DISABLED" => "Off"}.fetch(settings.google_signals, settings.google_signals ? "Not set" : "Unknown")
+
+    = render layout: "shared/card", locals: {id: "key-events", title: "Key events", icon: "check-circle"} do
+      - if settings.key_events.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No key events set.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Event
+                %th{scope: "col", class: "#{th_class} text-left"} Counted
+            %tbody
+              - settings.key_events.each do |event|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium"}= event.event_name
+                  %td{class: "px-3 py-1.5 text-slate-500"}= event.counting_method == "ONCE_PER_SESSION" ? "Once per session" : "Every time"
+
+    = render layout: "shared/card", locals: {id: "custom-dimensions", title: "Custom definitions", icon: "list"} do
+      - settings.missing_custom_dimensions.each do |parameter|
+        %div{class: "flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-sm"}
+          %span
+            %span{class: "font-mono text-xs"}= parameter
+            %span{class: "text-slate-500"} not registered
+          = button_to google_analytics_settings_custom_dimensions_path(parameter_name: parameter), form_class: "inline-flex",
+            title: "Needs the service account to be an Editor of the property",
+            class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+            = icon("plus", size: 14)
+            Register
+      - settings.missing_custom_metrics.each do |parameter|
+        %div{class: "flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-sm"}
+          %span
+            %span{class: "font-mono text-xs"}= parameter
+            %span{class: "text-slate-500"} not registered as a metric
+          = button_to google_analytics_settings_custom_dimensions_path(parameter_name: parameter), form_class: "inline-flex",
+            title: "Needs the service account to be an Editor of the property",
+            class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+            = icon("plus", size: 14)
+            Register
+      - if settings.custom_dimensions.empty? && settings.custom_metrics.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No custom dimensions registered.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Name
+                %th{scope: "col", class: "#{th_class} text-left"} Parameter
+                %th{scope: "col", class: "#{th_class} text-left"} Scope
+            %tbody
+              - settings.custom_dimensions.each do |dimension|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium"}= dimension.display_name
+                  %td{class: "px-3 py-1.5 font-mono text-xs"}= dimension.parameter_name
+                  %td{class: "px-3 py-1.5 text-slate-500"}= dimension.scope.to_s.humanize
+              - settings.custom_metrics.each do |metric|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium"}
+                    = metric.display_name
+                    %span{class: "ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"} Metric
+                  %td{class: "px-3 py-1.5 font-mono text-xs"}= metric.parameter_name
+                  %td{class: "px-3 py-1.5 text-slate-500"}= metric.scope.to_s.humanize
+
+  = render layout: "shared/card", locals: {id: "data-streams", title: "Data streams", icon: "radio", class: "mt-6"} do
+    - if settings.data_streams.empty?
+      %p{class: "px-4 py-3 text-sm text-slate-500"} No web data streams.
+    - else
+      - toggles = {stream_enabled: "Enhanced measurement", scrolls: "Scrolls", outbound_clicks: "Outbound clicks", site_search: "Site search",
+        video_engagement: "Video engagement", file_downloads: "File downloads", page_changes: "Page changes", form_interactions: "Form interactions"}
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "#{th_class} text-left"} Stream
+              %th{scope: "col", class: "#{th_class} text-left"} Measurement ID
+              - toggles.each_value do |label|
+                %th{scope: "col", class: "#{th_class} text-left"}= label
+          %tbody
+            - settings.data_streams.each do |stream|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "px-3 py-1.5"}
+                  %div{class: "font-medium"}= stream.display_name
+                  %div{class: "text-xs text-slate-500"}= stream.url
+                %td{class: "px-3 py-1.5 font-mono text-xs"}= stream.measurement_id
+                - if stream.enhanced_measurement
+                  - toggles.each_key do |toggle|
+                    - on = toggle == :stream_enabled ? stream.enhanced_measurement.stream_enabled : stream.enhanced_measurement.enabled?(toggle)
+                    - expected = service::EXPECTED_ENHANCED_MEASUREMENT.key?(toggle) || toggle == :stream_enabled
+                    %td{class: ["px-3 py-1.5", on ? "text-slate-700" : (expected ? "font-medium text-amber-700" : "text-slate-500")]}
+                      = yes_no(on)
+                - else
+                  %td{colspan: toggles.size, class: "px-3 py-1.5 text-slate-500"}
+                    GA wouldn't say whether enhanced measurement is on.
+
+  - annotate = button_to google_analytics_settings_annotations_path, form_class: "inline-flex",
+    title: "Needs the service account to be an Editor of the property",
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("plus", size: 12)
+    Mark recent entries
+  = render layout: "shared/card", locals: {id: "annotations", title: "Annotations", icon: "calendar", class: "mt-6", actions: annotate} do
+    - if settings.annotations.nil?
+      %p{class: "px-4 py-3 text-sm text-slate-500"} GA wouldn't list its annotations.
+    - elsif settings.annotations.empty?
+      %p{class: "px-4 py-3 text-sm text-slate-500"} No annotations yet. Each new entry is marked on GA's charts after the feed sync that brings it in.
+    - else
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "#{th_class} text-left"} Date
+              %th{scope: "col", class: "#{th_class} text-left"} Title
+              %th{scope: "col", class: "#{th_class} text-left"} Description
+          %tbody
+            - settings.annotations.first(20).each do |annotation|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= annotation.date&.strftime("%-d %b %Y") || "—"
+                %td{class: "px-3 py-1.5 font-medium"}
+                  = annotation.title
+                  - if annotation.system_generated
+                    %span{class: "ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"} GA
+                %td{class: "px-3 py-1.5 text-slate-500"}= annotation.description.presence || "—"

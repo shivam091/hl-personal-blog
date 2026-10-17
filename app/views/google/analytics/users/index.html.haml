@@ -1,0 +1,21 @@
+- content_for :title, "Analytics users"
+
+-# New readers at the base, so how many a week brings in reads straight
+-# off the axis.
+- extra = capture do
+  - weeks = @visitor_weeks
+  = render layout: "shared/card", locals: {id: "new-and-returning", title: "New and returning readers by week", icon: "users", class: "mb-6"} do
+    - if weeks[:views].values.flatten.sum.zero?
+      %p{class: "px-4 py-3 text-sm text-slate-500"} No views in this period.
+    - else
+      - known = {"new" => ["New", ChartsHelper::SHARE_COLORS[0]], "returning" => ["Returning", ChartsHelper::SHARE_COLORS[1]]}
+      - types = weeks[:views].keys.sort_by { |type| [known.keys.index(type) || known.size, type] }
+      %div{class: "px-4 py-3"}
+        = stacked_chart(weeks[:weeks], types.map { |type| ChartsHelper::Series.new(name: known.dig(type, 0) || type.humanize,
+            values: weeks[:views][type], color: known.dig(type, 1) || ChartsHelper::SHARE_OTHER_COLOR) },
+          per: :week, y_title: "Views", label: "Each week's views from new and returning readers")
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Views rather than readers, since GA's readers can't be added up across days. Every reader in the period, whichever breakdown is open.
+
+= render "google/shared/report", title: "Analytics users", extra: extra,
+  description: "Where readers are, the devices and browsers they read on, and when they read (in the GA property's time zone), from Google Analytics. GA keeps processing late hits for up to two days."

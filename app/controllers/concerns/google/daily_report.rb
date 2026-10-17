@@ -188,7 +188,18 @@ module Google
     included do
       before_action :set_breakdown
       helper_method :breakdown_query, :sync_dialog_locals, :report_metrics, :figure_metrics, :report_breakdowns, :sync_kind, :report_shares?,
-                    :unanswerable_search, :event_filters, :table_metrics, :unsettled_from
+                    :unanswerable_search, :event_filters, :table_metrics, :table_columns, :unsettled_from
+    end
+
+    class_methods do
+      # Every figure any breakdown shows, once, so one layout covers the
+      # whole report. A breakdown's own columns stand as one, since they
+      # differ from tab to tab and name each row.
+      def layout_columns
+        metrics = [*self::METRICS, *self::BREAKDOWNS.values.flat_map { |breakdown| Array(breakdown.metrics) }].uniq(&:field)
+        {"breakdown" => {label: "Breakdown", required: true}}
+          .merge(metrics.to_h { |metric| [metric.field.to_s, {label: metric.label, sort: metric.sort_direction, align: "right"}] })
+      end
     end
 
     def index
@@ -269,10 +280,35 @@ module Google
     # table follows the chart; every figure while none is ticked, so the
     # table never goes empty.
     def table_metrics
+      metrics = laid_out_metrics
       follows = self.class.const_defined?(:TABLE_FOLLOWS_TREND) && self.class::TABLE_FOLLOWS_TREND
-      return report_metrics unless follows && @trend&.selection&.fields&.any?
+      return metrics unless follows && @trend&.selection&.fields&.any?
 
-      report_metrics.select { |metric| !metric.color || @trend.selection.fields.include?(metric.field) }
+      metrics.select { |metric| !metric.color || @trend.selection.fields.include?(metric.field) }
+    end
+
+    # The figures in the saved order, less the hidden ones; a figure this
+    # breakdown doesn't have is skipped rather than drawn empty. Until one
+    # is saved, each breakdown keeps its own order, as GA's reports do.
+    def laid_out_metrics
+      return report_metrics unless @layout&.customized?
+
+      metrics = report_metrics.index_by { |metric| metric.field.to_s }
+      @layout.visible_columns.filter_map { |column| metrics[column.key] }
+    end
+
+    # The figures with :breakdown where the layout puts the breakdown's own
+    # columns.
+    def table_columns
+      return [:breakdown, *table_metrics] unless @layout&.customized?
+
+      before = @layout.visible_columns.take_while { |column| column.key != "breakdown" }.map(&:key)
+      leading, trailing = table_metrics.partition { |metric| before.include?(metric.field.to_s) }
+      [*leading, :breakdown, *trailing]
+    end
+
+    def list_layout
+      ListLayout.find(self.class::LIST_LAYOUT) if self.class.const_defined?(:LIST_LAYOUT)
     end
 
     # A share only means something for counts that add up to the total,
@@ -317,6 +353,7 @@ module Google
     end
 
     def load_report
+      @layout = list_layout
       @period = Period.new(params)
       @filtering = Filtering.new(params, fields: [*shared_search_fields, *@breakdown.search], tabs: tabs)
       # Figures are what's being compared, so they sort first; a breakdown's
@@ -324,7 +361,10 @@ module Google
       sorts = report_metrics.to_h { |metric| [metric.field.to_s, metric.sort_direction] }
         .merge(@breakdown.keys.to_h { |key| [key.to_s, "asc"] })
       sorts = @breakdown.default_sort.merge(sorts.except(*@breakdown.default_sort.keys)) if @breakdown.default_sort
-      @sorting = Sorting.new(params, columns: sorts, tiebreaker: @breakdown.keys.first)
+      # Only a sort the admin saved, so a breakdown keeps its own default
+      # otherwise; one on a figure this breakdown lacks falls back to it.
+      default = @layout.default_sort if @layout&.setting&.sort
+      @sorting = Sorting.new(params, columns: sorts, tiebreaker: @breakdown.keys, default: default)
       @filtered = @filtering.apply(@period.apply(breakdown_criteria))
       @rows_scope = @sorting.apply(@filtered.klass.grouped(@filtered, by: @breakdown.keys))
       @live = live_figures(@period) if live_metrics
@@ -335,7 +375,7 @@ module Google
     end
 
     def load_page
-      @pagination = Pagination.new(@rows_scope, params)
+      @pagination = @layout ? @layout.pagination(@rows_scope, params) : Pagination.new(@rows_scope, params)
       # Loaded once, since a grouped scope re-runs its aggregation each time it's read.
       @rows = @pagination.records.to_a
       @totals = totals_for(@period)
@@ -364,7 +404,10 @@ module Google
     # two ways of counting, so without the earlier period's there's none.
     def previous_totals
       totals = totals_for(@period.previous)
-      totals = totals.merge(merged_figures(@period.previous)[:total]) if @breakdown.merged
+      if @breakdown.merged
+        @previous_merged = merged_figures(@period.previous)
+        totals = totals.merge(@previous_merged[:total])
+      end
       if @narrowed
         @previous_narrowed = narrowed_figures(@period.previous)
         return unless @previous_narrowed
@@ -373,8 +416,8 @@ module Google
       end
       return totals unless @live
 
-      previous = live_figures(@period.previous)
-      totals.merge(previous.total) if previous
+      @previous_live = live_figures(@period.previous)
+      totals.merge(@previous_live.total) if @previous_live
     end
 
     # Searched the same way as the rows they join, so a page's figures are
@@ -389,11 +432,12 @@ module Google
        total: fields.index_with { |field| totals.value(field) }}
     end
 
-    # Only for this page's rows, and only for figures stored as they are
-    # read, since a live one would mean a GA call per change shown.
+    # Only for this page's rows. GA's figures come from the one call the
+    # totals already made, and without them there's no change to show, as
+    # for the totals.
     def previous_rows
-      return unless report_metrics.any?(&:row_change)
       return if @narrowed && !@previous_narrowed
+      return if @live && !@previous_live
 
       keys = @breakdown.keys
       shown = @rows.map { |row| keys.map { |key| row[key] } }
@@ -402,7 +446,10 @@ module Google
       criteria = previous_rows_criteria(@period.previous).any_of(*shown.map { |values| keys.zip(values).to_h })
       criteria.klass.grouped(criteria, by: keys).to_h do |row|
         values = keys.map { |key| row[key] }
-        [values, @previous_narrowed ? narrow(row, narrowed_row(@previous_narrowed, values)) : row]
+        row = row.merge(@previous_live.rows.fetch(values) { live_fields.index_with(0) }) if @previous_live
+        row = row.merge(@previous_merged[:rows].fetch(values) { @breakdown.merged[:fields].index_with(0) }) if @previous_merged
+        row = narrow(row, narrowed_row(@previous_narrowed, values)) if @previous_narrowed
+        [values, row]
       end
     end
 
@@ -517,11 +564,11 @@ module Google
     # Sorted again here, since the database sorted by the summed figures.
     def sort_rows(rows)
       column = @sorting.column
-      tiebreaker = @sorting.tiebreaker
+      tiebreakers = Array(@sorting.tiebreaker)
       rows.sort do |a, b|
         order = (a.value(column) <=> b.value(column)) || 0
         order = -order if @sorting.direction == "desc"
-        order.nonzero? || (a.value(tiebreaker) <=> b.value(tiebreaker)) || 0
+        order.nonzero? || tiebreakers.lazy.map { |key| (a.value(key) <=> b.value(key)) || 0 }.find(&:nonzero?) || 0
       end
     end
 

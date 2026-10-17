@@ -58,7 +58,8 @@ module ChartsHelper
 
   # Named for what each date in a run stands for, so a week's point isn't
   # read as a single day's.
-  DATE_AXIS_TITLES = {hour: "Hour", day: "Date", week: "Week starting", month: "Month"}.freeze
+  DATE_AXIS_TITLES = {minute: "Time", hour: "Hour", day: "Date", week: "Week starting", month: "Month"}.freeze
+  DATE_AXIS_FORMATS = {minute: "%H:%M", month: "%b %Y"}.freeze
   # Worded as Search Console's own readout, for the days its figures may
   # still change.
   UNSETTLED_NOTE = "Data is still being collected"
@@ -245,7 +246,7 @@ module ChartsHelper
             ])
           end,
           tag.div(class: "flex") { safe_join(axes.values_at(1, 3).compact) },
-          tag.span, x_axis(keys, format: ("%b %Y" if per == :month), inset: nil, lines: true), tag.span,
+          tag.span, x_axis(keys, format: DATE_AXIS_FORMATS[per], inset: nil, lines: true), tag.span,
           tag.span, axis_title(DATE_AXIS_TITLES.fetch(per), class: "text-center"), tag.span
         ])
       end
@@ -582,7 +583,7 @@ module ChartsHelper
             ])
           end
         end,
-        x_axis(keys, format: ("%b %Y" if per == :month), lines: lines),
+        x_axis(keys, format: DATE_AXIS_FORMATS[per], lines: lines),
         axis_title(x_title, class: "ml-14 text-center")
       ])
     end
@@ -941,6 +942,7 @@ module ChartsHelper
     return chart_key_label(key) unless key.respond_to?(:strftime)
 
     case per
+    when :minute then key.strftime("%H:%M %Z")
     when :hour then key.strftime("%a, %-d %b %Y, %H:00 %Z")
     when :week then "Week of #{l(key)}"
     when :month then l(key, format: "%B %Y")

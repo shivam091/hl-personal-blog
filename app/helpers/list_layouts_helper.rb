@@ -17,17 +17,17 @@ module ListLayoutsHelper
   # A fixed header needs the list to scroll inside its own box, since
   # sticky stops at the nearest scrolling ancestor.
   def list_container_class(layout)
-    ["relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm", ("max-h-[75vh] overflow-y-auto" if layout.sticky_header?)]
+    ["relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm", ("max-h-[75vh] overflow-y-auto" if layout&.sticky_header?)]
   end
 
   # Set on the table rather than each cell, so every list gets the density
   # without its cells knowing about it.
   def list_table_class(layout)
-    ["w-full border-collapse text-left text-sm", ("[&_td]:py-1 [&_th]:py-1.5" if layout.compact?)]
+    ["w-full border-collapse text-left text-sm", ("[&_td]:py-1 [&_th]:py-1.5" if layout&.compact?)]
   end
 
   def list_head_class(layout)
-    ["border-b border-slate-200 bg-slate-50 text-slate-600", ("sticky top-0 z-10 shadow-[0_1px_0_var(--color-slate-200)]" if layout.sticky_header?)]
+    ["border-b border-slate-200 bg-slate-50 text-slate-600", ("sticky top-0 z-10 shadow-[0_1px_0_var(--color-slate-200)]" if layout&.sticky_header?)]
   end
 
   def saved_searches(layout, filtering, sorting)

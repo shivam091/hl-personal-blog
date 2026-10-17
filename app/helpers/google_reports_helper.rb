@@ -56,10 +56,18 @@ module GoogleReportsHelper
     [
       ["Active users", number_with_delimiter(snapshot.active_users), "text-slate-900", "users",
         "The number of distinct users who visited your website in the last 30 minutes."],
+      ["Views", number_with_delimiter(snapshot.pages.values.sum), "text-slate-900", "eye",
+        "The number of app screens or web pages your users viewed in the last 30 minutes. Repeated views of a single page or screen are counted."],
+      ["Event count", number_with_delimiter(snapshot.events.values.sum), "text-slate-900", "zap",
+        "The number of times users triggered an event in the last 30 minutes."],
+      ["Key events", number_with_delimiter(snapshot.key_events.values.sum), "text-slate-900", "target",
+        "The number of times users triggered a key event in the last 30 minutes."],
       ["Pages", number_with_delimiter(snapshot.pages.size), "text-slate-900", "file",
-        "Views by page title: how many different pages active users are viewing in the last 30 minutes."],
+        "Views by page title and screen name: how many different pages active users viewed in the last 30 minutes."],
       ["Countries", number_with_delimiter(snapshot.countries.size), "text-slate-900", "globe",
         "Active users by country: how many different countries users visited from in the last 30 minutes."],
+      ["Cities", number_with_delimiter(snapshot.cities.size), "text-slate-900", "map-pin",
+        "Active users by city: how many different cities users visited from in the last 30 minutes."],
       ["Devices", number_with_delimiter(snapshot.devices.size), "text-slate-900", "cpu",
         "Active users by device category: how many device categories (desktop, mobile, tablet) users are on in the last 30 minutes."]
     ]
@@ -161,14 +169,15 @@ module GoogleReportsHelper
     number_to_percentage(value.to_f / total * 100, precision: 2, strip_insignificant_zeros: true)
   end
 
-  # Decided in one place, so a column shows a change or a share, never both.
+  # Decided in one place, so a column shows a change or a share, never both;
+  # a picked comparison is what the whole table is read against, as in GA.
   # A size smaller than the figure, so the figure is what's read first.
   def report_cell_aside(row, metric)
     value = row.value(metric.field)
-    if metric.row_change
-      return unless @previous_rows
-
+    if comparing? && @previous_rows
       row_change(value, @previous_rows[@breakdown.keys.map { |key| row[key] }]&.value(metric.field), metric)
+    elsif metric.row_change
+      nil
     elsif report_shares? && metric.format == :count
       share = share_of_total(value, @totals.value(metric.field))
       tag.span("(#{share})", class: "text-xs text-slate-500") if share
