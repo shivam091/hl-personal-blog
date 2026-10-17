@@ -37,6 +37,15 @@ RSpec.describe SyncFeedJob do
     expect { described_class.perform_now }.to have_enqueued_job(Google::SearchConsole::SitemapSubmitJob)
   end
 
+  it "marks new entries on GA's charts once the sync has created any" do
+    allow(Google::SearchConsole::UrlInspectionSyncService).to receive(:new) {
+      instance_double(Google::SearchConsole::UrlInspectionSyncService, inspect_new_entries: SyncResult.empty)
+    }
+    allow(FeedSyncService).to receive(:call) { SyncResult.new(1, 0, 0, []) }
+
+    expect { described_class.perform_now }.to have_enqueued_job(Google::Analytics::AnnotationJob)
+  end
+
   it "doesn't inspect when nothing new was synced" do
     allow(Google::SearchConsole::UrlInspectionSyncService).to receive(:new)
     allow(FeedSyncService).to receive(:call) { SyncResult.new(0, 2, 5, []) }

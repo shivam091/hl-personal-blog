@@ -9,6 +9,12 @@ class Blog
       Rails.application.credentials.blog&.[](:url).to_s.chomp("/").presence
     end
 
+    # Analytics also receives hits from local development, which only the
+    # hostname tells apart from real traffic.
+    def host
+      URI(url).host if url
+    end
+
     def sitemap_url
       "#{url}/sitemap.xml" if url
     end

@@ -1,0 +1,8 @@
+- content_for :title, "Analytics users"
+
+- extra = capture do
+  = render "google/analytics/shared/visitor_weeks"
+  = render "google/analytics/users/breakdown_charts"
+
+= render "google/shared/report", title: "Analytics users", extra: extra,
+  description: "Where readers are, the devices and browsers they read on, and when they read (in the GA property's time zone), from Google Analytics. GA keeps processing late hits for up to two days."

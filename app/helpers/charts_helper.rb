@@ -62,8 +62,8 @@ module ChartsHelper
 
   # Named for what each date in a run stands for, so a week's point isn't
   # read as a single day's.
-  DATE_AXIS_TITLES = {minute: "Time", hour: "Hour", day: "Date", week: "Week starting", month: "Month"}.freeze
-  DATE_AXIS_FORMATS = {minute: "%H:%M", month: "%b %Y"}.freeze
+  DATE_AXIS_TITLES = {minute: "Time", hour: "Hour", day: "Date", week: "Week starting", month: "Month", year: "Year"}.freeze
+  DATE_AXIS_FORMATS = {minute: "%H:%M", month: "%b %Y", year: "%Y"}.freeze
   # Clock steps a single day's hours are labelled at, so labels fall on round hours.
   HOUR_STEPS = [1, 2, 3, 4, 6, 8, 12].freeze
   # Worded as Search Console's own readout, for the days its figures may
@@ -170,6 +170,14 @@ module ChartsHelper
     end
   end
 
+  # The id tells apart several on a page.
+  # Left out where the period's length leaves only days to show.
+  def chart_granularity_picker(granularity, label, id = nil)
+    return if ChartGranularity.options(@period).empty?
+
+    render "shared/chart_granularity", granularity: granularity, label: label, id: id || "chart-by"
+  end
+
   # The first part sits at the base so its height can be read straight off
   # the axis; the top is whole because what's stacked are counts. Titles
   # name a bar in its readout when its date alone wouldn't say what it is.
@@ -208,7 +216,7 @@ module ChartsHelper
   # One shared axis so series are only ever compared in the same unit.
   # Selectable for charts with too many lines to read at once. Events mark
   # the days something happened, by key, so a jump can be put down to it.
-  def line_chart(keys, series, label:, y_title:, x_title: nil, unit: "", selectable: false, per: :day, events: {}, event_name: nil, unsettled: nil)
+  def line_chart(keys, series, label:, y_title:, x_title: nil, unit: "", selectable: false, per: :day, events: {}, event_name: nil, unsettled: nil, precision: nil)
     unit = reading_unit(unit)
     max = series.flat_map(&:values).compact.max
     events = events.slice(*keys)
@@ -216,7 +224,7 @@ module ChartsHelper
       (chart_legend(series, selectable: selectable, events: (event_name if events.any?)) if series.size > 1 || events.any?),
       chart_frame(keys, max, label, x_title: x_title, y_title: y_title, crosshair: true, lines: true, per: per,
         overlay: ->(top) { safe_join([line_end_markers(keys, series, top), event_markers(keys, events)]) }) do |top|
-        line_marks(keys, series, top, unit, per, events, event_name, unsettled: unsettled, y_title: y_title)
+        line_marks(keys, series, top, unit, per, events, event_name, unsettled: unsettled, y_title: y_title, precision: precision)
       end
     ].compact)
   end
@@ -1208,7 +1216,7 @@ module ChartsHelper
 
   # The first series is filled beneath, so the main figure stands out from
   # the ones it's compared against.
-  def line_marks(keys, series, max, unit, per, events = {}, event_name = nil, unsettled: nil, y_title: nil)
+  def line_marks(keys, series, max, unit, per, events = {}, event_name = nil, unsettled: nil, y_title: nil, precision: nil)
     x = ->(index) { point_x(index, keys.size) }
     y = ->(value) { (CHART_HEIGHT - value.to_f / max * CHART_HEIGHT).round(2) }
     lines = series.each_with_index.flat_map do |line, index|
@@ -1234,7 +1242,7 @@ module ChartsHelper
     hits = keys.each_with_index.map do |key, index|
       rows = series.each_with_index.map do |line, line_index|
         value = line.values[index]
-        {value: value.nil? ? "No data" : "#{number_with_delimiter(value)}#{unit}",
+        {value: value.nil? ? "No data" : "#{precision ? number_with_precision(value, precision: precision, delimiter: ",") : number_with_delimiter(value)}#{unit}",
          **compared_name(metric.(line), (earlier[line_index] || keys)[index], per, compared, (previous_period_name || line.name if line.against)),
          color: line.color || LINE_COLORS.fetch(line_index, LINE_COLORS.last), dashed: (true if line.dashed), dotted: (true if line.dotted),
          marker: line.marker, earlier: (true if line.against), y: (y.(value) unless value.nil?)}.compact
@@ -1311,6 +1319,7 @@ module ChartsHelper
     when :hour then key.strftime("%a, %-d %b %Y, %H:00 %Z")
     when :week then "Week of #{l(key)}"
     when :month then l(key, format: "%B %Y")
+    when :year then key.strftime("%Y")
     else chart_key_label(key)
     end
   end
@@ -1428,6 +1437,7 @@ module ChartsHelper
     last = case per
     when :week then key.to_date + 6
     when :month then key.to_date.end_of_month
+    when :year then key.to_date.end_of_year
     else key.to_date
     end
     UNSETTLED_NOTE if last >= unsettled
