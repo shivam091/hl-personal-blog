@@ -6,6 +6,7 @@ class RankingOpportunityReportsController < ApplicationController
   def show
     load_blog_stats
     @opportunities = Google::SearchConsole::Opportunities.new(@period, summary: Google::SearchConsole::Summary.new(@period, country: @stats.country))
+    @ai_gaps = Google::SearchConsole::AiGaps.new(Google::SearchConsole::GenerativeAiSummary.new(@period))
 
     respond_to do |format|
       format.html
