@@ -4,6 +4,7 @@
     %p{class: subtitle_class}= description
     = last_sync_status(sync_kind)
   %div{class: toolbar_class}
+    = columns_button(@layout) if @layout
     = render "google/shared/export_menu", exports: report_exports
     = render "google/shared/sync_dialog", **sync_dialog_locals
 
@@ -55,26 +56,30 @@
   = render "google/shared/charts", chart: @chart if @chart
   -# Rows to chart are picked, as in GA, since a chart can only tell a few
   -# lines apart.
-  %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm",
+  - row_numbers = @layout.nil? || @layout.row_numbers?
+  %div{class: list_container_class(@layout),
     data: ({controller: "plot-rows", plot_rows_plotted_value: @chart.rows.map(&:values).to_json, plot_rows_limit_value: Google::DailyReport::CHART_ROWS} if @chart)}
-    %table{class: "w-full border-collapse text-left text-sm"}
-      %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+    %table{class: list_table_class(@layout)}
+      %thead{class: list_head_class(@layout)}
         %tr
           - if @chart
             %th{scope: "col", class: "w-px py-2.5 pl-3"}
               = check_box_tag nil, nil, false, id: nil, title: "Chart the first #{Google::DailyReport::CHART_ROWS} rows, or none", class: "size-4 rounded border-slate-300 align-middle",
                 aria: {label: "Chart the first #{Google::DailyReport::CHART_ROWS} rows, or none"}, data: {plot_rows_target: "all", action: "plot-rows#toggleAll"}
-          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", aria: {label: "Row number"}} #
+          - if row_numbers
+            %th{scope: "col", class: list_heading_right_class, aria: {label: "Row number"}} #
           - sort_keep = [@period, @filtering, @pagination, *kept]
           - splits = breakdown_splits
-          - @breakdown.headings.zip(@breakdown.keys).each_with_index do |(heading, key), index|
-            = sort_header @sorting, heading, key.to_s, keep: sort_keep, class: "px-3 py-2.5 align-top font-semibold" do
-              = split_select(splits) if splits && index.zero?
-          - table_metrics.each do |metric|
-            - event_filter = event_filters.find { |filter| filter.field == metric.field }
-            = sort_header @sorting, metric.label, metric.field.to_s, keep: sort_keep, title: metric.hint,
-              class: "px-3 py-2.5 text-right align-top font-semibold whitespace-nowrap" do
-              = event_select(event_filter, metric.label) if event_filter
+          - table_columns.each do |metric|
+            - if metric == :breakdown
+              - @breakdown.headings.zip(@breakdown.keys).each_with_index do |(heading, key), index|
+                = sort_header @sorting, heading, key.to_s, keep: sort_keep, class: "px-3 py-2.5 align-top font-semibold" do
+                  = split_select(splits) if splits && index.zero?
+            - else
+              - event_filter = event_filters.find { |filter| filter.field == metric.field }
+              = sort_header @sorting, metric.label, metric.field.to_s, keep: sort_keep, title: metric.hint,
+                class: "px-3 py-2.5 text-right align-top font-semibold whitespace-nowrap" do
+                = event_select(event_filter, metric.label) if event_filter
         - if report_shares?
           -# Above the rows, as in GA, so each share is read against it.
           -# No border of its own: a collapsed one stays behind when the head
@@ -85,16 +90,18 @@
               %td{class: "py-2 pl-3"}
                 = check_box_tag nil, nil, @chart.plotting.total, id: nil, class: "size-4 rounded border-slate-300 align-middle",
                   aria: {label: "Chart the total"}, data: {plot_rows_target: "total", action: "plot-rows#change"}
-            %td
-            %th{scope: "row", colspan: @breakdown.keys.size, class: "px-3 py-2 font-semibold"} Total
-            - table_metrics.each do |metric|
-              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums"}
-                %div{class: "font-semibold", style: ("color: #{metric.color}" if metric.color)}= metric_value(@totals.value(metric.field), metric.format)
-                - if metric.row_change
-                  - if @previous_totals
+            - if row_numbers
+              %td
+            - table_columns.each do |metric|
+              - if metric == :breakdown
+                %th{scope: "row", colspan: @breakdown.keys.size, class: "px-3 py-2 font-semibold"} Total
+              - else
+                %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums"}
+                  %div{class: "font-semibold", style: ("color: #{metric.color}" if metric.color)}= metric_value(@totals.value(metric.field), metric.format)
+                  - if comparing? && @previous_totals
                     %div{class: "text-xs font-normal"}= row_change(@totals.value(metric.field), @previous_totals.value(metric.field), metric)
-                - elsif metric.format == :count && @totals.value(metric.field).to_i.positive?
-                  %div{class: "text-xs font-normal text-slate-500"} 100% of total
+                  - elsif !metric.row_change && metric.format == :count && @totals.value(metric.field).to_i.positive?
+                    %div{class: "text-xs font-normal text-slate-500"} 100% of total
       %tbody
         - @rows.each.with_index(@pagination.first_item) do |row, number|
           %tr{class: "group/row border-b border-slate-100 last:border-b-0 hover:bg-slate-50"}
@@ -103,19 +110,23 @@
               %td{class: "py-2 pl-3"}
                 = check_box_tag nil, values.to_json, @chart.plotted?(values), id: nil, class: "size-4 rounded border-slate-300 align-middle disabled:opacity-40",
                   aria: {label: "Chart #{values.compact.join(" · ")}"}, data: {plot_rows_target: "row", action: "plot-rows#change"}
-            %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= number_with_delimiter(number)
-            - @breakdown.keys.each do |key|
-              -# Out of the way until the row is pointed at, as in Search
-              -# Console; always there on a touch screen, which can't point.
-              %td{class: "px-3 py-2"}
-                - actions = breakdown_actions(row, key)
-                %div{class: "flex items-center justify-between gap-4"}
-                  %span= breakdown_value(row, key)
-                  - if actions
-                    %span{class: "-my-1 flex shrink-0 gap-0.5 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100"}= actions
-            - table_metrics.each do |metric|
-              -# In its line's colour, so a column is found from the chart.
-              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums"}= safe_join([tag.span(metric_value(row.value(metric.field), metric.format),
-                style: ("color: #{metric.color}" if metric.color)), report_cell_aside(row, metric)].compact, " ")
+            - if row_numbers
+              %td{class: muted_number_cell_class}= number_with_delimiter(number)
+            - table_columns.each do |metric|
+              - if metric == :breakdown
+                - @breakdown.keys.each do |key|
+                  -# Out of the way until the row is pointed at; always there on
+                  -# a touch screen, which can't point.
+                  %td{class: "px-3 py-2"}
+                    - actions = breakdown_actions(row, key)
+                    %div{class: "flex items-center justify-between gap-4"}
+                      %span= breakdown_value(row, key)
+                      - if actions
+                        %span{class: "-my-1 flex shrink-0 gap-0.5 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100"}= actions
+              - else
+                %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums"}= safe_join([tag.span(metric_value(row.value(metric.field), metric.format),
+                  style: ("color: #{metric.color}" if metric.color)), report_cell_aside(row, metric)].compact, " ")
 
 = pagination_nav @pagination, keep: [@period, @filtering, @sorting, *kept]
+
+= turbo_frame_tag "modal"
