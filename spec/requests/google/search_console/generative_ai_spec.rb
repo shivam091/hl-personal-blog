@@ -29,7 +29,7 @@ RSpec.describe "Search Console generative AI performance", type: :request do
 
     page = Nokogiri::HTML5(response.body)
     expect(page.css("dl dd").first.text.squish).to eq("8")
-    expect(page.css("#generative-ai-impressions ~ div [data-tip]")).not_to be_empty
+    expect(page.css("section[aria-labelledby=generative-ai-impressions] [data-tip]")).not_to be_empty
     expect(table_rows).to eq([["1", "/post/grid", "6", "60.0%"], ["2", "/", "4", "40.0%"]])
     expect(page.css("thead tr:last-child").text.squish).to include("Total 10 100%")
     expect(response.body).to include("Uploaded days run from", "whatever period is picked")

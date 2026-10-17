@@ -71,7 +71,7 @@
         - else
           No upload of #{type} has #{tab_label.downcase}.
 
-  = render "google/shared/period", period: @period, keep: [@search_type, @sorting]
+  = render "google/shared/period", period: @period, keep: [@search_type, @sorting, @granularity]
 
   -# Days nothing was uploaded for are told apart from days with none.
   - if @period.from < @first_day || @period.to > @last_day
@@ -83,11 +83,14 @@
 
   - days = (@period.from..@period.to).to_a
   - before = @period.previous if @previous_daily
-  = render layout: "shared/card", locals: {id: "generative-ai-impressions", title: "Impressions per day", icon: "trending-up", class: "mb-6"} do
+  = render layout: "shared/card", locals: {id: "generative-ai-impressions", title: "Impressions per #{@granularity.by}", icon: "trending-up", class: "mb-6",
+    actions: chart_granularity_picker(@granularity, "Impressions", "impressions-by")} do
     %div{class: "px-4 py-3"}
-      = line_chart(days, [ChartsHelper::Series.new(name: "This period", values: days.map { |day| @daily[day] }),
-        (ChartsHelper::Series.new(name: before.to_s, values: (before.from..before.to).map { |day| @previous_daily[day] }.first(days.size), dashed: true) if before)].compact,
-        y_title: "Impressions", label: "AI Overviews and AI Mode impressions per day#{", against #{before}" if before}")
+      - impressions_now = ChartsHelper::Series.new(name: "This period", values: @granularity.sums(days, days.map { |day| @daily[day] }))
+      = line_chart(@granularity.dates(days), [impressions_now,
+        (ChartsHelper::Series.new(name: before.to_s, values: @granularity.sums_for(before, (before.from..before.to).map { |day| @previous_daily[day] }).first(@granularity.dates(days).size), dashed: true, against: impressions_now) if before)].compact,
+        y_title: "Impressions", per: @granularity.per,
+        label: "AI Overviews and AI Mode impressions per #{@granularity.by}#{", against #{before}" if before}")
 
   - if @pagination.total_count.zero?
     = render "shared/empty_state", icon: "inbox",

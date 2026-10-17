@@ -12,18 +12,15 @@
 -# Dotted in each line's own colour, after the lines they belong to so the
 -# rows keep their positions for the ranking's highlighting.
 - if chart.previous_name
-  - series += [(ChartsHelper::Series.new(name: "Total, #{chart.previous_name}", values: chart.previous_total, dotted: true, marker: ChartsHelper::TOTAL_MARKER) if total),
-    *chart.rows.zip(ChartsHelper::SHARE_COLORS, ChartsHelper::ROW_MARKERS).map { |row, color, marker| ChartsHelper::Series.new(name: "#{row.label}, #{chart.previous_name}", values: row.previous_daily, color: color, marker: marker, dotted: true) }].compact
+  - now = series.dup
+  - offset = total ? 1 : 0
+  - series += [(ChartsHelper::Series.new(name: "Total, #{chart.previous_name}", values: chart.previous_total, dotted: true, marker: ChartsHelper::TOTAL_MARKER, against: now.first) if total),
+    *chart.rows.zip(ChartsHelper::SHARE_COLORS, ChartsHelper::ROW_MARKERS).each_with_index.map { |(row, color, marker), index| ChartsHelper::Series.new(name: "#{row.label}, #{chart.previous_name}", values: row.previous_daily, color: color, marker: marker, dotted: true, against: now[index + offset]) }].compact
 - empty = "Tick rows in the table to chart them."
 - per = chart.plotting.by
-- granularity = capture do
-  = label_tag "chart-by", "Show #{label.downcase} by", class: "sr-only"
-  = picker_select_tag :chart_by, options_for_select([%w[Day day], %w[Week week], %w[Month month]], per), id: "chart-by",
-    class: "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none",
-    data: {controller: "chart-granularity", action: "chart-granularity#change"}
 %div{class: "mb-6 grid gap-4",
   data: {controller: "series-highlight", action: "chart-tooltip:show->series-highlight#near chart-tooltip:hide->series-highlight#restore"}}
-  = render layout: "shared/card", locals: {id: "chart-over-time", title: "#{label} by #{by} over time", icon: "activity", actions: granularity} do
+  = render layout: "shared/card", locals: {id: "chart-over-time", title: "#{label} by #{by} over time", icon: "activity", actions: chart_granularity_picker(chart.plotting, label)} do
     %div{class: "px-4 py-3"}
       - if series.any?
         = line_chart(chart.dates, series, y_title: label, label: "#{label} per #{per} for the charted rows#{" and in total" if total}", selectable: true, per: per.to_sym,

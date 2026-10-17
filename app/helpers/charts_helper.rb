@@ -60,8 +60,8 @@ module ChartsHelper
 
   # Named for what each date in a run stands for, so a week's point isn't
   # read as a single day's.
-  DATE_AXIS_TITLES = {minute: "Time", hour: "Hour", day: "Date", week: "Week starting", month: "Month"}.freeze
-  DATE_AXIS_FORMATS = {minute: "%H:%M", month: "%b %Y"}.freeze
+  DATE_AXIS_TITLES = {minute: "Time", hour: "Hour", day: "Date", week: "Week starting", month: "Month", year: "Year"}.freeze
+  DATE_AXIS_FORMATS = {minute: "%H:%M", month: "%b %Y", year: "%Y"}.freeze
   # Clock steps a single day's hours are labelled at, so labels fall on round hours.
   HOUR_STEPS = [1, 2, 3, 4, 6, 8, 12].freeze
   # Worded as Search Console's own readout, for the days its figures may
@@ -157,6 +157,15 @@ module ChartsHelper
       other = key == :other
       Series.new(name: other ? "Other" : yield(key), values: values, color: other ? SHARE_OTHER_COLOR : SHARE_COLORS[index])
     end
+  end
+
+  # The one dropdown every chart that can be put in other buckets uses; the id
+  # tells apart several on a page.
+  # Left out where the period's length leaves only days to show.
+  def chart_granularity_picker(granularity, label, id = nil)
+    return if ChartGranularity.options(@period).empty?
+
+    render "shared/chart_granularity", granularity: granularity, label: label, id: id || "chart-by"
   end
 
   # The first part sits at the base so its height can be read straight off
@@ -1226,6 +1235,7 @@ module ChartsHelper
     when :hour then key.strftime("%a, %-d %b %Y, %H:00 %Z")
     when :week then "Week of #{l(key)}"
     when :month then l(key, format: "%B %Y")
+    when :year then key.strftime("%Y")
     else chart_key_label(key)
     end
   end
@@ -1238,6 +1248,7 @@ module ChartsHelper
     last = case per
     when :week then key.to_date + 6
     when :month then key.to_date.end_of_month
+    when :year then key.to_date.end_of_year
     else key.to_date
     end
     UNSETTLED_NOTE if last >= unsettled

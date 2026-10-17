@@ -1,0 +1,7 @@
+-# Worded and placed as the Google reports' own switch, so a chart is put in
+-# days, weeks, months or years the same way on every page.
+- select_id = local_assigns.fetch(:id, "chart-by")
+= label_tag select_id, "Show #{label.downcase} by", class: "sr-only"
+= picker_select_tag :chart_by, options_for_select(ChartGranularity.options(@period), granularity.by), id: select_id,
+  class: "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none",
+  data: {controller: "chart-granularity", action: "chart-granularity#change"}

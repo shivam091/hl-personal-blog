@@ -4,7 +4,8 @@
 # columns without one can't be sorted on. `required` columns name the row,
 # so a list can never be left without them. The list's own order here is
 # its default order. `tabs` names the constant holding the list's quick
-# filters, so its default tab can be chosen.
+# filters, so its default tab can be chosen. `columns_from` names a Google
+# report whose figures are the columns.
 shared:
   crawled_pages:
     label: Crawled pages
@@ -16,3 +17,19 @@ shared:
       url: {label: URL, sort: asc, required: true}
       last_modified_at: {label: Last modified, sort: desc}
       indexed: {label: Indexed, sort: desc}
+  analytics_acquisition:
+    label: Analytics acquisition
+    route: google_analytics_acquisition
+    columns_from: Google::Analytics::AcquisitionController
+  analytics_engagement:
+    label: Analytics engagement
+    route: google_analytics_engagement
+    columns_from: Google::Analytics::EngagementController
+  analytics_users:
+    label: Analytics users
+    route: google_analytics_users
+    columns_from: Google::Analytics::UsersController
+  analytics_retention:
+    label: Analytics retention
+    route: google_analytics_retention
+    columns_from: Google::Analytics::RetentionController
