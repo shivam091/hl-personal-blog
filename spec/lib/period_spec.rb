@@ -152,4 +152,10 @@ RSpec.describe Period do
     expect(period({from: "2026-10-12", to: "2026-10-12"}).preset?(:today)).to be_truthy
     expect(period({from: "2026-10-06", to: "2026-10-12"}).to).to eq(today)
   end
+
+  it "narrows daily stats to the days it covers, both ends included" do
+    [Date.new(2026, 9, 13), Date.new(2026, 9, 14), Date.new(2026, 10, 11), today].each { |date| Google::Recaptcha::Stat.create!(date: date) }
+
+    expect(period.apply(Google::Recaptcha::Stat.all).pluck(:date)).to contain_exactly(Date.new(2026, 9, 14), Date.new(2026, 10, 11))
+  end
 end

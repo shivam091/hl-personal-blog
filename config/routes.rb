@@ -93,6 +93,13 @@ Rails.application.routes.draw do
       post "settings/annotations", to: "settings#annotate", as: :settings_annotations
       get "quota", to: "quotas#show", as: :quota
     end
+
+    namespace :recaptcha do
+      resources :stats, only: :index, path: "scores" do
+        post :sync, on: :collection
+      end
+      resources :assessments, only: %i[index show]
+    end
   end
 
   resources :request_logs, only: %i[index show destroy], path: "request-logs" do
