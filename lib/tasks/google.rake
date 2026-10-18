@@ -70,4 +70,13 @@ namespace :google do
       end
     end
   end
+
+  namespace :recaptcha do
+    desc "Create and update daily reCAPTCHA score stats for every day Google still holds (credentials google.*, recaptcha.site_key)"
+    task sync: :environment do
+      report_sync.call("reCAPTCHA metrics sync", SyncRequest.track("recaptcha_metrics", trigger: "rake") do
+        Google::Recaptcha::MetricsSyncService.call
+      end)
+    end
+  end
 end

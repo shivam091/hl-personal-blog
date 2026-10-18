@@ -101,6 +101,15 @@ shared:
             - label: Settings
               icon: settings
               route: google_analytics_settings
+        - label: reCAPTCHA
+          icon: shield
+          items:
+            - label: Scores
+              icon: shield
+              route: google_recaptcha_stats
+            - label: Logins
+              icon: shield-check
+              route: google_recaptcha_assessments
 
     - label: Monitoring
       icon: activity
