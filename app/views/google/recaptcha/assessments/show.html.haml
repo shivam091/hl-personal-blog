@@ -1,0 +1,16 @@
+- assessment = @assessment
+- content_for :title, "#{assessment} – reCAPTCHA logins"
+
+= link_to google_recaptcha_assessments_path, class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
+  = icon("arrow-left")
+  reCAPTCHA logins
+
+%div{class: "mb-6"}
+  %h1{class: "text-xl font-semibold tracking-tight break-all"}= assessment
+  %p{class: "mt-1 flex flex-wrap items-center gap-x-2 text-sm text-slate-500"}
+    = assessment_outcome_badge(assessment)
+    = time_or_dash(assessment.created_at)
+
+%div{class: "grid items-start gap-6 lg:grid-cols-2"}
+  = render "shared/details", id: "assessment", title: "Assessment", icon: "shield-check", rows: assessment_rows(assessment)
+  = render "shared/details", id: "client", title: "Client", icon: "server", rows: assessment_client_rows(assessment)

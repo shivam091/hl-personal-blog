@@ -1,9 +1,16 @@
 - content_for :title, "Sign in"
+- if Google::Recaptcha::Verifier.enabled?
+  - content_for :head do
+    %script{src: "https://www.google.com/recaptcha/api.js?render=#{ERB::Util.url_encode(Google::Recaptcha::Verifier.site_key)}", async: true, defer: true}
 
 %div{class: "mx-auto mt-8 max-w-sm sm:mt-16"}
   %h1{class: "mb-6 text-center text-2xl font-semibold tracking-tight"} Sign in
 
-  = form_with url: session_path, class: "space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm" do |form|
+  - recaptcha = Google::Recaptcha::Verifier.enabled? && { controller: "recaptcha", action: "submit->recaptcha#submit",
+    recaptcha_site_key_value: Google::Recaptcha::Verifier.site_key, recaptcha_action_value: SessionsController::RECAPTCHA_ACTION }
+  = form_with url: session_path, data: recaptcha || {}, class: "space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm" do |form|
+    - if recaptcha
+      = hidden_field_tag :recaptcha_token, nil, data: { recaptcha_target: "token" }
     %div
       = form.label :username, "Username", class: "mb-1.5 block text-sm font-medium text-slate-700"
       = form.text_field :username, value: params[:username], autofocus: true,
