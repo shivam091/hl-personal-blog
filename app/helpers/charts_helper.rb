@@ -121,7 +121,9 @@ module ChartsHelper
   # Events mark days as on a line chart, so a bar's rise can be put down to
   # what happened that day. Unsettled is the first day whose figures may
   # still change, so its readout and every later one say so.
-  def time_chart(points, label:, y_title:, x_title: nil, style: :bars, unit: "", per: :day, events: {}, event_name: nil, unsettled: nil)
+  # A legend names the bars where the card's title alone doesn't say what
+  # they count.
+  def time_chart(points, label:, y_title:, x_title: nil, style: :bars, unit: "", per: :day, events: {}, event_name: nil, unsettled: nil, legend: nil)
     keys = points.map(&:first)
     if style == :line
       return line_chart(keys, [Series.new(name: label, values: points.map(&:last))], label: label, unit: unit, y_title: y_title, x_title: x_title,
@@ -130,6 +132,7 @@ module ChartsHelper
 
     events = events.slice(*keys)
     safe_join([
+      (swatch_legend([[legend, BAR_COLOR]]) if legend),
       (event_legend(event_name) if events.any?),
       chart_frame(keys, points.map(&:last).compact.max, label, x_title: x_title, y_title: y_title, per: per,
         overlay: (->(_) { event_markers(keys, events, lines: false) } if events.any?)) do |max|
@@ -150,12 +153,18 @@ module ChartsHelper
   # The first part sits at the base so its height can be read straight off
   # the axis; the top is whole because what's stacked are counts. Titles
   # name a bar in its readout when its date alone wouldn't say what it is.
-  def stacked_chart(keys, series, label:, y_title:, x_title: nil, per: :day, titles: nil, unsettled: nil)
+  # The period compared with is a dotted line of whole bars on the same
+  # scale, as on the trend charts, so each bar is read against its own past.
+  def stacked_chart(keys, series, label:, y_title:, x_title: nil, per: :day, titles: nil, unsettled: nil, previous: nil, previous_name: nil)
     totals = keys.each_index.map { |index| series.sum { |part| part.values[index].to_i } }
+    top = round_top([*totals, *previous&.compact].max.to_f, whole: true)
     safe_join([
-      swatch_legend(series.map { |part| [part.name, part.color] }),
-      chart_frame(keys, round_top(totals.max.to_f, whole: true), label, x_title: x_title, y_title: y_title, per: per) do |max|
-        stacked_marks(keys, series, max, per, titles, unsettled: unsettled)
+      swatch_legend(series.map { |part| [part.name, part.color] }, dotted: (previous_name if previous)),
+      chart_frame(keys, top, label, x_title: x_title, y_title: y_title, per: per) do |max|
+        safe_join([
+          stacked_marks(keys, series, max, per, titles, unsettled: unsettled, previous: previous, previous_name: previous_name),
+          (previous_bars_line(keys, previous, max) if previous)
+        ].compact)
       end
     ])
   end
@@ -258,7 +267,9 @@ module ChartsHelper
   # Numbered from first_series so each bar answers to its line in the chart
   # beside it. Round gridlines so a bar's length can be read off the axis as
   # well as from its figure.
-  def ranking_chart(rows, label:, total:, x_title:, y_title:, first_series: nil)
+  # A row's change, when one is given, sits by its name so it's read with
+  # the row rather than hunted for in the readout.
+  def ranking_chart(rows, label:, total:, x_title:, y_title:, first_series: nil, previous: nil, previous_name: nil, changes: {})
     step, top = axis_scale(rows.map { |_, value, _| value.to_f }.max.to_f)
     ticks = (0..(top / step).round).map { |index| index * step }
     columns = "grid grid-cols-[minmax(0,11rem)_1fr] gap-x-3"
@@ -271,12 +282,16 @@ module ChartsHelper
           tag.ul(class: "grid flex-1 auto-rows-fr text-xs") do
             safe_join(rows.each_with_index.map do |(name, value, swatch, color, marker), index|
               share = share_of_total(value, total)
-              tip = chart_tip(name, [{value: number_with_delimiter(value), name: ("#{share} of total" if share), color: color, marker: marker}.compact])
+              readings = [{value: number_with_delimiter(value), name: ("#{share} of total" if share), color: color, marker: marker}.compact]
+              readings << {value: number_with_delimiter(previous[name].to_i), name: previous_name, color: color, dotted: true} if previous
+              tip = chart_tip(name, readings)
               tip = tip.merge(series: first_series + index, action: "click->series-highlight#toggle") if first_series
               tag.li(class: [columns, "min-h-8 rounded px-1 transition-opacity hover:bg-slate-100 data-active:bg-slate-100", ("cursor-pointer" if first_series)],
                 data: tip) do
                 safe_join([
-                  tag.span(name, title: name, class: "self-center truncate font-medium text-slate-700"),
+                  tag.span(class: "flex min-w-0 items-center gap-1 self-center") do
+                    safe_join([tag.span(name, title: name, class: "truncate font-medium text-slate-700"), (tag.span(changes[name], class: "shrink-0") if changes[name])].compact, " ")
+                  end,
                   tag.div(class: "relative flex items-center py-1") do
                     safe_join([
                       *ticks.drop(1).map do |tick|
@@ -819,11 +834,11 @@ module ChartsHelper
 
   # Parts are inset by a gap, so touching colours stay apart; a day with no
   # data has no bar and no readout, so it isn't read as a day of none.
-  def stacked_marks(keys, series, max, per, titles = nil, unsettled: nil)
+  def stacked_marks(keys, series, max, per, titles = nil, unsettled: nil, previous: nil, previous_name: nil)
     slot = CHART_WIDTH.to_f / [keys.size, 1].max
     gap = [slot * 0.2, 2].min
     safe_join(keys.each_with_index.filter_map do |key, index|
-      next if series.all? { |part| part.values[index].nil? }
+      next if series.all? { |part| part.values[index].nil? } && previous&.at(index).nil?
 
       y = CHART_HEIGHT.to_f
       parts = series.filter_map do |part|
@@ -835,6 +850,10 @@ module ChartsHelper
           class: "stroke-white", "stroke-width": 1, "vector-effect": "non-scaling-stroke")
       end
       rows = series.map { |part| {value: number_with_delimiter(part.values[index].to_i), name: part.name, color: part.color} }
+      if previous
+        before = previous[index]
+        rows << {value: before.nil? ? "No data" : number_with_delimiter(before), name: previous_name, color: BAR_COLOR, dotted: true}
+      end
       tag.g(class: "group", data: chart_tip(titles&.at(index) || chart_bucket_label(key, per), rows, note: unsettled_note(key, per, unsettled))) do
         safe_join([
           tag.rect(x: (index * slot).round(2), y: 0, width: slot.round(2), height: CHART_HEIGHT, fill: "transparent",
@@ -851,12 +870,37 @@ module ChartsHelper
     end
   end
 
-  def swatch_legend(entries)
-    tag.ul(class: "mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600") do
-      safe_join(entries.map do |name, color|
-        tag.li(class: "inline-flex items-center gap-1.5") { safe_join([tag.span(class: "size-2.5 rounded-sm", style: "background-color: #{color}"), name]) }
-      end)
+  def swatch_legend(entries, dotted: nil)
+    dotted_key = if dotted
+      tag.li(class: "inline-flex items-center gap-1.5") do
+        line = tag.svg(width: 18, height: 6, aria: {hidden: true}) do
+          tag.line(x1: 1, x2: 17, y1: 3, y2: 3, stroke: BAR_COLOR, "stroke-width": 2, "stroke-dasharray": "0 4", "stroke-linecap": "round")
+        end
+        safe_join([line, dotted])
+      end
     end
+    tag.ul(class: "mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600") do
+      safe_join([
+        *entries.map do |name, color|
+          tag.li(class: "inline-flex items-center gap-1.5") { safe_join([tag.span(class: "size-2.5 rounded-sm", style: "background-color: #{color}"), name]) }
+        end,
+        dotted_key
+      ].compact)
+    end
+  end
+
+  # Through the middle of each bar's slot, so a point sits over the bar it's
+  # read against; broken where a day has no data, as a line is. Haloed in
+  # white so it shows over a bar of any shade.
+  def previous_bars_line(keys, previous, max)
+    slot = CHART_WIDTH.to_f / [keys.size, 1].max
+    safe_join(line_runs(previous).flat_map do |run|
+      points = run.map { |value, i| "#{((i + 0.5) * slot).round(2)},#{(CHART_HEIGHT - value.to_f / max * CHART_HEIGHT).round(2)}" }.join(" ")
+      [["white", 4, "0 4"], [BAR_COLOR, 2, "0 4"]].map do |stroke, width, dashes|
+        tag.polyline(points: points, fill: "none", stroke: stroke, "stroke-width": width, "stroke-linejoin": "round", "stroke-linecap": "round",
+          "stroke-dasharray": dashes, "vector-effect": "non-scaling-stroke", class: "pointer-events-none", data: {previous: ""})
+      end
+    end)
   end
 
   # The first series is filled beneath, so the main figure stands out from

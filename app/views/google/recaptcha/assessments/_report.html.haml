@@ -1,0 +1,57 @@
+-# Follows the search and tab, so the figures always describe the list below.
+- days = "#{l(report.from)} – #{l(report.to)}"
+- tile_class = "relative rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"
+- figure_class = "mt-1 text-lg font-semibold tabular-nums text-slate-900"
+%dl{id: "login-figures", class: "mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"}
+  - [["Attempts", "log-in", number_with_delimiter(report.attempts), nil,
+      "Sign-in attempts reCAPTCHA scored, for the search and tab picked."],
+     ["Rejected", "x", number_with_delimiter(report.rejected), (number_to_percentage(report.rejected * 100.0 / report.attempts, precision: 1) + " of attempts"),
+      "Attempts reCAPTCHA turned away: an invalid token, one from another form, or a score under the threshold. Their password was never checked."],
+     ["Wrong password", "alert-circle", number_with_delimiter(report.wrong_passwords), nil,
+      "Attempts reCAPTCHA let through whose password was wrong."],
+     ["IP addresses", "globe", number_with_delimiter(report.addresses), nil,
+      "Distinct addresses the attempts came from."]].each do |label, tile_icon, value, note, hint|
+    %div{class: tile_class}
+      %dt{class: "flex items-center gap-1.5 text-xs font-medium text-slate-500"}
+        = icon(tile_icon, size: 14, class: "text-slate-400")
+        = label
+        = render("shared/hint", label: label, text: hint)
+      %dd{class: figure_class}= value
+      - if note
+        %dd{class: "mt-0.5 text-xs text-slate-500"}= note
+
+%div{class: "mb-6 grid gap-4 lg:grid-cols-2"}
+  = render layout: "shared/card", locals: {id: "login-attempts", title: "Attempts per day", icon: "bar-chart"} do
+    - daily = report.daily
+    %div{class: "px-4 py-3"}
+      = stacked_chart(daily.map(&:first),
+        [ChartsHelper::Series.new(name: "Accepted", values: daily.map(&:second), color: "#2a78d6"),
+         ChartsHelper::Series.new(name: "Rejected", values: daily.map(&:third), color: "#eb6834")],
+        label: "Login attempts per day, #{days}, accepted and rejected", y_title: "Attempts")
+  -# A right password scored low is a real login the threshold refused; a
+  -# wrong one scored high is a bot reCAPTCHA missed.
+  = render layout: "shared/card", locals: {id: "login-scores", title: "Scores by password", icon: "shield"} do
+    - groups = report.scores_by_password
+    %div{class: "px-4 py-3"}
+      = stacked_chart(Google::Recaptcha::Summary::BUCKETS,
+        [ChartsHelper::Series.new(name: "Right password", values: groups["CORRECT_PASSWORD"], color: "#2a78d6"),
+         ChartsHelper::Series.new(name: "Wrong password", values: groups["INCORRECT_PASSWORD"], color: "#eb6834"),
+         ChartsHelper::Series.new(name: "Not checked", values: groups[nil], color: ChartsHelper::SHARE_OTHER_COLOR)],
+        label: "Login attempts by score, 0 likely a bot, 1 likely a person, split by password", x_title: "Score", y_title: "Attempts")
+
+-# A run of attempts from one address is the shape of a password guesser.
+= render layout: "shared/card", locals: {id: "repeat-addresses", title: "Repeat IP addresses", icon: "list", class: "mb-6"} do
+  - addresses = report.repeat_addresses
+  - if addresses.empty?
+    %p{class: "px-4 py-3 text-sm text-slate-500"} No address tried more than once.
+  - else
+    %ol{class: "divide-y divide-slate-100 text-sm"}
+      - addresses.each do |address|
+        %li{class: "flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2"}
+          = link_to address.ip, google_recaptcha_assessments_path(ip: address.ip),
+            class: "font-mono text-xs font-medium text-slate-900 hover:underline", title: "Show only attempts from #{address.ip}"
+          %span{class: "flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 tabular-nums"}
+            %span= pluralize(number_with_delimiter(address.attempts), "attempt")
+            %span{class: ("font-medium text-red-700" if address.rejected.positive?)} #{number_with_delimiter(address.rejected)} rejected
+            %span #{number_with_delimiter(address.wrong_passwords)} wrong #{"password".pluralize(address.wrong_passwords)}
+            %span Last #{time_or_dash(address.last_at)}

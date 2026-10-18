@@ -184,6 +184,18 @@ module GoogleReportsHelper
     end
   end
 
+  # A day's figures as the summary tiles name them, so a row's change is
+  # worked out and coloured as the tile's is; nil where a day has no
+  # requests to divide by, or no challenges reported.
+  def recaptcha_day_figures(stat)
+    {
+      requests: stat.requests,
+      low_score_share: (stat.low_score_requests.fdiv(stat.requests) if stat.requests.positive?),
+      average_score: stat.average_score,
+      failed_challenges: (stat.challenges["failed"].to_i if stat.challenges.key?("failed"))
+    }
+  end
+
   # Beside a cell's figure, so a row can be judged against itself; a row
   # with nothing before has no rate of change, only a start.
   def row_change(current, previous, metric)

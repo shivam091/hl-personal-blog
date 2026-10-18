@@ -1,0 +1,151 @@
+- content_for :title, "reCAPTCHA scores"
+- low_score = Google::Recaptcha::Stat::LOW_SCORE
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} reCAPTCHA scores
+    %p{class: "mt-1 text-sm text-slate-500"}
+      How reCAPTCHA scored the blog's visitors each day, from 1.0 (very likely human) down to 0.0 (very likely a bot).
+    = last_sync_status("recaptcha_metrics")
+  %div{class: "flex flex-wrap items-center gap-2"}
+    = render "google/shared/export_menu", exports: [["Daily scores", list_url(@period, @sorting, format: :csv), "One row per day, with a column per score bucket"],
+      ["Scores by action", list_url(@period, @sorting, format: :csv, export: "actions"), "One row per day and form, since each is scored on its own"]]
+    = button_to sync_google_recaptcha_stats_path, form_class: "inline-flex",
+      title: "Google returns every day it still holds, so there's no range to choose",
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("refresh", size: 14)
+      Sync scores
+
+= render "google/shared/period", period: @period, keep: [@sorting, @pagination, @report]
+
+= render "google/shared/totals", metrics: recaptcha_summary_metrics, totals: @summary, previous_totals: @previous_summary,
+  previous_period: @period.previous
+
+-# As reCAPTCHA's console lays them out, overall or for one action, so a
+-# spike can be traced to the form it hit.
+- report = @report
+- if @pagination.total_count.positive?
+  - scope = report.action ? "the #{report.action} action" : "all actions"
+  - shown = capture do
+    = label_tag "recaptcha-action", "Show", class: "text-xs font-medium text-slate-500"
+    = picker_select_tag :recaptcha_action, options_for_select(report.actions, report.action), include_blank: "Overall traffic", id: "recaptcha-action",
+      class: "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none",
+      data: {controller: "chart-granularity", chart_granularity_param_value: "recaptcha_action", action: "chart-granularity#change"}
+  - empty = capture do
+    %p{class: "py-10 text-center text-sm text-slate-500"} No scores for #{scope} in #{@period}.
+  %div{class: "mb-6 grid gap-4 lg:grid-cols-2"}
+    -# Only with actions to pick, since Google doesn't always split them out
+    -# and overall traffic alone is no choice.
+    = render layout: "shared/card", locals: {id: "recaptcha-requests", title: "Number of requests", icon: "bar-chart",
+      actions: (tag.div(shown, class: "flex items-center gap-2") if report.actions.any?)} do
+      %div{class: "px-4 py-3"}
+        - if report.requests.positive?
+          -# Risk is told by shade of one hue, since high and low are ends of
+          -# one scale rather than two kinds of thing.
+          = stacked_chart(report.daily.map(&:first),
+            [ChartsHelper::Series.new(name: "High risk (below #{low_score})", values: report.daily.map(&:second), color: "#0d366b"),
+             ChartsHelper::Series.new(name: "Low risk", values: report.daily.map(&:third), color: "#3987e5")],
+            label: "Requests per day for #{scope}, split by risk", y_title: "Requests",
+            previous: report.previous_daily, previous_name: Period::COMPARES[@period.compare])
+        - else
+          = empty
+    = render layout: "shared/card", locals: {id: "recaptcha-scores", title: "Score distribution", icon: "bar-chart"} do
+      %div{class: "px-4 py-3"}
+        - if report.requests.positive?
+          = time_chart(report.histogram.to_a, label: "Requests by score for #{scope}, 0 likely a bot, 1 likely a person",
+            x_title: "Score", y_title: "Requests", unit: " requests", legend: "Requests")
+        - else
+          = empty
+    -# Always every action, since they're what's chosen between above, and
+    -# only when there are some, since two empty cards tell nothing.
+    - if report.actions.any?
+      - [["recaptcha-top-actions", "Top #{Google::Recaptcha::Report::TOP_ACTIONS} actions", report.top_actions, report.previous_actions, "bg-[#3987e5]", "#3987e5", false],
+         ["recaptcha-suspicious-actions", "Top #{Google::Recaptcha::Report::TOP_ACTIONS} suspicious actions", report.top_suspicious_actions, report.previous_suspicious_actions,
+          "bg-[#0d366b]", "#0d366b", true]].each do |id, title, (rows, total), previous, swatch, color, lower_is_better|
+        = render layout: "shared/card", locals: {id: id, title: title, icon: "list", class: "flex flex-col"} do
+          %div{class: "flex flex-1 flex-col px-4 py-3"}
+            - if rows.any?
+              - change = Google::DailyReport::Metric.new(lower_is_better: lower_is_better)
+              = ranking_chart(rows.map { |name, count| [name, count, swatch, color] }, label: "#{title} by requests in #{@period}",
+                total: total, x_title: "Requests", y_title: "Action", previous: previous, previous_name: "Requests, #{@period.previous}",
+                changes: (rows.to_h { |name, count| [name, row_change(count, previous[name], change)] } if previous) || {})
+            - else
+              %p{class: "py-10 text-center text-sm text-slate-500"} No #{"suspicious " if id.include?("suspicious")}requests by action in #{@period}.
+    - if report.challenged?
+      - challenges = report.daily_challenges
+      - pass_rate = report.challenge_pass_rate
+      = render layout: "shared/card", locals: {id: "recaptcha-challenges", title: "Challenges", icon: "shield-check", class: "lg:col-span-2",
+        actions: (tag.span("#{metric_value(pass_rate, :percent)} of challenges passed", class: "text-xs font-medium text-slate-600") if pass_rate)} do
+        %div{class: "px-4 py-3"}
+          -# One hue for getting through and another for failing, since a
+          -# failed challenge is the one kind that stops someone.
+          = stacked_chart(challenges.map(&:first),
+            [ChartsHelper::Series.new(name: "No challenge needed", values: challenges.map(&:second), color: "#9ec5f4"),
+             ChartsHelper::Series.new(name: "Passed", values: challenges.map(&:third), color: "#2a78d6"),
+             ChartsHelper::Series.new(name: "Failed", values: challenges.map(&:fourth), color: "#eb6834")],
+            label: "Checkbox challenges per day for the whole site: cleared without one, passed and failed", y_title: "Requests")
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", icon: "inbox", message: "No scores for #{@period}. Sync to fetch them from Google."
+- else
+  %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+        %tr
+          %th{scope: "col", class: "w-10 px-3 py-2.5"}
+            %span{class: "sr-only"} Expand
+          = sort_header @sorting, "Date", "date", keep: [@period, @pagination, @report], class: "px-3 py-2.5 font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold"} Requests
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold"} Below #{low_score}
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold"} Average
+          %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Scores
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold"} Challenges failed
+
+      - day_metrics = recaptcha_summary_metrics.index_by(&:field)
+      - @stats.each do |stat|
+        - details_id = dom_id(stat, :details)
+        -# Only days Google split actions out for open, so none opens on nothing.
+        - actions = stat.action_scores.present?
+        -# Against the day at the same place in the period compared with, as
+        -# the chart reads it; nothing where either day lacks the figure.
+        - before_day = @report.previous_day(stat.date)
+        - figures = recaptcha_day_figures(stat)
+        - before = recaptcha_day_figures(before_day) if before_day
+        - day_change = ->(field) { row_change(figures[field], before[field], day_metrics[field]) if before && !figures[field].nil? && !before[field].nil? }
+        %tbody{class: "border-b border-slate-100 last:border-b-0", data: {controller: "disclosure"}}
+          %tr{class: "hover:bg-slate-50"}
+            %td{class: "px-3 py-2"}
+              - if actions
+                %button{type: "button",
+                  class: "group inline-flex rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400",
+                  aria: {expanded: "false", controls: details_id, label: "Show actions for #{l(stat.date)}"},
+                  data: {action: "disclosure#toggle", disclosure_target: "button"}}
+                  = icon("chevron-down", class: "transition-transform duration-150 group-aria-expanded:rotate-180")
+            %td{class: "px-3 py-2 font-medium whitespace-nowrap"}
+              %time{datetime: stat.date.iso8601}= l(stat.date)
+            %td{class: "px-3 py-2 text-right tabular-nums"}
+              = number_with_delimiter(stat.requests)
+              = day_change.(:requests)
+            %td{class: "px-3 py-2 text-right tabular-nums"}
+              = stat.requests.positive? ? number_to_percentage(stat.low_score_requests * 100.0 / stat.requests, precision: 1) : "—"
+              = day_change.(:low_score_share)
+            %td{class: "px-3 py-2 text-right tabular-nums"}
+              = stat.average_score ? number_with_precision(stat.average_score, precision: 2) : "—"
+              = day_change.(:average_score)
+            %td{class: "px-3 py-2"}
+              %ul{class: "flex flex-wrap gap-1.5"}
+                - stat.scores.select { |bucket| bucket["count"].positive? }.each do |bucket|
+                  %li{class: ["rounded-full px-2 py-0.5 text-xs", bucket["score"] < low_score ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"]}
+                    %span{class: "font-medium"}= number_with_precision(bucket["score"], precision: 1)
+                    %span{class: "tabular-nums"}= number_with_delimiter(bucket["count"])
+            %td{class: "px-3 py-2 text-right tabular-nums"}
+              = stat.challenges.key?("failed") ? number_with_delimiter(stat.challenges["failed"]) : "—"
+              = day_change.(:failed_challenges)
+          - if actions
+            %tr{id: details_id, hidden: true, class: "bg-slate-50", data: {disclosure_target: "panel"}}
+              %td
+              %td{colspan: 6, class: "px-3 pt-1 pb-4 whitespace-normal"}
+                = render "shared/breakdown", counts: stat.action_scores.transform_values { |buckets| buckets.sum { |bucket| bucket["count"] } },
+                  heading: "Action", count_heading: "Requests", empty: "Google split out no actions this day."
+
+= pagination_nav @pagination, keep: [@period, @sorting, @report]
