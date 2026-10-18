@@ -1,0 +1,59 @@
+- content_for :title, "reCAPTCHA logins"
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} reCAPTCHA logins
+    %p{class: subtitle_class} Every admin sign-in attempt reCAPTCHA checked, and why it was let through or turned away.
+  %div{class: toolbar_class}
+    = columns_button(@layout)
+    = link_to list_url(@filtering, @sorting, format: :csv),
+      class: outline_button_class do
+      = icon("download", size: 14)
+      Export CSV
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+= render "report", report: @report if @report.any?
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
+    message: (@filtering.filtered? ? "No sign-in checks match." : "No sign-in checks yet. They're recorded as the admin login is used.")
+- else
+  %div{class: list_container_class(@layout)}
+    %table{class: list_table_class(@layout)}
+      %thead{class: list_head_class(@layout)}
+        %tr
+          - if @layout.row_numbers?
+            %th{scope: "col", class: list_heading_right_class, aria: {label: "Row number"}} #
+          = column_headers @layout, @sorting, keep: [@filtering, @pagination]
+      %tbody
+        - @assessments.each.with_index(@pagination.first_item) do |assessment, number|
+          %tr{class: "border-b border-slate-100 last:border-b-0 hover:bg-slate-50"}
+            - if @layout.row_numbers?
+              %td{class: muted_number_cell_class}= number_with_delimiter(number)
+            - @layout.visible_columns.each do |column|
+              - case column.key
+              - when "created_at"
+                %td{class: "px-3 py-2 whitespace-nowrap"}
+                  = link_to google_recaptcha_login_path(assessment), class: "font-medium text-slate-900 hover:underline" do
+                    = time_or_dash(assessment.created_at)
+              - when "action"
+                %td{class: "px-3 py-2 text-slate-600"}= assessment.action.presence || "—"
+              - when "score"
+                %td{class: "px-3 py-2"}= recaptcha_score_badge(assessment.score)
+              - when "outcome"
+                %td{class: "px-3 py-2"}
+                  = assessment_outcome_badge(assessment)
+                  - if (reason = assessment.invalid_reason.presence || assessment.reasons.first)
+                    %p{class: "mt-0.5 text-xs text-slate-500"}= humanize_state(reason)
+              - when "password"
+                %td{class: "px-3 py-2 whitespace-nowrap text-slate-600"}= assessment.password_outcome ? humanize_state(assessment.password_outcome) : "—"
+              - when "client"
+                %td{class: "px-3 py-2"}
+                  %div{class: "font-mono text-xs text-slate-700"}= assessment.remote_ip
+                  %div{class: "max-w-56 truncate text-xs text-slate-500", title: assessment.user_agent}= assessment.user_agent
+
+= pagination_nav @pagination, keep: [@filtering, @sorting]
+
+= turbo_frame_tag "modal"
