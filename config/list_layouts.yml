@@ -1,4 +1,17 @@
 shared:
+  recaptcha_assessments:
+    label: reCAPTCHA logins
+    route: google_recaptcha_logins
+    tabs: Google::Recaptcha::LoginsController::ACCEPTED_TABS
+    # Newest first, since it's read for what just happened at the login.
+    sort: created_at
+    columns:
+      created_at: {label: Time, sort: desc, required: true}
+      action: {label: Action, sort: asc}
+      score: {label: Score, sort: asc}
+      outcome: {label: Outcome}
+      password: {label: Password}
+      client: {label: Client}
   analytics_acquisition:
     label: Analytics acquisition
     route: google_analytics_acquisition

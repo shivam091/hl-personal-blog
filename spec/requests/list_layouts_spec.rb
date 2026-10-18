@@ -3,6 +3,69 @@
 require "rails_helper"
 
 RSpec.describe "List settings", type: :request do
+  def headers
+    Nokogiri::HTML5(response.body).css("thead th").map { |th| th.text.squish }.compact_blank
+  end
+
+  # reCAPTCHA logins is the list with both a layout and filter tabs.
+  describe "a list with a layout" do
+    let!(:accepted) { Google::Recaptcha::Assessment.create!(action: "LOGIN", score: 0.9, accepted: true, remote_ip: "203.0.113.1", created_at: Time.utc(2026, 7, 5)) }
+
+    it "lists every list's layout" do
+      get list_layouts_path
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("reCAPTCHA logins", "Time, descending", "Default")
+    end
+
+    it "opens the dialog with each column in its zone" do
+      ListSetting.create!(list: "recaptcha_assessments", hidden: %w[client])
+
+      get edit_list_layout_path("recaptcha_assessments")
+
+      html = Nokogiri::HTML5(response.body)
+      expect(html.css("[data-zone=shown] input").map { |input| input["value"] }).to eq(%w[created_at action score outcome password])
+      expect(html.css("[data-zone=hidden] input").map { |input| input["name"] }).to eq(%w[hidden[]])
+    end
+
+    it "reorders, hides and sorts a list, then resets it" do
+      patch list_layout_path("recaptcha_assessments"),
+        params: {shown: %w[score created_at], hidden: %w[action outcome password client], sort: "score", direction: "asc", per_page: "50"},
+        headers: {"HTTP_REFERER" => google_recaptcha_logins_url}
+      expect(response).to redirect_to(google_recaptcha_logins_url)
+
+      get google_recaptcha_logins_path
+      expect(headers).to eq(%w[# Score Time])
+      expect(response.body).to include('aria-sort="ascending"')
+
+      get list_layouts_path
+      expect(response.body).to include("Customized", "Score, ascending")
+
+      delete list_layout_path("recaptcha_assessments")
+      expect(ListSetting.count).to eq(0)
+
+      get google_recaptcha_logins_path
+      expect(headers).to eq(%w[# Time Action Score Outcome Password Client])
+    end
+
+    it "opens a list on its default tab, dense, without row numbers and with a fixed header" do
+      Google::Recaptcha::Assessment.create!(action: "LOGIN", score: 0.1, accepted: false, remote_ip: "198.51.100.7", created_at: Time.utc(2026, 7, 6))
+      patch list_layout_path("recaptcha_assessments"), params: {tab: "no", density: "compact", row_numbers: "0", sticky_header: "1"}
+
+      get google_recaptcha_logins_path
+      html = Nokogiri::HTML5(response.body)
+      expect(html.at_css("nav[aria-label='Filter by outcome'] a[aria-current=page]").text).to include("Rejected")
+      expect(html.css("tbody tr").size).to eq(1)
+      expect(html.at_css("nav a[href='/google/recaptcha/logins?accepted=all']")).to be_present
+      expect(headers).to eq(%w[Time Action Score Outcome Password Client])
+      expect(html.at_css("thead")["class"]).to include("sticky")
+      expect(html.at_css("table")["class"]).to include("[&_td]:py-1")
+
+      get google_recaptcha_logins_path(accepted: "all")
+      expect(Nokogiri::HTML5(response.body).css("tbody tr").size).to eq(2)
+    end
+  end
+
   it "404s for an unknown list" do
     get edit_list_layout_path("nope")
 
