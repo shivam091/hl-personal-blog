@@ -38,7 +38,9 @@ class SyncRequest
     Kind.new(key: "analytics", section: "Analytics acquisition, engagement, users & retention", source: "Google Analytics", page: :google_analytics_acquisition_path,
       enqueue: ->(request) { Google::Analytics::SyncJob.perform_later(request.days, request.to_date.iso8601, request_id: request.id.to_s) }),
     Kind.new(key: "analytics_annotations", section: "Analytics annotations", source: "Google Analytics", page: :google_analytics_settings_path,
-      enqueue: ->(request) { Google::Analytics::AnnotationJob.perform_later(request_id: request.id.to_s) })
+      enqueue: ->(request) { Google::Analytics::AnnotationJob.perform_later(request_id: request.id.to_s) }),
+    Kind.new(key: "recaptcha_metrics", section: "reCAPTCHA scores", source: "reCAPTCHA", page: :google_recaptcha_scores_path,
+      enqueue: ->(request) { Google::Recaptcha::MetricsSyncJob.perform_later(request_id: request.id.to_s) })
   ].index_by(&:key).freeze
 
   TRIGGERS = {"admin" => "Admin", "resync" => "Resync", "rake" => "Rake task", "job" => "Background job"}.freeze
