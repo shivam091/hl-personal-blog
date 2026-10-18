@@ -99,6 +99,54 @@ RSpec.describe "Sessions", type: :request, signed_out: true do
     expect(response).to redirect_to(root_path)
   end
 
+  context "with reCAPTCHA keys set" do
+    before do
+      allow(Rails.application.credentials).to receive(:recaptcha) { {site_key: "site-key", secret_key: "secret"} }
+    end
+
+    it "loads reCAPTCHA on the login form" do
+      get new_session_path
+
+      expect(response.body).to include("https://www.google.com/recaptcha/api.js?render=site-key", 'data-controller="recaptcha"', 'name="recaptcha_token"')
+    end
+
+    it "checks the token before the password, then tells reCAPTCHA whether the password was right" do
+      assessment = Google::Recaptcha::Assessment.create!
+      allow(Google::Recaptcha::Verifier).to receive(:check) { Google::Recaptcha::Verifier::Verdict.new(true, assessment) }
+
+      post session_path, params: {
+        username: AuthenticationHelpers::ADMIN_USERNAME,
+        password: AuthenticationHelpers::ADMIN_PASSWORD,
+        recaptcha_token: "token"
+      }
+
+      expect(response).to redirect_to(root_path)
+      expect(Google::Recaptcha::Verifier).to have_received(:check).with("token", action: "login", remote_ip: "127.0.0.1", user_agent: nil)
+      expect(assessment.reload.password_outcome).to eq("CORRECT_PASSWORD")
+
+      delete session_path
+      assessment = Google::Recaptcha::Assessment.create!
+      allow(Google::Recaptcha::Verifier).to receive(:check) do
+        Google::Recaptcha::Verifier::Verdict.new(true, assessment)
+      end
+      sign_in(password: "wrong")
+      expect(assessment.reload.password_outcome).to eq("INCORRECT_PASSWORD")
+    end
+
+    it "turns away a failed check even with the right password" do
+      allow(Google::Recaptcha::Verifier).to receive(:check) do
+        Google::Recaptcha::Verifier::Verdict.new(false, nil)
+      end
+
+      sign_in
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("Couldn&#39;t confirm you&#39;re not a bot.")
+      get root_path
+      expect(response).to redirect_to(new_session_path)
+    end
+  end
+
   it "leaves reCAPTCHA off the login form while its keys aren't set" do
     allow(Rails.application.credentials).to receive(:recaptcha) { nil }
     get new_session_path
