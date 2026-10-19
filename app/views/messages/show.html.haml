@@ -16,10 +16,13 @@
         = time_tag(message.created_at)
   %div{class: "flex flex-col items-end gap-1.5"}
     %div{class: toolbar_class}
+      = message_verdict_buttons(message, @review)
       = mail_to message.email, subject: "Re: your message",
         class: "inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-slate-700" do
         = icon("reply", size: 14)
         Reply
+    -# Whether Google heard, since a verdict only teaches it once sent.
+    %p{class: "text-xs text-slate-500", id: "message-feedback"}= message_feedback_status(message, @review)
 
 %div{class: "grid gap-6 lg:grid-cols-3"}
   %div{class: "lg:col-span-2"}
