@@ -96,6 +96,18 @@ Rails.application.routes.draw do
       get "quota", to: "quotas#show", as: :quota
     end
 
+    namespace :page_speed, path: "pagespeed" do
+      resources :results, only: :index, path: "" do
+        post :sync, on: :collection
+      end
+    end
+
+    namespace :crux, path: "web-vitals" do
+      resources :stats, only: :index, path: "" do
+        post :sync, on: :collection
+      end
+    end
+
     namespace :recaptcha do
       resources :stats, only: :index, path: "scores" do
         post :sync, on: :collection
