@@ -1,0 +1,41 @@
+- category_labels = {"performance" => "Performance", "accessibility" => "Accessibility", "best_practices" => "Best practices", "seo" => "SEO"}
+- vitals = [[:lcp_ms, :field_lcp_ms, "LCP", ->(value) { "#{number_with_precision(value / 1000.0, precision: 1)} s" }],
+  [:inp_ms, :field_inp_ms, "INP", ->(value) { "#{value.round} ms" }],
+  [:cls, :field_cls, "CLS", ->(value) { number_with_precision(value, precision: 2) }]]
+- row_class = "grid grid-cols-[7.5rem_minmax(0,1fr)_3.5rem] items-center gap-3"
+= render layout: "shared/card", locals: {id: "page-speed", title: "Speed", icon: "gauge", class: "mb-6"} do
+  - if results.empty?
+    %p{class: empty_note_class} Not tested by PageSpeed Insights yet.
+  - else
+    %div{class: "grid divide-y divide-slate-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0"}
+      - Google::PageSpeed::Result::STRATEGIES.each do |strategy|
+        - result = results[strategy]
+        %div{class: "px-4 py-3"}
+          %h3{class: "mb-2 flex items-baseline justify-between gap-2 text-xs font-semibold text-slate-700"}
+            = strategy.capitalize
+            - if result&.fetched_at
+              %span{class: "font-normal text-slate-500"} Tested #{l(result.fetched_at.to_date)}
+          - if result.nil?
+            %p{class: "text-sm text-slate-500"} Not tested on #{strategy} yet.
+          - else
+            %ul{class: "space-y-2 text-sm"}
+              - category_labels.each do |category, label|
+                - score = result[category]
+                %li{class: row_class}
+                  %span{class: "text-slate-500"}= label
+                  = score ? meter(score * 100, 100, label: "#{label} score on #{strategy}") : tag.span
+                  %span{class: "text-right font-medium tabular-nums"}= score ? (score * 100).round : "—"
+            %p{class: "mt-4 mb-2 text-xs font-medium text-slate-500"}
+              Real Chrome users, 75th percentile
+              - if result.field_source == "origin"
+                · the whole site's, too few users for this page
+            %ul{class: "space-y-2 text-sm"}
+              - vitals.each do |metric, field, label, format|
+                - value = result[field]
+                - good, poor = Google::PageSpeed::Result::THRESHOLDS.fetch(metric)
+                %li{class: row_class}
+                  %span{class: "text-slate-500"}= label
+                  = value ? threshold_meter(value, good: good, poor: poor, label: "#{label} on #{strategy}, good up to #{format.(good)}") : tag.span
+                  %span{class: "text-right font-medium tabular-nums"}= value ? format.(value) : "—"
+    %p{class: footnote_class}
+      Scores are out of 100 from one lab test. The bands under each vital are Google's good, needs-improvement and poor ranges.
