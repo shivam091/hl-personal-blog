@@ -41,6 +41,25 @@ class SyncRequest
     Kind.new(key: "recaptcha_metrics", section: "reCAPTCHA scores", source: "reCAPTCHA", page: :google_recaptcha_scores_path,
       enqueue: ->(request) { Google::Recaptcha::MetricsSyncJob.perform_later(request_id: request.id.to_s) }),
     Kind.new(
+      key: "page_speed",
+      section: "PageSpeed",
+      source: "PageSpeed Insights",
+      page: :google_page_speed_results_path,
+      enqueue: ->(request) {
+        Google::PageSpeed::SyncJob.perform_later(
+          limit: (request.limit || Google::PageSpeed::SyncService::DEFAULT_LIMIT),
+          request_id: request.id.to_s
+        )
+      }
+    ),
+    Kind.new(
+      key: "crux",
+      section: "Web Vitals history",
+      source: "Chrome UX Report",
+      page: :google_crux_web_vitals_histories_path,
+      enqueue: ->(request) { Google::Crux::SyncJob.perform_later(request_id: request.id.to_s) }
+    ),
+    Kind.new(
       key: "mixpanel",
       section: "Mixpanel pages, engagement & frustration",
       source: "Mixpanel",

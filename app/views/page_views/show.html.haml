@@ -22,6 +22,8 @@
 
 = render "page_views/mixpanel", page_view: page_view, report: @mixpanel, granularity: @granularity
 
+= render "page_views/speed", results: @page_speed
+
 - if @launch_curve
   = render layout: "shared/card", locals: {id: "launch", title: "First #{LaunchCurve::DAYS} days", icon: "trending-up", class: "mb-6"} do
     - typical = @launch_curve.typical

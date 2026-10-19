@@ -1,0 +1,71 @@
+- content_for :title, "Web Vitals (readers)"
+
+- figures = ->(metric, field) { Google::Analytics::WebVitalsController.metrics_for(metric).find { |figure| figure.field == field } }
+- overview = capture do
+  = render layout: "shared/card", locals: {id: "web-vitals-overview", title: "Every metric, #{@period}", icon: "gauge", class: "mb-6"} do
+    - if @overview.empty?
+      %p{class: empty_note_class}
+        No Web Vitals reported in this period. GA keeps them out of reports until metric_rating is registered (see Settings).
+    - else
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium"} Metric
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium"} Good · needs improvement · poor
+              %th{scope: "col", class: "px-3 py-1.5 text-right font-medium", title: Google::Analytics::WebVitalsController::MEAN_HINT} Mean
+              %th{scope: "col", class: "px-3 py-1.5 text-right font-medium"} Reports
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium", title: "Highest mean, from #{Google::Analytics::WebVitalsController::MIN_REPORTS}+ reports"}
+                Slowest pages
+          %tbody
+            - Google::Analytics::WebVitalStat::METRICS.each do |metric|
+              - row = @overview[metric]
+              - key = metric.downcase
+              - mean_metric = figures.(metric, :mean_value)
+              - reports_metric = figures.(metric, :event_count)
+              %tr{class: "#{table_row_class} align-top"}
+                %th{scope: "row", class: "px-3 py-2 text-left"}
+                  = link_to url_for(action: :index, breakdown: key, **breakdown_query), class: "font-medium text-slate-900 hover:underline" do
+                    = metric
+                  %div{class: "text-xs font-normal text-slate-500"}= crux_metric_label(key)
+                %td{class: "w-1/3 min-w-48 px-3 py-2"}
+                  - if row&.rated_count&.positive?
+                    - bands = [[row.good_share, "#10b981", "Good"], [row.needs_improvement_share, "#fbbf24", "Needs improvement"],
+                      [row.poor_share, "#ef4444", "Poor"]]
+                    = share_bar(bands.map { |share, color, name| [metric, share, color, [{value: metric_value(share, :percent), name: name, color: color}]] },
+                      label: "Share of #{metric} reports rated good, needing improvement and poor")
+                    %div{class: "mt-1 flex justify-between text-xs tabular-nums text-slate-500"}
+                      - bands.each do |share, _, _|
+                        %span= metric_value(share, :percent)
+                  - else
+                    %span{class: "text-xs text-slate-400"} No rated reports
+                %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums #{web_vital_rating_class(Google::Crux::Stat.rating(key, row&.mean_value))}"}
+                  = crux_value(key, row&.mean_value)
+                  - if comparing? && @previous_overview
+                    - before = @previous_overview[metric]
+                    - if row&.mean_value && before&.mean_value
+                      %div= row_change(row.mean_value, before.mean_value, mean_metric)
+                %td{class: "px-3 py-2 text-right tabular-nums"}
+                  = number_with_delimiter(row&.event_count.to_i)
+                  - if comparing? && @previous_overview
+                    %div= row_change(row&.event_count.to_i, @previous_overview[metric]&.event_count.to_i, reports_metric)
+                %td{class: "px-3 py-2"}
+                  - slowest = @slowest.fetch(metric)
+                  - if slowest.empty?
+                    %span{class: "text-xs text-slate-400"} None with enough reports
+                  - else
+                    %ul{class: "space-y-0.5"}
+                      - slowest.each do |page|
+                        %li{class: "flex justify-between gap-3"}
+                          = blog_page_link(page[:page_path], page_view_path(page[:page_path]))
+                          %span{class: "tabular-nums text-slate-600"}
+                            = crux_value(key, page.mean_value)
+                            - before = @previous_slowest&.dig(metric, page[:page_path])
+                            - if comparing? && @previous_slowest && before
+                              = row_change(page.mean_value, before, mean_metric)
+      %p{class: footnote_class}
+        Bands are Google's, from each report's own rating. Means are coloured by the same thresholds as a guide only: Google rates
+        the 75th percentile, which GA can't give. CLS was sent a thousandfold and is shown as its score.
+
+= render "google/shared/report", title: "Web Vitals (readers)", extra: overview,
+  description: "How fast pages are for every reader, in any browser that measures it, as the blog reports each visit's Web Vitals to Google Analytics. The Chrome UX Report's history stays under Web Vitals history."
