@@ -239,6 +239,20 @@ RSpec.describe "Page views", type: :request do
       ])
     end
 
+    it "shows the page's latest speed tests, each vital against Google's thresholds" do
+      PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
+      Google::PageSpeed::Result.create!(url: "https://blog.example.com/post/a", page_path: "/post/a", strategy: "mobile", fetched_at: 1.day.ago,
+        performance: 0.42, accessibility: 1, best_practices: 0.96, seo: 1, field_lcp_ms: 4500, field_inp_ms: 150, field_cls: 0.05, field_source: "page")
+
+      get page_view_path("/post/a")
+
+      card = Nokogiri::HTML5(response.body).at_css("#page-speed").parent
+      expect(card.css("li").map { |row| row.text.squish }).to eq(["Performance 42", "Accessibility 100", "Best practices 96", "SEO 100",
+        "LCP 4.5 s", "INP 150 ms", "CLS 0.05"])
+      expect(card.at_css("[role=meter][aria-label^=LCP] span.absolute.w-1")["style"]).to eq("left: 75.0%")
+      expect(card.text).to include("Not tested on desktop yet.")
+    end
+
     it "sets the page's likes per 100 views beside the site's, once it has views enough for a rate" do
       PageView.collection.insert_many([
         {"_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a", "visitorCount" => 200},

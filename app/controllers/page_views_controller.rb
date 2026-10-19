@@ -46,6 +46,7 @@ class PageViewsController < ApplicationController
     same_path = /\Ahttps?:\/\/[^\/]+#{Regexp.escape(@page_view.slug == "/" ? "" : @page_view.slug)}\/?\z/
     @feed_entry = FeedEntry.where(_id: same_path).first
     @crawled_page = CrawledPage.where(url: same_path).first
+    @page_speed = Google::PageSpeed::Result.where(url: same_path).index_by(&:strategy)
     @launch_curve = LaunchCurve.new(@page_view, @feed_entry) if @feed_entry
     @like_rates = {"This page" => like_rate(@page_like&.like_count.to_i, @page_view.visitor_count),
                    "Site average" => like_rate(PageLike.sum(:likeCount), PageView.hit_totals[:humans])}
