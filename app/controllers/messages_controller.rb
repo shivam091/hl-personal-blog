@@ -21,6 +21,7 @@ class MessagesController < ApplicationController
       format.html do
         @pagination = Pagination.new(filtered_messages, params)
         @messages = @pagination.records.to_a
+        @reviews = MessageReview.for(@messages)
         @tab_counts = @filtering.tab_counts(Message.all)
       end
       format.csv do
@@ -31,6 +32,19 @@ class MessagesController < ApplicationController
 
   def show
     @message = Message.find(params[:id])
+    @review = @message.review
+  end
+
+  # Back where it was marked, list or message, so a run of messages can be
+  # gone through without losing the place.
+  def review
+    message = Message.find(params[:id])
+    verdict = params[:verdict].presence_in(MessageReview::VERDICTS.keys)
+    return redirect_back_or_to(message_path(message), alert: "Unknown verdict.") unless verdict
+
+    MessageReview.mark(message, verdict)
+    note = message.recaptcha_assessment.present? ? "and reporting it to reCAPTCHA" : "(not reported to reCAPTCHA: no assessment was kept with it)"
+    redirect_back_or_to message_path(message), notice: "Marked the message from #{message.name} as #{MessageReview::VERDICTS.dig(verdict, :label).downcase} #{note}."
   end
 
   private
