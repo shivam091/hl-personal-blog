@@ -21,6 +21,8 @@
   analytics: @analytics, feed_entry: @feed_entry, crawled_page: @crawled_page,
   views_since: @views_since, likes_since: @likes_since
 
+= render "page_views/speed", results: @page_speed
+
 - if @launch_curve
   = render layout: "shared/card", locals: {id: "launch", title: "First #{LaunchCurve::DAYS} days", icon: "trending-up", class: "mb-6"} do
     - typical = @launch_curve.typical

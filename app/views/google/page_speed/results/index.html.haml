@@ -1,0 +1,182 @@
+- content_for :title, "PageSpeed"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} PageSpeed
+    %p{class: "mt-1 text-sm text-slate-500"}
+      Lighthouse's scores from one test of each page, beside real Chrome users' Core Web Vitals over the last 28 days.
+      A few pages are retested each day, oldest result first.
+    = last_sync_status("page_speed")
+  %div{class: "flex flex-wrap items-center gap-2"}
+    = link_to list_url(@filtering, @sorting, format: :csv),
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("download", size: 14)
+      Export CSV
+    = button_to sync_google_page_speed_results_path, form_class: "inline-flex",
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("refresh", size: 14)
+      Test pages
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
+    message: (@filtering.filtered? ? "No results match." : "No pages tested yet. Test pages to run PageSpeed Insights on them.")
+- else
+  %div{class: "mb-6 grid gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "device-gaps", title: "Mobile against desktop", icon: "cpu"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Each page's performance score on both devices, widest gap first. A long line means a page that's fine on a desktop but slow on a phone.
+      - if @device_gaps.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No page has been tested on both devices yet.
+      - else
+        %div{class: "px-4 py-3"}
+          = dumbbell_chart(@device_gaps.map { |row| [row.page_path || row.url, [row.mobile, row.desktop]] },
+            keys: [["Mobile", ChartsHelper::SHARE_COLORS[1], :circle], ["Desktop", ChartsHelper::SHARE_COLORS[0], :square]],
+            x_title: "Performance score", y_title: "Page", label: "Performance score on mobile and desktop for each page, widest gap first")
+
+    -# Lab and field disagree when the test machine isn't what readers use,
+    -# so a page under the limit in the lab but over it in the field is slow
+    -# only for real readers.
+    = render layout: "shared/card", locals: {id: "lcp-lab-field", title: "LCP in the lab and for readers", icon: "clock"} do
+      - good = Google::PageSpeed::Result::THRESHOLDS.fetch(:lcp_ms).first / 1000.0
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Each page's Largest Contentful Paint in one lab test against real Chrome users' 75th percentile. Inside the dashed
+        box is good on both, under #{number_with_precision(good, precision: 1)} s.
+      - if @lcp_pairs.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No page has its own real-user LCP yet.
+      - else
+        - colors = {"mobile" => ChartsHelper::SHARE_COLORS[1], "desktop" => ChartsHelper::SHARE_COLORS[0]}
+        - seconds = ->(value) { "#{number_with_precision(value, precision: 1)} s" }
+        - tick = ->(value) { "#{number_with_precision(value, precision: 2, strip_insignificant_zeros: true)} s" }
+        - x_max = round_top([*@lcp_pairs.map { |result| result.lab_lcp_ms / 1000.0 }, good * 1.6].max)
+        %div{class: "px-4 py-3"}
+          = scatter_chart(@lcp_pairs.map { |result| ChartsHelper::ScatterPoint.new(x: result.lab_lcp_ms / 1000.0, y: result.field_lcp_ms / 1000.0,
+              color: colors[result.strategy], tip: chart_tip(result.page_path || result.url,
+                [{value: seconds.(result.lab_lcp_ms / 1000.0), name: "lab", color: colors[result.strategy]},
+                {value: seconds.(result.field_lcp_ms / 1000.0), name: "real readers"},
+                {value: result.strategy.capitalize, name: "device"}])) },
+            curve: [[0, good], [good, good], [good, 0]], x_min: 0, x_max: x_max, x_ticks: [0, x_max / 4.0, x_max / 2.0, x_max * 3 / 4.0, x_max],
+            x_tick: tick, y_tick: tick, x_title: "Lab LCP", y_title: "Real readers' LCP",
+            label: "Lab LCP against real readers' LCP for each page, with the good limit boxed",
+            key: [["Mobile", colors["mobile"]], ["Desktop", colors["desktop"]]])
+
+  -# Above the averages, since a page that just got slower is the one a
+  -# recent change broke, and the fix is freshest now.
+  - if @regressions.any?
+    %div{class: "mb-6"}
+      = render layout: "shared/card", locals: {id: "regressions", title: "Got slower", icon: "arrow-down"} do
+        %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          Pages whose latest performance score is #{(Google::PageSpeed::ResultHistory::REGRESSION * 100).round} or more below
+          their run before, biggest drop first.
+        %div{class: "overflow-x-auto"}
+          %table{class: "w-full border-collapse text-sm"}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Page
+                %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Device
+                %th{scope: "col", class: "px-3 py-1.5 text-right font-medium whitespace-nowrap"} Before
+                %th{scope: "col", class: "px-3 py-1.5 text-right font-medium whitespace-nowrap"} Now
+                %th{scope: "col", class: "px-3 py-1.5 text-right font-medium whitespace-nowrap"} Lab LCP
+                %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Tested
+            %tbody
+              - @regressions.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row.page_path || row.url, google_page_speed_history_path(url: row.url, device: row.strategy), live: row.url)
+                  %td{class: "px-3 py-1.5 text-slate-500"}= row.strategy.capitalize
+                  %td{class: "px-3 py-1.5 text-right tabular-nums #{lighthouse_score_class(row.previous.performance)}"}= (row.previous.performance * 100).round
+                  %td{class: "px-3 py-1.5 text-right tabular-nums #{lighthouse_score_class(row.latest.performance)}"}= (row.latest.performance * 100).round
+                  %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap text-slate-600"}
+                    #{lab_value(:lab_lcp_ms, row.previous.lab_lcp_ms)} → #{lab_value(:lab_lcp_ms, row.latest.lab_lcp_ms)}
+                  %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(row.latest.fetched_at)
+
+  - category_labels = {"performance" => "Performance", "accessibility" => "Accessibility", "best_practices" => "Best practices", "seo" => "SEO"}
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    -# Averages per category rather than per page, so a weakness the whole
+    -# site shares, like contrast or missing alt text, shows as one line.
+    = render layout: "shared/card", locals: {id: "category-averages", title: "Lighthouse categories", icon: "gauge"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Each category's average score across the pages listed, on both devices.
+      %div{class: "px-4 py-3"}
+        = dumbbell_chart(@category_averages.map { |category, scores| [category_labels[category], scores.values_at("mobile", "desktop")] },
+          keys: [["Mobile", ChartsHelper::SHARE_COLORS[1], :circle], ["Desktop", ChartsHelper::SHARE_COLORS[0], :square]],
+          x_title: "Average score", y_title: "Category", label: "Average Lighthouse score per category on mobile and desktop")
+
+    = render layout: "shared/card", locals: {id: "weakest-pages", title: "Weakest pages on a phone", icon: "alert-triangle"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        The lowest average across all four categories first, coloured as PageSpeed Insights colours a score.
+      - if @weakest.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No page has been tested on mobile yet.
+      - else
+        %div{class: "overflow-x-auto px-4 py-3"}
+          %table{class: "w-full border-separate border-spacing-0.5 text-xs"}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "px-1 py-1 text-left font-medium"} Page
+                - {"performance" => "Perf.", "accessibility" => "A11y", "best_practices" => "BP", "seo" => "SEO"}.each do |category, short|
+                  %th{scope: "col", class: "px-1 py-1 text-center font-medium whitespace-nowrap", title: category_labels[category]}= short
+            %tbody
+              - @weakest.each do |result|
+                %tr
+                  %th{scope: "row", class: "max-w-48 truncate px-1 py-0.5 text-left font-medium", title: result.url}
+                    = result.page_path || result.url
+                  - category_labels.each_key do |category|
+                    - score = result.public_send(category)
+                    %td{class: "w-14 rounded px-1 py-1 text-center tabular-nums #{lighthouse_cell_class(score)}"}= score ? (score * 100).round : "—"
+
+  %div{class: "relative overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+        %tr
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", aria: {label: "Row number"}} #
+          - sort_keep = [@filtering, @pagination]
+          = sort_header @sorting, "Page", "url", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Device
+          = sort_header @sorting, "Performance", "performance", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold", title: "Accessibility, best practices and SEO"} A11y · BP · SEO
+          = sort_header @sorting, "LCP", "field_lcp_ms", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+          = sort_header @sorting, "INP", "field_inp_ms", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+          = sort_header @sorting, "CLS", "field_cls", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5 font-semibold", title: "Real Chrome users' overall verdict on the page, from CrUX"} Overall
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold whitespace-nowrap", title: "First Contentful Paint, Speed Index, Total Blocking Time and Cumulative Layout Shift in the lab test"}
+            Lab FCP · SI · TBT · CLS
+          = sort_header @sorting, "Tested", "fetched_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
+      %tbody
+        - @results.each.with_index(@pagination.first_item) do |result, number|
+          %tr{class: "border-b border-slate-100 last:border-b-0 hover:bg-slate-50"}
+            %td{class: "px-3 py-2 text-right tabular-nums text-slate-500"}= number_with_delimiter(number)
+            %td{class: "px-3 py-2"}
+              = blog_page_link(result.page_path || result.url, page_view_path(result.page_path || "/"), live: result.url)
+              - if result.error
+                %span{class: "block truncate text-xs text-red-700", title: result.error} Last test failed: #{result.error}
+            %td{class: "px-3 py-2 text-slate-500"}= result.strategy.capitalize
+            %td{class: "px-3 py-2 text-right tabular-nums #{lighthouse_score_class(result.performance)}"}
+              = result.performance ? (result.performance * 100).round : "—"
+            %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-600"}
+              = %i[accessibility best_practices seo].map { |category| result[category] ? (result[category] * 100).round : "—" }.join(" · ")
+            - [[:lcp_ms, result.field_lcp_ms, ->(value) { "#{number_with_precision(value / 1000.0, precision: 1)} s" }],
+               [:inp_ms, result.field_inp_ms, ->(value) { "#{value.round} ms" }],
+               [:cls, result.field_cls, ->(value) { number_with_precision(value, precision: 2) }]].each do |metric, value, label|
+              %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap #{web_vital_rating_class(Google::PageSpeed::Result.rating(metric, value))}",
+                title: ("The whole site's figure: too few Chrome users visited this page" if value && result.field_source == "origin")}
+                - if value
+                  = label.(value)
+                  - if result.field_source == "origin"
+                    %span{class: "text-xs text-slate-400"} site
+                - else
+                  %span{class: "text-slate-400", title: "Too few Chrome users for Google to say"} —
+            %td{class: "px-3 py-2 whitespace-nowrap"}= field_category_label(result.field_category)
+            %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-600"}
+              = %i[lab_fcp_ms lab_speed_index_ms lab_tbt_ms lab_cls].map { |field| lab_value(field, result[field]) }.join(" · ")
+            %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}
+              = link_to google_page_speed_history_path(url: result.url, device: result.strategy), title: "Every run of this page on #{result.strategy}",
+                class: "hover:text-slate-900 hover:underline" do
+                = time_or_dash(result.fetched_at)
+
+  = pagination_nav @pagination, keep: [@filtering, @sorting]
+
+%p{class: "mt-4 text-xs text-slate-500"}
+  LCP, INP and CLS are real Chrome users' 75th percentiles, green when good and red when poor by Google's thresholds. Scores are out of 100,
+  from one lab test on Google's servers. Open a test's date for every run of that page.
