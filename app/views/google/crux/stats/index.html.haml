@@ -1,0 +1,67 @@
+- content_for :title, "Web Vitals history"
+- stats = @stats
+- latest = stats.last
+- dates = stats.map(&:date)
+- table_class = "w-full border-collapse text-sm"
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Web Vitals history
+    %p{class: "mt-1 text-sm text-slate-500"}
+      How fast the whole blog is for real Chrome users, from the Chrome UX Report: each point is the 75th percentile
+      over the 28 days ending that day. Kept here after Google drops it.
+    = last_sync_status("crux")
+  %div{class: "flex flex-wrap items-center gap-2"}
+    = link_to google_crux_stats_path(format: :csv),
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("download", size: 14)
+      Export CSV
+    = button_to sync_google_crux_stats_path, form_class: "inline-flex",
+      class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+      = icon("refresh", size: 14)
+      Sync
+
+%nav{class: "mb-4 flex flex-wrap gap-2", aria: {label: "Device"}}
+  - Google::Crux::Stat::FORM_FACTORS.each do |key, label|
+    - current = key == @form_factor
+    = link_to label, google_crux_stats_path(device: key.downcase), aria: {current: (current ? "page" : nil)},
+      class: "rounded-full border px-3 py-1 text-sm font-medium #{current ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}"
+
+- if latest.nil?
+  = render "shared/empty_state",
+    message: "No Chrome UX Report figures for this device yet. Sync to fetch them; a blog with few Chrome readers may have none."
+- else
+  = render layout: "shared/card", locals: {id: "latest", title: "28 days to #{l(latest.date)}", icon: "timer"} do
+    %div{class: "overflow-x-auto"}
+      %table{class: table_class}
+        %thead{class: "text-slate-500"}
+          %tr
+            %th{scope: "col", class: "#{th_class} text-left"} Metric
+            %th{scope: "col", class: "#{th_class} text-right", title: "75th percentile"} p75
+            %th{scope: "col", class: "#{th_class} text-right", title: "Share of readers in the good band"}
+              Good
+        %tbody
+          - Google::Crux::Stat::METRICS.each_key do |metric|
+            - value = latest.p75[metric]
+            %tr{class: "border-t border-slate-200"}
+              %td{class: "px-3 py-1.5 font-medium"}
+                = crux_metric_label(metric)
+                - if core_web_vital?(metric)
+                  %span{class: "ml-1 text-xs text-slate-400"} Core Web Vital
+              %td{class: "px-3 py-1.5 text-right tabular-nums #{web_vital_rating_class(Google::Crux::Stat.rating(metric, value))}"}
+                = crux_value(metric, value)
+              %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(latest.good[metric], :percent)
+
+  -# A chart per metric, since they're in different units and a shared axis
+  -# would flatten CLS to nothing.
+  %div{class: "mt-6 grid items-start gap-6 lg:grid-cols-2"}
+    - Google::Crux::Stat::METRICS.each_key do |metric|
+      - label = crux_metric_label(metric)
+      = render layout: "shared/card", locals: {id: "chart-#{metric}", title: "#{label} (p75)", icon: "trending-up"} do
+        %div{class: "px-4 py-3"}
+          = line_chart(dates, [ChartsHelper::Series.new(name: label, values: stats.map { |stat| stat.p75[metric] })],
+            y_title: crux_unit(metric), label: "#{label}, 75th percentile, by 28-day window")
+        - good, poor = Google::Crux::Stat::THRESHOLDS.fetch(metric)
+        %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          Good up to #{crux_value(metric, good)}, poor beyond #{crux_value(metric, poor)}.
