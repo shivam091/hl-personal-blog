@@ -88,6 +88,15 @@ shared:
             - label: Settings
               icon: settings
               route: google_analytics_settings
+        - label: PageSpeed
+          icon: zap
+          route: google_page_speed_results
+        - label: Web Vitals history
+          icon: timer
+          route: google_crux_stats
+        - label: Web Vitals (readers)
+          icon: gauge
+          route: google_analytics_web_vitals
         - label: reCAPTCHA
           icon: shield
           items:
