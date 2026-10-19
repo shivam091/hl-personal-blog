@@ -94,6 +94,16 @@ namespace :google do
     end
   end
 
+  namespace :page_speed do
+    desc "Run PageSpeed Insights on up to N pages, least recently tested first (default 30, credentials google.api_key): bin/rails 'google:page_speed:sync[limit]'"
+    task :sync, [:limit] => :environment do |_task, args|
+      limit = (args[:limit].presence || Google::PageSpeed::SyncService::DEFAULT_LIMIT).to_i
+      report_sync.call("PageSpeed sync", SyncRequest.track("page_speed", trigger: "rake", limit: limit) do
+        Google::PageSpeed::SyncService.call(limit: limit)
+      end)
+    end
+  end
+
   namespace :recaptcha do
     desc "Create and update daily reCAPTCHA score stats for every day Google still holds (credentials google.*, recaptcha.site_key)"
     task sync: :environment do

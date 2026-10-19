@@ -13,6 +13,16 @@ module Google
 
       METRICS = %w[LCP INP CLS FCP TTFB].freeze
       RATINGS = %w[good needs-improvement poor].freeze
+      # Google's good and poor bands for each metric, by the lowercase key
+      # the pages use; applied to a mean as a guide only, since Google rates
+      # the 75th percentile.
+      THRESHOLDS = {
+        "lcp" => [2500, 4000],
+        "inp" => [200, 500],
+        "cls" => [0.1, 0.25],
+        "fcp" => [1800, 3000],
+        "ttfb" => [800, 1800]
+      }.freeze
       # The blog sends CLS a thousandfold, since GA keeps an event's value
       # to whole numbers.
       CLS_SCALE = 1000.0
@@ -75,6 +85,16 @@ module Google
       end
 
       class << self
+        def rating(metric, value)
+          return if value.nil?
+
+          good, poor = THRESHOLDS.fetch(metric)
+          if value <= good then :good
+          elsif value <= poor then :needs_improvement
+          else :poor
+          end
+        end
+
         def grouped(criteria, by:)
           GroupedScope.new(criteria, keys: by, sums: GROUP_SUMS, derived: GROUP_DERIVED, row_class: Total)
         end
