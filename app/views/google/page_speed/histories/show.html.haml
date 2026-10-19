@@ -1,0 +1,73 @@
+- content_for :title, "#{@url} – PageSpeed history"
+- add_breadcrumb("History", google_page_speed_history_path(url: @url, device: @strategy))
+- scored = @runs.reject(&:error)
+-# A day's last run, since the axis is by day and runs are days apart.
+- by_day = scored.index_by { |run| run.fetched_at.to_date }
+- dates = by_day.keys
+- lab_fields = {lab_lcp_ms: "LCP", lab_fcp_ms: "FCP", lab_speed_index_ms: "Speed Index", lab_tbt_ms: "TBT", lab_cls: "CLS"}
+
+= link_to google_page_speed_results_path, class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
+  = icon("arrow-left")
+  PageSpeed
+
+%div{class: page_header_class}
+  %div{class: "min-w-0"}
+    %h1{class: "text-xl font-semibold tracking-tight break-all"}= @url
+    %p{class: subtitle_class}
+      Every PageSpeed run of this page, oldest first on the charts. A drop of
+      #{(Google::PageSpeed::ResultHistory::REGRESSION * 100).round} or more in the performance score from the run before is marked red.
+  = link_to google_page_speed_history_path(url: @url, device: @strategy, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+%nav{class: "mb-4 flex flex-wrap gap-2", aria: {label: "Device"}}
+  - Google::PageSpeed::Result::STRATEGIES.each do |strategy|
+    - current = strategy == @strategy
+    = link_to strategy.capitalize, google_page_speed_history_path(url: @url, device: strategy), aria: {current: (current ? "page" : nil)},
+      class: "rounded-full border px-3 py-1 text-sm font-medium #{current ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}"
+
+- if @runs.empty?
+  = render "shared/empty_state", message: "No runs kept for this device yet. Each test from now on is added here."
+- else
+  - if dates.size > 1
+    %div{class: split_grid_class}
+      = render layout: "shared/card", locals: {id: "scores", title: "Lighthouse scores", icon: "gauge"} do
+        %div{class: "px-4 py-3"}
+          = line_chart(dates, page_speed_history_series(by_day, Google::PageSpeed::Result::CATEGORIES, scale: 100),
+            y_title: "Score", label: "Lighthouse scores of each run")
+      = render layout: "shared/card", locals: {id: "lab-times", title: "Lab load times", icon: "clock"} do
+        %div{class: "px-4 py-3"}
+          = line_chart(dates, page_speed_history_series(by_day, %w[lab_lcp_ms lab_fcp_ms lab_speed_index_ms], scale: 0.001),
+            y_title: "Seconds", unit: " s", label: "Lab LCP, FCP and Speed Index of each run")
+
+  = render layout: "shared/card", locals: {id: "runs", title: "Runs", icon: "list"} do
+    %div{class: "overflow-x-auto"}
+      %table{class: table_class}
+        %thead{class: "text-slate-500"}
+          %tr
+            = report_th "Tested"
+            = report_th "Performance", :right
+            = report_th "A11y · BP · SEO", :right, title: "Accessibility, best practices and SEO"
+            - lab_fields.each_value do |label|
+              = report_th "Lab #{label}", :right
+            = report_th "Real readers"
+        %tbody
+          - @runs.each_with_index.reverse_each do |run, index|
+            - previous = @runs.first(index).reverse.find(&:performance)
+            - regressed = run.regressed_from?(previous)
+            %tr{class: ["border-t border-slate-200", ("bg-red-50" if regressed)]}
+              %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(run.fetched_at)
+              - if run.error
+                %td{colspan: lab_fields.size + 3, class: "px-3 py-1.5 text-xs text-red-700"} Failed: #{run.error}
+              - else
+                %td{class: "#{cell_class} whitespace-nowrap #{lighthouse_score_class(run.performance)}"}
+                  = run.performance ? (run.performance * 100).round : "—"
+                  - if regressed
+                    %span{class: "text-xs font-medium text-red-700", title: "Down from #{(previous.performance * 100).round} on the run before"}
+                      −#{((previous.performance - run.performance) * 100).round}
+                %td{class: "#{cell_class} whitespace-nowrap text-slate-600"}
+                  = %i[accessibility best_practices seo].map { |category| run[category] ? (run[category] * 100).round : "—" }.join(" · ")
+                - lab_fields.each_key do |field|
+                  %td{class: "#{cell_class} whitespace-nowrap"}= lab_value(field, run[field])
+                %td{class: "px-3 py-1.5 whitespace-nowrap"}= field_category_label(run.field_category)
