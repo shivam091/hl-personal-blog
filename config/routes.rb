@@ -16,7 +16,9 @@ Rails.application.routes.draw do
   resources :page_views, only: %i[index show], path: "page-views", constraints: {id: /.+/}
   resources :page_likes, only: %i[index show], path: "page-likes", constraints: {id: /.+/}
   resources :newsletter_subscribers, only: %i[index show destroy], path: "newsletter-subscribers"
-  resources :messages, only: %i[index show]
+  resources :messages, only: %i[index show] do
+    patch :review, on: :member
+  end
 
   # Reports join the blog's own figures with Google's, so they sit apart from
   # the pages of either source.
