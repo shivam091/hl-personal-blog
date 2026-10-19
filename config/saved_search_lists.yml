@@ -13,3 +13,4 @@ shared:
   export_requests: {label: Export requests, route: export_requests, controller: export_requests}
   url_inspections: {label: URL inspection, route: google_search_console_url_inspections, controller: google/search_console/url_inspections}
   sitemaps: {label: Sitemaps, route: google_search_console_sitemaps, controller: google/search_console/sitemaps}
+  page_speed: {label: PageSpeed, route: google_page_speed_results, controller: google/page_speed/results}
