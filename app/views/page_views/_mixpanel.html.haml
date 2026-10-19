@@ -1,0 +1,49 @@
+-# Left out until Mixpanel has synced anything, so a blog without it
+-# shows no empty card on every page.
+- if report.any?
+  - path = page_view.slug
+  - page = report.page(path)
+  - earlier = report.previous&.page(path)
+  - higher = DashboardHelper::HIGHER_IS_BETTER
+  - lower = DashboardHelper::Kpi.new(lower_is_better: true)
+  = render layout: "shared/card", locals: {id: "mixpanel", title: "How it was read", icon: "mouse-pointer", class: "mb-6",
+    actions: chart_granularity_picker(granularity, "Reading", "mixpanel-by")} do
+    - if page.nil? || page.page_views.zero?
+      %p{class: empty_note_class} Mixpanel saw no views of this page in the period.
+    - else
+      %dl{class: "grid grid-cols-2 gap-3 px-4 pt-3 lg:grid-cols-5"}
+        = render "dashboard/tile", label: "Mixpanel views", tile_icon: "eye", value: number_with_delimiter(page.page_views),
+          spark: report.page_daily(:page_views, path: path), hint: "Views of this page by readers Mixpanel may track.",
+          change: metric_change(page.page_views, earlier&.page_views, higher), compared_with: report.period.previous
+        = render "dashboard/tile", label: "Engaged time", tile_icon: "timer",
+          value: (engagement_duration(page.mean_engaged_seconds) if page.mean_engaged_seconds) || "—",
+          spark: report.daily_ratio(:engaged_seconds, :engaged_views, path: path), hint: "Seconds readers were active on this page, per view.",
+          change: metric_change(page.mean_engaged_seconds, earlier&.mean_engaged_seconds, higher, format: :duration), compared_with: report.period.previous
+        = render "dashboard/tile", label: "Scroll depth", tile_icon: "arrow-down", value: metric_value(page.mean_scroll_share, :percent),
+          spark: report.daily_ratio(:scroll_percent_sum, :engaged_views, path: path), hint: "How far down this page views got, on average.",
+          change: metric_change(page.mean_scroll_share, earlier&.mean_scroll_share, higher, format: :percent), compared_with: report.period.previous
+        = render "dashboard/tile", label: "Read through", tile_icon: "book-open", value: metric_value(page.read_through_share, :percent),
+          spark: report.daily_ratio(:read_through_views, :engaged_views, scale: 100, path: path),
+          hint: "Views that reached #{Mixpanel::PageStat::READ_THROUGH_PERCENT}% of this page.",
+          change: metric_change(page.read_through_share, earlier&.read_through_share, higher, format: :percent), compared_with: report.period.previous
+        = render "dashboard/tile", label: "Frustration", tile_icon: "alert-triangle", value: number_with_delimiter(page.frustrations),
+          hint: "Rage clicks, dead clicks and script errors on this page.",
+          change: metric_change(page.frustrations, earlier&.frustrations, lower), compared_with: report.period.previous
+      %div{class: "grid gap-6 px-4 py-3 lg:grid-cols-2"}
+        %div{class: "min-w-0"}
+          %p{class: "mb-1 text-xs font-medium text-slate-500"} Engaged time per view, per #{granularity.by}
+          = mixpanel_engaged_chart(report, granularity, path: path, label: "Mean seconds readers were active per view of this page, per #{granularity.by}")
+        %div{class: "min-w-0"}
+          %p{class: "mb-1 text-xs font-medium text-slate-500"} Read through and scroll depth, per #{granularity.by}
+          = line_chart(granularity.dates(report.dates), mixpanel_reading_series(report, granularity, path: path), y_title: "% of views", unit: "%",
+            label: "Share of this page's views read to the end, and mean scroll depth, per #{granularity.by}", per: granularity.per)
+        - if page.frustrations.positive?
+          %div{class: "min-w-0 lg:col-span-2"}
+            %p{class: "mb-1 text-xs font-medium text-slate-500"} Frustration per #{granularity.by}
+            = stacked_chart(granularity.dates(report.dates), mixpanel_frustration_series(report, granularity, path: path), per: granularity.per,
+              total_name: "All", y_title: "Count", label: "Rage clicks, dead clicks and script errors on this page, per #{granularity.by}")
+    %p{class: "#{card_footer_class} text-xs"}
+      = link_to mixpanel_report_path(**@period.query),
+        class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+        Mixpanel report
+        = icon("chevron-right", size: 14)

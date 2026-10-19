@@ -1,7 +1,7 @@
 # Personal Blog
 
 Rails 8 backend for the blog: serves the blog's content API and pulls in
-external data from Google's APIs for an admin dashboard. Full-stack app
+external data from Google's APIs and Mixpanel for an admin dashboard. Full-stack app
 (HAML views, Hotwire/Turbo + Stimulus, Tailwind CSS).
 
 ## Stack
@@ -150,6 +150,30 @@ annotations ([`AnnotationService`](app/services/google/analytics/annotation_serv
 For that, the service account must be an Editor of the property (Admin →
 Property access management).
 
+## Mixpanel
+
+`/mixpanel` reports what the blog sends to Mixpanel alongside Google
+Analytics: how long readers were active on each page and how far they
+scrolled, rage clicks, dead clicks and script errors, a day's funnel from
+viewing a page to subscribing, and the share of readers whose browser
+blocked Google Analytics. Session replays and heatmaps stay in Mixpanel.
+
+[`Mixpanel::SyncService`](app/services/mixpanel/sync_service.rb) copies each
+day from Mixpanel's raw export, one query per day against the project's 60
+an hour, into daily page, site and issue stats. Only events from the blog's
+own host (`blog.url`) count, so a local run or a preview deploy sending to
+the same project is left out. Recent days are fetched again, since Mixpanel
+accepts events sent days late.
+
+| Rake task | Page button | Does |
+|---|---|---|
+| `mixpanel:sync[days]` | **Sync** | Copies the last N days (default 3) |
+| `mixpanel:annotate` | **Mark posts** | Marks posts published in the last 30 days on Mixpanel's charts |
+| `mixpanel:describe` | **Describe events** | Sends the blog's event and property descriptions ([`TrackingPlan`](app/models/mixpanel/tracking_plan.rb)) to Mixpanel's Lexicon |
+
+The retention card needs Mixpanel's Query API, which its Free plan doesn't
+include; the sync skips it there rather than failing.
+
 ## Request logs
 
 Every request (except `/up` and assets) is saved as a
@@ -274,6 +298,16 @@ ipinfo:
 # overrides the feed.
 blog:
   url: https://harshal-ladhe.vercel.app
+
+# A Mixpanel service account (Organization settings → Service accounts) with
+# at least the Analyst role on the blog's project. project_id is the number
+# in the project's URL; data_host is the export host of the project's region:
+# data.mixpanel.com (US), data-eu.mixpanel.com or data-in.mixpanel.com.
+mixpanel:
+  project_id: "1234567"
+  service_account_username: ...
+  service_account_secret: ...
+  data_host: data.mixpanel.com
 ```
 
 On Render, set the `RAILS_MASTER_KEY` environment variable to the contents of

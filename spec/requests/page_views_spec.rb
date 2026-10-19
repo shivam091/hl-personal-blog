@@ -311,5 +311,25 @@ RSpec.describe "Page views", type: :request do
       get page_view_path("/nope")
       expect(response).to have_http_status(:not_found)
     end
+
+    it "shows how Mixpanel's readers read the page, only once Mixpanel has synced" do
+      travel_to(Time.zone.parse("2026-10-12 12:00")) do
+        PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
+
+        get page_view_path("/post/a")
+        expect(Nokogiri::HTML5(response.body).at_css("#mixpanel")).to be_nil
+
+        Mixpanel::SiteStat.create!(date: Date.new(2026, 10, 10), visitors: 5, page_views: 6)
+        Mixpanel::PageStat.create!(date: Date.new(2026, 10, 10), page_path: "/post/a", page_views: 6, engaged_views: 4,
+          engaged_seconds: 360, scroll_percent_sum: 300, read_through_views: 3, dead_clicks: 2)
+
+        get page_view_path("/post/a")
+
+        card = Nokogiri::HTML5(response.body).at_css("#mixpanel").ancestors("section").first
+        figures = card.css("dl > div").to_h { |tile| [tile.at_css("dt").xpath("text()").text.squish, tile.at_css("dd span").text.strip] }
+        expect(figures).to eq("Mixpanel views" => "6", "Engaged time" => "1m 30s", "Scroll depth" => "75.0%", "Read through" => "75.0%", "Frustration" => "2")
+        expect(card.text).to include("Engaged time per view, per day", "Frustration per day")
+      end
+    end
   end
 end

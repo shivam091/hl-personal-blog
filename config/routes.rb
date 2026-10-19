@@ -113,6 +113,14 @@ Rails.application.routes.draw do
     end
   end
 
+  namespace :mixpanel do
+    resource :report, only: :show, path: "" do
+      post :sync
+      post :annotate
+      post :describe
+    end
+  end
+
   resources :request_logs, only: %i[index show destroy], path: "request-logs" do
     collection do
       post :clear

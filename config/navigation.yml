@@ -30,6 +30,10 @@ shared:
           icon: target
           route: ranking_opportunity_report
 
+    - label: Mixpanel
+      icon: mouse-pointer
+      route: mixpanel_report
+
     - label: Google
       icon: globe
       items:
