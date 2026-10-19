@@ -34,6 +34,10 @@ class Message
     Message.with_email(email).where(:_id.ne => id).order(created_at: :desc)
   end
 
+  def review
+    MessageReview.where(message_id: id).first
+  end
+
   def to_s
     "#{name} <#{email}>"
   end
