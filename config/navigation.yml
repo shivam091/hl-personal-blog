@@ -93,9 +93,19 @@ shared:
             - label: Site search
               icon: text-search
               route: google_analytics_site_search
+            - label: Web Vitals
+              full_label: Web Vitals (readers)
+              icon: gauge
+              route: google_analytics_web_vitals
             - label: Settings
               icon: settings
               route: google_analytics_settings
+        - label: PageSpeed
+          icon: zap
+          route: google_page_speed_results
+        - label: Web Vitals history
+          icon: timer
+          route: google_crux_web_vitals_histories
         - label: reCAPTCHA
           icon: shield
           items:
