@@ -10,6 +10,66 @@ RSpec.describe "Messages", type: :request do
     }.compact)
   end
 
+  describe "marking a message as spam or genuine" do
+    include ActiveJob::TestHelper
+
+    it "keeps the verdict apart from the message and queues reporting it to reCAPTCHA" do
+      id = insert_message(name: "Bot", assessment: "projects/123/assessments/abc").inserted_id
+
+      expect { patch review_message_path(id, verdict: "spam") }.to have_enqueued_job(Google::Recaptcha::AnnotateMessageJob)
+      expect(response).to redirect_to(message_path(id))
+      expect(flash[:notice]).to eq("Marked the message from Bot as spam and reporting it to reCAPTCHA.")
+      expect(MessageReview.all.to_a.sole).to have_attributes(message_id: id, verdict: "spam", annotated_at: nil)
+      expect(Message.find(id).attributes).not_to have_key("verdict")
+
+      get message_path(id)
+      page = Nokogiri::HTML5(response.body)
+      expect(page.at_css("button[aria-pressed=true]").text.squish).to eq("Spam")
+      expect(page.at_css("#message-feedback").text).to eq("Sending to reCAPTCHA…")
+    end
+
+    it "changes a verdict in place, sending the new one" do
+      id = insert_message(name: "Ada", assessment: "projects/123/assessments/abc").inserted_id
+      patch review_message_path(id, verdict: "spam")
+
+      expect { patch review_message_path(id, verdict: "genuine") }.to have_enqueued_job(Google::Recaptcha::AnnotateMessageJob)
+      expect(MessageReview.all.to_a.sole.verdict).to eq("genuine")
+    end
+
+    it "marks a message checked without an assessment, saying it can't be reported" do
+      id = insert_message(name: "Ada").inserted_id
+
+      patch review_message_path(id, verdict: "genuine")
+      expect(flash[:notice]).to include("not reported to reCAPTCHA: no assessment was kept with it")
+
+      get message_path(id)
+      expect(Nokogiri::HTML5(response.body).at_css("#message-feedback").text).to eq("Not sent: no reCAPTCHA assessment was kept with this message")
+    end
+
+    it "refuses an unknown verdict" do
+      id = insert_message(name: "Ada").inserted_id
+
+      patch review_message_path(id, verdict: "maybe"), headers: {"HTTP_REFERER" => messages_url}
+      expect(response).to redirect_to(messages_url)
+      expect(MessageReview.count).to eq(0)
+    end
+
+    it "badges each marked message in the list, with both verdicts offered" do
+      id = insert_message(name: "Bot").inserted_id
+      insert_message(name: "Ada")
+      patch review_message_path(id, verdict: "spam")
+
+      get messages_path
+      page = Nokogiri::HTML5(response.body)
+      expect(page.css("tbody span.bg-red-100").map(&:text)).to eq(["Spam"])
+      buttons = page.css("tbody form button")
+      expect(buttons.map { |button| button.text.squish }.uniq).to eq([""])
+      expect(buttons.map { |button| button["title"] }.tally)
+        .to eq("Mark as genuine" => 2, "Mark as spam" => 1, "Marked as spam" => 1)
+      expect(buttons.map { |button| button["aria-label"] }).to include("Marked as spam: message from Bot")
+    end
+  end
+
   it "lists messages newest first, with the full text and a reply link" do
     insert_message(name: "Older", created_at: Time.utc(2026, 9, 1))
     insert_message(name: "Newer", message: "Line one\nLine two", created_at: Time.utc(2026, 9, 2))
