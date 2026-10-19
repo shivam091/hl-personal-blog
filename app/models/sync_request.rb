@@ -40,7 +40,26 @@ class SyncRequest
     Kind.new(key: "analytics_annotations", section: "Analytics annotations", source: "Google Analytics", page: :google_analytics_settings_path,
       enqueue: ->(request) { Google::Analytics::AnnotationJob.perform_later(request_id: request.id.to_s) }),
     Kind.new(key: "recaptcha_metrics", section: "reCAPTCHA scores", source: "reCAPTCHA", page: :google_recaptcha_scores_path,
-      enqueue: ->(request) { Google::Recaptcha::MetricsSyncJob.perform_later(request_id: request.id.to_s) })
+      enqueue: ->(request) { Google::Recaptcha::MetricsSyncJob.perform_later(request_id: request.id.to_s) }),
+    Kind.new(
+      key: "page_speed",
+      section: "PageSpeed",
+      source: "PageSpeed Insights",
+      page: :google_page_speed_results_path,
+      enqueue: ->(request) {
+        Google::PageSpeed::SyncJob.perform_later(
+          limit: (request.limit || Google::PageSpeed::SyncService::DEFAULT_LIMIT),
+          request_id: request.id.to_s
+        )
+      }
+    ),
+    Kind.new(
+      key: "crux",
+      section: "Web Vitals history",
+      source: "Chrome UX Report",
+      page: :google_crux_web_vitals_histories_path,
+      enqueue: ->(request) { Google::Crux::SyncJob.perform_later(request_id: request.id.to_s) }
+    )
   ].index_by(&:key).freeze
 
   TRIGGERS = {"admin" => "Admin", "resync" => "Resync", "rake" => "Rake task", "job" => "Background job"}.freeze
