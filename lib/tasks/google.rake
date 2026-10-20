@@ -90,6 +90,15 @@ namespace :google do
     end
   end
 
+  namespace :safe_browsing do
+    desc "Check every outbound link readers have clicked against Google Safe Browsing (credentials google.api_key)"
+    task sync: :environment do
+      report_sync.call("Safe Browsing sync", SyncRequest.track("safe_browsing", trigger: "rake") do
+        Google::SafeBrowsing::SyncService.call
+      end)
+    end
+  end
+
   namespace :recaptcha do
     desc "Create and update daily reCAPTCHA score stats for every day Google still holds (credentials google.*, recaptcha.site_key)"
     task sync: :environment do
