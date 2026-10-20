@@ -107,6 +107,9 @@ shared:
         - label: Web Vitals history
           icon: timer
           route: google_crux_web_vitals_histories
+        - label: Link safety
+          icon: shield-alert
+          route: google_safe_browsing_link_checks
         - label: reCAPTCHA
           icon: shield
           items:
