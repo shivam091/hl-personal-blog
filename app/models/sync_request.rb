@@ -59,6 +59,13 @@ class SyncRequest
       source: "Chrome UX Report",
       page: :google_crux_stats_path,
       enqueue: ->(request) { Google::Crux::SyncJob.perform_later(request_id: request.id.to_s) }
+    ),
+    Kind.new(
+      key: "safe_browsing",
+      section: "Link safety",
+      source: "Safe Browsing",
+      page: :google_safe_browsing_link_checks_path,
+      enqueue: ->(request) { Google::SafeBrowsing::SyncJob.perform_later(request_id: request.id.to_s) }
     )
   ].index_by(&:key).freeze
 

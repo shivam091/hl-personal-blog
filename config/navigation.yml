@@ -97,6 +97,9 @@ shared:
         - label: Web Vitals (readers)
           icon: gauge
           route: google_analytics_web_vitals
+        - label: Link safety
+          icon: shield-alert
+          route: google_safe_browsing_link_checks
         - label: reCAPTCHA
           icon: shield
           items:
