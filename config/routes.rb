@@ -123,6 +123,12 @@ Rails.application.routes.draw do
       end
     end
 
+    namespace :safe_browsing, path: "link-safety" do
+      resources :link_checks, only: :index, path: "" do
+        post :sync, on: :collection
+      end
+    end
+
     namespace :recaptcha do
       resources :scores, only: :index do
         post :sync, on: :collection
