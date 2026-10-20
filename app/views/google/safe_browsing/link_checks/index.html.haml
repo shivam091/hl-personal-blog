@@ -1,0 +1,63 @@
+- content_for :title, "Link safety"
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Link safety
+    %p{class: subtitle_class}
+      Every link readers have clicked out of the blog, checked against Google Safe Browsing's malware and
+      phishing lists.
+    = last_sync_status("safe_browsing")
+  %div{class: toolbar_class}
+    = link_to list_url(@filtering, @sorting, format: :csv),
+      class: outline_button_class do
+      = icon("download", size: 14)
+      Export CSV
+    = button_to sync_google_safe_browsing_link_checks_path, form_class: "inline-flex",
+      class: outline_button_class do
+      = icon("refresh", size: 14)
+      Check links
+
+- if @flagged_count.positive?
+  %div{class: "mb-4 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}
+    = icon("alert-triangle", size: 18, class: "text-red-500")
+    %p
+      #{pluralize(@flagged_count, "link")} readers clicked #{@flagged_count == 1 ? "is" : "are"} listed by Google as unsafe.
+      Find where each is linked from and remove or replace it.
+
+= search_panel @filtering, keep: [@sorting, @pagination]
+= filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
+
+- if @pagination.total_count.zero?
+  = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
+    message: (@filtering.filtered? ? "No links match." : "No links checked yet. Check links to look up every outbound link readers have clicked.")
+- else
+  %div{class: table_card_class}
+    %table{class: "w-full border-collapse text-left text-sm"}
+      %thead{class: table_head_class}
+        %tr
+          %th{scope: "col", class: list_heading_right_class, aria: {label: "Row number"}} #
+          - sort_keep = [@filtering, @pagination]
+          = sort_header @sorting, "Link", "url", keep: sort_keep, class: list_heading_class
+          %th{scope: "col", class: list_heading_class} Status
+          = sort_header @sorting, "Flagged since", "flagged_at", keep: sort_keep, class: list_heading_class
+          = sort_header @sorting, "Checked", "checked_at", keep: sort_keep, class: list_heading_class
+      %tbody
+        - @checks.each.with_index(@pagination.first_item) do |check, number|
+          %tr{class: "border-b border-slate-100 last:border-b-0 hover:bg-slate-50"}
+            %td{class: muted_number_cell_class}= number_with_delimiter(number)
+            -# Not a live link: a flagged one shouldn't be a click away.
+            %td{class: "max-w-xl px-3 py-2"}
+              %span{class: "block truncate font-medium", title: check.url}= check.url
+            %td{class: "px-3 py-2 whitespace-nowrap"}
+              - if check.flagged?
+                %span{class: "rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"}
+                  = check.threat_labels.join(", ")
+              - else
+                %span{class: "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"}
+                  Safe
+            %td{class: muted_cell_class}
+              = time_or_dash(check.flagged_at)
+            %td{class: muted_cell_class}
+              = time_or_dash(check.checked_at)
+
+  = pagination_nav @pagination, keep: [@filtering, @sorting]

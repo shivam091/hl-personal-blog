@@ -97,6 +97,9 @@ shared:
         - label: PageSpeed
           icon: zap
           route: google_page_speed_results
+        - label: Link safety
+          icon: shield-alert
+          route: google_safe_browsing_link_checks
         - label: reCAPTCHA
           icon: shield
           items:
