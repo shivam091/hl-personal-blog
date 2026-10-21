@@ -1,0 +1,48 @@
+- content_for :title, "Page gaps"
+- page_gap = @page_gap
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Page gaps
+    %p{class: subtitle_class}
+      Each page's views counted by the blog against GA's. Readers who decline or block GA lose every page alike, so a page
+      losing far more than the rest has a problem of its own.
+    %p{class: "mt-1 text-sm"}= link_to "Back to the consent report", consent_report_path(**@period.query), class: "text-slate-600 hover:underline"
+  = link_to list_url(@period, @sorting, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "google/shared/period", period: @period, keep: [@sorting], compare: false
+
+- if !page_gap.any?
+  = render "shared/empty_state", message: "GA hasn't synced yet, so there is nothing to compare the blog's views with."
+- elsif @rows.empty?
+  = render "shared/empty_state", message: "No page views recorded in #{@period}."
+- else
+  - flagged = page_gap.flagged
+  - median = page_gap.median_percent
+  = render "shared/period_notes", notes: ["Only the #{pluralize(page_gap.days_covered, "day")} GA has synced in #{@period} are counted."]
+  - if median
+    %p{class: "mb-3 text-sm text-slate-600"}
+      The median page loses #{number_to_percentage(median * 100, precision: 1)} of its views to GA. A page is flagged when it loses
+      #{(PageGap::MARGIN * 100).round} points more than that, with at least #{PageGap::MIN_VIEWS} views.
+      - if flagged.any?
+        #{pluralize(flagged.size, "page")} flagged.
+  %div{id: "page-gap-table", class: "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"}
+    %div{class: "relative overflow-x-auto"}
+      %table{class: "w-full border-collapse text-left text-sm"}
+        %thead{class: table_head_class}
+          %tr
+            - {"slug" => "Page", "first_party" => "Our views", "analytics" => "GA views", "gap" => "Gap", "gap_percent" => "Gap %"}.each do |column, heading|
+              = sort_header @sorting, heading, column, keep: [@period], class: ["px-3 py-2.5 font-semibold whitespace-nowrap", ("text-right" unless column == "slug")]
+            %th{scope: "col", class: "px-3 py-2.5 font-semibold whitespace-nowrap"} Flag
+        %tbody
+          - @rows.each do |row|
+            %tr{class: ["border-b border-slate-100 last:border-b-0 hover:bg-slate-50", ("bg-amber-50" if row.flagged)]}
+              %td{class: "px-3 py-2 font-medium"}= row.slug
+              %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.first_party)
+              %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.analytics)
+              %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.gap)
+              %td{class: "px-3 py-2 text-right tabular-nums"}= row.percent ? number_to_percentage(row.percent * 100, precision: 1) : "—"
+              %td{class: "px-3 py-2 whitespace-nowrap"}= row.flagged ? "Well above the median" : ""
