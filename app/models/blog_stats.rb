@@ -112,6 +112,13 @@ class BlogStats
     sum_by(facts(metric, within, nil), &:country)
   end
 
+  # Against the compared country's total over the same dates when one is
+  # picked, so every country reads against one audience rather than itself.
+  def compared_by_country(metric)
+    previous = period.previous
+    period.compare_countries? ? Hash.new(total(metric, previous)) : by_country(metric, previous)
+  end
+
   def by_page(metric, within = period, country: within.country || self.country)
     sum_by(facts(metric, within, country), &:slug)
   end
@@ -203,9 +210,12 @@ class BlogStats
     :analytics_views, keyword_init: true
   ) do
     class << self
-      def to_csv(rows)
+      # AI impressions are Google's totals over the latest upload's range, so
+      # the range goes in their heading rather than following the period.
+      def to_csv(rows, ai: nil)
+        ai = nil unless ai&.covered
         CSV.generate do |csv|
-          csv << FUNNEL_CSV_HEADERS
+          csv << [*FUNNEL_CSV_HEADERS, *("AI impressions #{ai.covered.begin.iso8601} to #{ai.covered.end.iso8601}" if ai)]
           rows.each do |row|
             csv << [
               row.country,
@@ -216,7 +226,8 @@ class BlogStats
               row.subscriber_rate&.round(4),
               row.messages,
               row.search_clicks,
-              row.analytics_views
+              row.analytics_views,
+              *(ai.countries.fetch(row.country, 0) if ai)
             ]
           end
         end
