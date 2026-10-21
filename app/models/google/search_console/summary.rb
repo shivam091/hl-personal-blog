@@ -41,6 +41,16 @@ module Google
       # Two or more of the blog's pages each shown for one query, splitting
       # Google's attention between them.
       Competition = Struct.new(:query, :clicks, :impressions, :pages, keyword_init: true)
+      # A page's or query's clicks against the period before, nil when that
+      # period wasn't synced, so a first sync doesn't read as everything new.
+      Mover = Struct.new(:key, :clicks, :impressions, :previous_clicks, keyword_init: true) do
+        def change
+          clicks - previous_clicks.to_i
+        end
+      end
+      # As Search Console's Insights lists them: a few, so the card is read
+      # at a glance.
+      MOVERS = 5
       CtrPoint = Struct.new(:query, :position, :ctr, :clicks, :impressions, :expected, keyword_init: true) do
         def below?
           expected.to_f.positive? && ctr < expected * CTR_SHORTFALL
@@ -287,6 +297,43 @@ module Google
         DeviceStat.grouped(criteria, by: [:device]).index_by { |row| row[:device].to_s.capitalize }
       end
 
+      def top_pages(limit: MOVERS)
+        top(page_movers, limit)
+      end
+
+      def trending_pages(direction, limit: MOVERS)
+        trending(page_movers, direction, limit)
+      end
+
+      def top_query_movers(limit: MOVERS)
+        top(query_movers, limit)
+      end
+
+      def trending_queries(direction, limit: MOVERS)
+        trending(query_movers, direction, limit)
+      end
+
+      # Pages aren't split by country, so a country compared with another
+      # would compare a page with itself.
+      def previous_pages?
+        compared? && !period.compare_countries?
+      end
+
+      # Every search type but web, which is most of the totals already; rows
+      # stored before search types existed have none, and read as web.
+      def search_types(within = period)
+        rows = Stat.grouped(totals_criteria(within), by: [:search_type]).to_a.group_by { |row| row[:search_type] || "web" }
+        (Performance::SEARCH_TYPES - ["web"]).filter_map do |type|
+          impressions = rows.fetch(type, []).sum(&:impressions)
+          [type, rows[type].sum(&:clicks), impressions] if impressions.positive?
+        end
+      end
+
+      # So a page reads as the post's title rather than its path.
+      def page_names
+        @page_names ||= FeedEntry.only(:_id, :name).to_h { |entry| [IndexCoverage.path_of(entry.url), entry.name] }
+      end
+
       def days_with_data(within = period)
         Stat.site_totals.where(date: within.from..within.to).distinct(:date).map(&:to_date)
       end
@@ -378,6 +425,44 @@ module Google
         return curve[lower || upper] if lower.nil? || upper.nil? || lower == upper
 
         curve[lower] + (curve[upper] - curve[lower]) * (position - lower) / (upper - lower)
+      end
+
+      def page_movers
+        @page_movers ||= movers(pages.values, (pages(period.previous).values if previous_pages?), :page_path)
+      end
+
+      def query_movers
+        @query_movers ||= movers(queries, (queries(period.previous) if compared?), :query)
+      end
+
+      # From either period, so one that lost every click still trends down.
+      def movers(now, before, key)
+        current = now.index_by { |row| row[key] }
+        previous = before&.index_by { |row| row[key] }
+        (current.keys | previous.to_h.keys).compact.map do |name|
+          Mover.new(
+            key: name,
+            clicks: current[name]&.clicks || 0,
+            impressions: current[name]&.impressions || 0,
+            previous_clicks: (previous[name]&.clicks || 0 if previous)
+          )
+        end
+      end
+
+      def top(movers, limit)
+        movers.select { |mover| mover.clicks.positive? }.sort_by { |mover| [-mover.clicks, -mover.impressions, mover.key.to_s] }.first(limit)
+      end
+
+      # Empty until the period before was synced, since every row would
+      # otherwise trend up from nothing.
+      def trending(movers, direction, limit)
+        return [] if movers.none? { |mover| mover.previous_clicks }
+
+        rising = direction == :up
+        movers
+          .select { |mover| rising ? mover.change.positive? : mover.change.negative? }
+          .sort_by { |mover| [rising ? -mover.change : mover.change, -mover.clicks, mover.key.to_s] }
+          .first(limit)
       end
 
       # Most seen first, since a query seen once is mostly noise.
