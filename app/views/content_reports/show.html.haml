@@ -1,0 +1,404 @@
+- content_for :title, "Content report"
+- content = @content
+- table_class = "w-full border-collapse text-sm"
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+- export_class = "inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline"
+- below_class = "text-amber-700"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Content report
+    %p{class: "mt-1 text-sm text-slate-500"}
+      Posts, tutorials and snippets: what each kind earns, where entries drop out, and what's worth refreshing.
+    = last_sync_status("feed")
+  = link_to list_url(@period, @filtering, format: :csv),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: []
+
+- if !content.any?
+  = render "shared/empty_state", message: "No feed entries yet. Sync them from Feed entries."
+- else
+  - if @stats.country
+    %p{class: "mb-4 text-sm text-slate-600"}
+      Views and likes are from #{country_label(@stats.country)}; search clicks, indexing and Analytics'
+      figures cover every country.
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "by-type", title: "By type", icon: "book-open"} do
+      %div{class: "overflow-x-auto"}
+        = render "content_reports/by_type", rows: content.by_type, table_class: table_class, th_class: th_class
+
+    -# Each step's bar is a share of everything published, so the steepest
+    -# drop is where entries are lost.
+    = render layout: "shared/card", locals: {id: "seo-funnel", title: "From published to read", icon: "trending-up"} do
+      - steps = content.funnel
+      - published = steps.first.last
+      %ol{class: "space-y-2 px-4 py-3 text-sm"}
+        - steps.each_with_index do |(label, count), index|
+          - before = index.zero? ? nil : steps[index - 1].last
+          %li
+            %div{class: "mb-1 flex justify-between gap-3"}
+              %span{class: "font-medium"}= label
+              %span{class: "tabular-nums"}
+                = number_with_delimiter(count)
+                - if before&.positive? && count < before
+                  %span{class: "text-xs text-red-700"} −#{number_to_percentage((before - count) * 100.0 / before, precision: 0)}
+            = meter(count, published, label: label)
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Search, reads and likes count entries with any in the period; the sitemap and index are as they stand now.
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "not-in-search", title: "Not shown in search", icon: "eye-off"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Entries Google didn't show once in the period, oldest first, with the first step each hasn't reached. Ones
+        published in the last #{ContentStats::NEW_ENTRY_DAYS} days may simply not have been shown yet.
+      - if !content.search_synced?
+        %p{class: "px-4 py-3 text-sm text-slate-500"}
+          No Search Console figures yet. Sync them from Search performance.
+      - else
+        - rows = content.not_in_search
+        - if rows.empty?
+          %p{class: "px-4 py-3 text-sm text-slate-500"} Every entry was shown in search in this period.
+        - else
+          %div{class: "overflow-x-auto"}
+            %table{class: table_class}
+              %thead{class: "text-slate-500"}
+                %tr
+                  %th{scope: "col", class: "#{th_class} text-left"} Entry
+                  %th{scope: "col", class: "#{th_class} text-left"} Why
+                  %th{scope: "col", class: "#{th_class} text-right"} Published
+              %tbody
+                - rows.each do |item|
+                  %tr{class: "border-t border-slate-200"}
+                    %td{class: "w-full px-3 py-1.5"}
+                      %div{class: "flex items-center gap-1.5"}
+                        = blog_page_link(item.entry.name, page_view_path(item.path), live: item.path)
+                        - if content.new_entry?(item)
+                          %span{class: "shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"}
+                            New
+                    %td{class: "px-3 py-1.5 whitespace-nowrap #{below_class unless item.indexed}"}= item.search_gap
+                    %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(item.entry.published_at.to_date)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "not-in-search"), class: export_class do
+          = icon("download", size: 12)
+          CSV
+
+    -# GA's Organic Search sessions rather than its landing pages, since
+    -# landing pages aren't split by channel and Search Console's clicks are
+    -# only search readers.
+    = render layout: "shared/card", locals: {id: "search-leaks", title: "Search readers who don't stay", icon: "log-out"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Entries with #{ContentStats::MIN_SEARCH_CLICKS}+ search clicks whose readers from search engage less often than
+        the site's #{metric_value(content.site_search_engagement_rate, :rate)}: they rank, but the opening doesn't give
+        searchers what they came for.
+      - rows = content.search_leaks
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No entry clicked from search loses its readers in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Entry
+                %th{scope: "col", class: "#{th_class} text-right", title: "Clicks from Google Search, Search Console"} Clicks
+                %th{scope: "col", class: "#{th_class} text-right", title: "Organic Search sessions, Analytics"} Sessions
+                %th{scope: "col", class: "#{th_class} text-right"} Engaged
+                %th{scope: "col", class: "#{th_class} text-right", title: "Engagement per session"} Time
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row.item.entry.name, page_view_path(row.item.path), live: row.item.path)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.item.clicks)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.sessions)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums #{below_class}"}= metric_value(row.engagement_rate, :rate)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.engagement_seconds_per_session, :duration)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "search-readers"), class: export_class do
+          = icon("download", size: 12)
+          Every entry's search clicks and readers as CSV
+
+  -# Both measures side by side, since a short read can still be finished
+  -# and a long engaged time can still stop halfway.
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "reading", title: "How far readers get", icon: "book-open"} do
+      - site_time = content.site_engagement_seconds_per_reader
+      - site_read_through = content.site_read_through
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Entries with #{Google::Analytics::Insights::MIN_VIEWS}+ Analytics views, most read first. Read-through is the share
+        of views that reached the end of the page (GA's scroll event). Under the site's #{metric_value(site_time, :duration)}
+        per reader or #{metric_value(site_read_through, :percent)} read-through is in amber.
+      - rows = content.reading
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No entry has enough Analytics views in this period.
+      - else
+        - if !content.scrolls?
+          %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-amber-700"}
+            No scroll events in this period: is enhanced measurement's scroll tracking on in GA?
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Entry
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+                %th{scope: "col", class: "#{th_class} text-right", title: "Engagement time per active user"} Engaged per reader
+                %th{scope: "col", class: "#{th_class} text-right"} Read-through
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row.item.entry.name, page_view_path(row.item.path), live: row.item.path)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.views)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums #{below_class if site_time && row.engagement_seconds_per_reader < site_time}"}
+                    = metric_value(row.engagement_seconds_per_reader, :duration)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums #{below_class if site_read_through && row.read_through < site_read_through}"}
+                    = metric_value(row.read_through, :percent)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "reading"), class: export_class do
+          = icon("download", size: 12)
+          Every entry as CSV
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "decay", title: "Age against views", icon: "clock"} do
+      - points = content.decay_points
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Each entry's views in the period against how long it had been out by the period's end. High on the right are evergreen; low
+        on the right have faded.
+      - if points.empty? || points.all? { |point| point.item.views.zero? }
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No entry was read in this period.
+      - else
+        - colors = FeedEntry::TYPES.zip(ChartsHelper::SHARE_COLORS).to_h
+        - x_max = round_top([points.map(&:age_months).max, 1].max)
+        %div{class: "px-4 py-3"}
+          = scatter_chart(points.map { |point| ChartsHelper::ScatterPoint.new(x: point.age_months, y: point.item.views, color: colors[point.item.type],
+              tip: chart_tip(point.item.entry.name, [{value: number_with_delimiter(point.item.views), name: "views", color: colors[point.item.type]},
+                {value: l(point.item.entry.published_at.to_date), name: "published"}, {value: point.item.type.capitalize, name: "type"}])) },
+            x_min: 0, x_max: x_max, x_ticks: [0, x_max / 4.0, x_max / 2.0, x_max * 3 / 4.0, x_max],
+            x_tick: ->(months) { number_with_precision(months, precision: 1, strip_insignificant_zeros: true) }, y_tick: ->(views) { compact_number(views) },
+            x_title: "Months since publishing", y_title: "Views", label: "Views in the period against each entry's age",
+            key: colors.map { |type, color| [type.pluralize.capitalize, color] })
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "refresh", title: "Worth refreshing", icon: "refresh"} do
+      - rows = content.refresh_candidates
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Not updated in over 6 months, yet still read #{ContentStats::MIN_VIEWS_TO_REFRESH}+ times in the period.
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} Nothing stale is still drawing readers.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Entry
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+                %th{scope: "col", class: "#{th_class} text-right"} Updated
+            %tbody
+              - rows.each do |item|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(item.entry.name, page_view_path(item.path), live: item.path)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(item.views)
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(item.entry.last_modified_at.to_date)
+
+    -# Beside what's worth refreshing, so how often entries are revisited
+    -# can be read against how many need it.
+    = render layout: "shared/card", locals: {id: "updates", title: "Updates after publishing", icon: "pencil"} do
+      - updates = content.updates
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        - typical = ", typically #{pluralize(updates.median_days, "day")} later" if updates.median_days
+        #{number_with_delimiter(updates.updated)} of #{pluralize(content.items.size, "entry")} updated after the day they went
+        out#{typical}. Every entry, by its latest update, whatever the period.
+      %div{class: "border-b border-slate-200 px-4 py-3"}
+        = ranking_chart(updates.bands.map { |band, count| [band, count, "bg-slate-600", ChartsHelper::BAR_COLOR] },
+          total: content.items.size, x_title: "Entries", y_title: "Latest update", label: "Entries by how long after publishing they were last updated")
+      - if updates.latest.any?
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Latest updated
+                %th{scope: "col", class: "#{th_class} text-right"} Published
+                %th{scope: "col", class: "#{th_class} text-right"} Updated
+            %tbody
+              - updates.latest.each do |item|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(item.entry.name, page_view_path(item.path), live: item.path)
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(item.entry.published_at.to_date)
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(item.entry.last_modified_at.to_date)
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "tags", title: "Tags", icon: "list"} do
+      - rows = content.tags
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No tagged entries.
+      - else
+        -# Per entry, so a tag on many middling entries doesn't outrank one
+        -# whose few entries are each read far more.
+        %div{class: "border-b border-slate-200 px-4 py-3"}
+          = ranking_chart(rows.sort_by { |row| [-row[:average_views], row[:tag]] }.map { |row| [row[:tag], row[:average_views].round, "bg-slate-600", ChartsHelper::BAR_COLOR] },
+            total: nil, x_title: "Views per entry", y_title: "Tag", label: "Views per entry for each of the most viewed tags")
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Tag
+                %th{scope: "col", class: "#{th_class} text-right"} Entries
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+                %th{scope: "col", class: "#{th_class} text-right"} Like rate
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium"}= row[:tag]
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row[:entries])
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row[:views])
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= rate_or_dash(row[:like_rate])
+
+    -# Search clicks beside views, since a broad section can be found through
+    -# Google without being read much once there, or the other way round.
+    = render layout: "shared/card", locals: {id: "categories", title: "Categories", icon: "grid"} do
+      - rows = content.categories
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No entries in a category.
+      - else
+        %div{class: "border-b border-slate-200 px-4 py-3"}
+          = ranking_chart(rows.sort_by { |row| [-row[:average_views], row[:category]] }.map { |row| [row[:category], row[:average_views].round, "bg-slate-600", ChartsHelper::BAR_COLOR] },
+            total: nil, x_title: "Views per entry", y_title: "Category", label: "Views per entry for each category")
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Category
+                %th{scope: "col", class: "#{th_class} text-right"} Entries
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+                %th{scope: "col", class: "#{th_class} text-right"} Like rate
+                %th{scope: "col", class: "#{th_class} text-right", title: "Clicks from Google Search, Search Console"} Clicks
+                %th{scope: "col", class: "#{th_class} text-right", title: "Search clicks per entry"} Per entry
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium"}= row[:category]
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row[:entries])
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row[:views])
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= rate_or_dash(row[:like_rate])
+                  - if content.search_synced?
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row[:clicks])
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}
+                      = number_with_precision(row[:clicks].fdiv(row[:entries]), precision: 1, delimiter: ",")
+                  - else
+                    %td{class: "px-3 py-1.5 text-right text-slate-400", title: "Search Console not synced yet"} —
+                    %td{class: "px-3 py-1.5 text-right text-slate-400", title: "Search Console not synced yet"} —
+        %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          An entry in several categories counts in each, so the rows can add up to more than the site's total.
+
+  -# Rows are weekdays and columns weeks, so a quiet month is a pale band
+  -# and a habit of publishing on one day is a dark row.
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "calendar", title: "Publishing calendar", icon: "calendar"} do
+      - weeks = content.calendar
+      - days = weeks.flatten
+      - max = days.map { |day| day.entries.size }.max.to_i
+      - cell_class = "size-3 rounded-sm hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900"
+      %div{class: "px-4 py-3"}
+        = chart_tooltip(label: "Entries published each day over the last year") do
+          %div{class: "overflow-x-auto pb-1"}
+            %div{class: "inline-grid gap-0.5 text-xs text-slate-400", style: "grid-template-columns: auto repeat(#{weeks.size}, 0.75rem)"}
+              %span
+              - weeks.each do |week|
+                - first = week.find { |day| day.date.day == 1 }
+                %span{class: "h-4 whitespace-nowrap", aria: {hidden: true}}= l(first.date, format: "%b") if first
+              - %w[Mon Tue Wed Thu Fri Sat Sun].each_with_index do |weekday, row|
+                %span{class: "pr-1.5 leading-3", aria: {hidden: true}}= weekday if row.even?
+                - weeks.each do |week|
+                  - day = week[row]
+                  - if day.nil?
+                    %span
+                  - else
+                    - count = day.entries.size
+                    %span{class: [cell_class, count.zero? ? "bg-slate-100" : heat_class(count, max)],
+                      data: chart_tip(l(day.date, format: "%a, %-d %b %Y"),
+                        [{value: count.to_s, name: "entry".pluralize(count)}, *day.entries.map { |entry| {value: entry.type.capitalize, name: entry.name} }])}
+        %div{class: "mt-2 flex items-center gap-1.5 text-xs text-slate-500", aria: {hidden: true}}
+          None
+          %span{class: "size-3 rounded-sm bg-slate-100"}
+          %span{class: "ml-2"} Fewer
+          - ChartsHelper::HEAT_CLASSES.drop(1).each do |heat|
+            %span{class: "size-3 rounded-sm #{heat}"}
+          More
+      - published = days.reject { |day| day.entries.empty? }
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        #{pluralize(published.sum { |day| day.entries.size }, "entry")} on #{pluralize(published.size, "day")} since
+        #{l(days.first.date)}. Every entry, whatever the period.
+
+  -# Bars per publishing day rather than per calendar day, so each one is a
+  -# wait between entries and a tall bar is a long silence.
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "gaps", title: "Days between entries", icon: "timer"} do
+      - rhythm = content.rhythm
+      - if rhythm.nil?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} Nothing published yet.
+      - else
+        - figure_class = "text-lg font-semibold tabular-nums text-slate-900"
+        - note_class = "text-xs text-slate-500"
+        %dl{class: "grid grid-cols-2 gap-x-6 gap-y-3 border-b border-slate-200 px-4 py-3 sm:grid-cols-3 lg:grid-cols-5"}
+          %div
+            %dt{class: "text-xs font-medium text-slate-500"} Since the last entry
+            %dd{class: figure_class}= pluralize(rhythm.since_last, "day")
+            %dd{class: note_class}= l(rhythm.last_published)
+          %div
+            %dt{class: "text-xs font-medium text-slate-500"} Typical gap
+            %dd{class: figure_class}= rhythm.median_gap ? pluralize(rhythm.median_gap, "day") : "—"
+            %dd{class: note_class} The median wait
+          %div
+            %dt{class: "text-xs font-medium text-slate-500"} Longest gap
+            - if (gap = rhythm.longest_gap)
+              %dd{class: figure_class}= pluralize(gap.days, "day")
+              %dd{class: note_class} #{l(gap.from)} – #{l(gap.to)}
+            - else
+              %dd{class: figure_class} —
+          %div
+            %dt{class: "text-xs font-medium text-slate-500"} Longest streak
+            - streak = rhythm.longest_streak
+            %dd{class: figure_class}= pluralize(streak.weeks, "week")
+            %dd{class: note_class} From the week of #{l(streak.from)}
+          %div
+            %dt{class: "text-xs font-medium text-slate-500"} Current streak
+            %dd{class: figure_class}= pluralize(rhythm.current_streak, "week")
+            %dd{class: note_class} With an entry every week
+        - since = (Date.current - 52.weeks).beginning_of_week
+        - recent = content.gaps.select { |gap| gap.to >= since }
+        %div{class: "px-4 py-3"}
+          - if recent.empty?
+            %p{class: "text-sm text-slate-500"} No two publishing days in the last year to measure between.
+          - else
+            = time_chart(recent.map { |gap| [gap.to, gap.days] }, y_title: "Days since the one before", x_title: "Publishing day",
+              label: "Days since the publishing day before, for each publishing day in the last year")
+        %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          Every entry, whatever the period. A streak is a run of weeks with at least one entry; two entries on one day count as
+          one publishing day.
+
+  -# A table rather than stacked bars, so each type's count is read off
+  -# directly and no colour has to stand for a type.
+  = render layout: "shared/card", locals: {id: "cadence", title: "Published per month", icon: "calendar"} do
+    - months = content.cadence
+    - max = months.flat_map { |_, counts| counts.values }.max.to_i
+    = chart_tooltip(label: "Entries published per month by type") do
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-xs"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium"} Type
+              - months.each do |month, _|
+                %th{scope: "col", class: "px-1 py-1.5 text-center font-medium whitespace-nowrap"}= l(month, format: "%b %y")
+          %tbody
+            - FeedEntry::TYPES.each do |type|
+              %tr
+                %th{scope: "row", class: "px-3 py-0.5 text-left font-medium"}= type.pluralize.capitalize
+                - months.each do |month, counts|
+                  %td{class: "p-0.5"}
+                    %div{class: "rounded px-1 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(counts[type], max)}",
+                      data: chart_tip(l(month, format: "%B %Y"), [{value: counts[type].to_s, name: type.pluralize(counts[type])}])}= counts[type]

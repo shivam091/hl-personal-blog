@@ -31,9 +31,27 @@ shared:
     - label: Reports
       icon: bar-chart
       items:
+        - label: Countries
+          icon: map-pin
+          route: country_report
+        - label: Search insights
+          icon: search
+          route: search_report
         - label: Ranking opportunities
           icon: target
           route: ranking_report
+        - label: Analytics insights
+          icon: trending-up
+          route: analytics_report
+        - label: Content
+          icon: file
+          route: content_report
+        - label: Messages
+          icon: message-square
+          route: message_report
+        - label: Data quality
+          icon: database
+          route: data_quality_report
 
     - label: Google
       icon: globe
