@@ -1,0 +1,24 @@
+-# Shares are of the clicks across every group, so a group's weight reads
+-# beside its own figures.
+- clicks = groups.sum(&:clicks)
+%div{class: "overflow-x-auto"}
+  %table{class: table_class}
+    %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+      %tr
+        %th{scope: "col", class: "#{th_class} text-left"}= heading
+        %th{scope: "col", class: "#{th_class} text-right"} Queries
+        %th{scope: "col", class: "#{th_class} text-right"} Clicks
+        %th{scope: "col", class: "#{th_class} text-right"} Share
+        %th{scope: "col", class: "#{th_class} text-right"} Impressions
+        %th{scope: "col", class: "#{th_class} text-right"} CTR
+        %th{scope: "col", class: "#{th_class} text-right"} Position
+    %tbody
+      - groups.each do |group|
+        %tr{class: "border-t border-slate-100"}
+          %td{class: "px-3 py-1.5 font-medium whitespace-nowrap"}= group.name
+          %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(group.queries)
+          %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(group.clicks)
+          %td{class: "px-3 py-1.5 text-right tabular-nums"}= clicks.positive? ? number_to_percentage(group.clicks * 100.0 / clicks, precision: 1) : "—"
+          %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(group.impressions)
+          %td{class: "px-3 py-1.5 text-right tabular-nums"}= group.ctr ? metric_value(group.ctr, :percent) : "—"
+          %td{class: "px-3 py-1.5 text-right tabular-nums"}= group.position ? metric_value(group.position, :position) : "—"

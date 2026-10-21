@@ -1,0 +1,387 @@
+- content_for :title, "Analytics insights"
+- insights = @insights
+- table_class = "w-full border-collapse text-sm"
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+- cell_class = "px-3 py-1.5 text-right tabular-nums"
+- export_class = "inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline"
+- min_views = Google::Analytics::Insights::MIN_VIEWS
+- min_sessions = Google::Analytics::Insights::MIN_SESSIONS
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} Analytics insights
+  %p{class: "mt-1 text-sm text-slate-500"}
+    Google Analytics: which pages are gaining or losing readers, which don't hold them, and which sites and channels send
+    the ones worth having.
+  = last_sync_status(Google::Analytics::AcquisitionController::SYNC_KIND)
+
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@granularity], likes_note: false,
+  notes: [counted_from_note(@period.from, Google::Analytics::TrackedSince::ANALYTICS_NOTE)]
+
+- if !insights.any?
+  = render "shared/empty_state", message: "No Analytics figures yet. Sync them from Analytics acquisition."
+- else
+  - totals = insights.totals
+  - if @stats.country
+    %p{class: "mb-4 text-sm text-slate-600"}
+      Views, key events and the page lists are for #{country_label(@stats.country)}; GA doesn't split scrolls, landing
+      pages or sources by country here, so those cover every country.
+
+  = render "trend", insights: insights, period: @period, granularity: @granularity, trend: @trend, published: @published
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    - [["rising-pages", "Rising pages", "arrow-up", insights.rising_pages],
+      ["falling-pages", "Falling pages", "arrow-down", insights.falling_pages]].each do |id, title, card_icon, rows|
+      = render layout: "shared/card", locals: {id: id, title: title, icon: card_icon} do
+        - if !insights.previous?
+          %p{class: "px-4 py-3 text-sm text-slate-500"} No earlier figures to compare with yet.
+        - elsif rows.empty?
+          %p{class: "px-4 py-3 text-sm text-slate-500"} None in this period.
+        - else
+          %div{class: "overflow-x-auto"}
+            %table{class: table_class}
+              %thead{class: "text-slate-500"}
+                %tr
+                  %th{scope: "col", class: "#{th_class} text-left"} Page
+                  %th{scope: "col", class: "#{th_class} text-right"} Views
+                  %th{scope: "col", class: "#{th_class} text-right", title: "Views in #{@period.previous}"} Before
+                  %th{scope: "col", class: "#{th_class} text-right"} Change
+              %tbody
+                - rows.each do |row|
+                  %tr{class: "border-t border-slate-200"}
+                    %td{class: "w-full px-3 py-1.5"}
+                      = blog_page_link(row.page_path, page_view_path(row.page_path))
+                    %td{class: cell_class}= number_with_delimiter(row.views)
+                    %td{class: cell_class}= number_with_delimiter(row.previous_views)
+                    %td{class: "px-3 py-1.5 text-right"}= growth_label(row.growth)
+        %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+          = link_to list_url(@period, @filtering, format: :csv, export: "changes"), class: export_class do
+            = icon("download", size: 12)
+            Every page as CSV
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "unengaging-pages", title: "Pages that don't hold readers", icon: "clock"} do
+      - rows = insights.unengaging_pages
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Pages with #{min_views}+ views but a lower engagement rate than the site's #{metric_value(totals.engagement_rate, :rate)}:
+        their openings are worth rewriting.
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} None in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Page
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+                %th{scope: "col", class: "#{th_class} text-right"} Engagement rate
+                %th{scope: "col", class: "#{th_class} text-right"} Per user
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row[:page_path], page_view_path(row[:page_path]))
+                  %td{class: cell_class}= number_with_delimiter(row.views)
+                  %td{class: cell_class}= metric_value(row.engagement_rate, :rate)
+                  %td{class: cell_class}= metric_value(row.average_engagement_seconds, :duration)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "unengaging"), class: export_class do
+          = icon("download", size: 12)
+          CSV
+
+    = render layout: "shared/card", locals: {id: "read-through", title: "Least read through", icon: "check"} do
+      - rows = insights.read_through
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Pages with #{min_views}+ views whose readers least often reach the end, against the site's
+        #{metric_value(insights.site_read_through, :percent)}.
+        - if insights.reads_since
+          Finished reads from #{l(insights.reads_since, format: "%-d %b %Y")}, when the blog began reporting them; GA's scroll
+          event before that.
+        - else
+          From GA's scroll event, until the blog's finished reads arrive.
+      - if !insights.scrolls?
+        %p{class: "px-4 py-3 text-sm text-slate-500"}
+          No finished reads or scroll events in this period. GA records scrolls when enhanced measurement is on.
+      - elsif rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} None in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Page
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+                %th{scope: "col", class: "#{th_class} text-right", title: "Finished reads, and scrolls on days before them"} Reads
+                %th{scope: "col", class: "#{th_class} text-right", title: "Reading time per finished read"} Time
+                %th{scope: "col", class: "#{th_class} text-right"} Read-through
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row.page_path, page_view_path(row.page_path))
+                  %td{class: cell_class}= number_with_delimiter(row.views)
+                  %td{class: cell_class}= number_with_delimiter(row.completions)
+                  %td{class: cell_class}= row.seconds_per_read ? metric_value(row.seconds_per_read, :duration) : "—"
+                  %td{class: cell_class}= metric_value(row.rate, :percent)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "read-through"), class: export_class do
+          = icon("download", size: 12)
+          CSV
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "leaking-landing-pages", title: "Landing pages that lose readers", icon: "log-out"} do
+      - rows = insights.leaking_landing_pages
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Pages that start #{min_sessions}+ sessions but engage fewer of them than the site's
+        #{metric_value(insights.landing_totals.engagement_rate, :rate)}: the first page a reader sees is the one to fix.
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} None in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Landing page
+                %th{scope: "col", class: "#{th_class} text-right"} Sessions
+                %th{scope: "col", class: "#{th_class} text-right"} Engaged sessions
+                %th{scope: "col", class: "#{th_class} text-right"} Engagement rate
+                %th{scope: "col", class: "#{th_class} text-right"} Per session
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row[:page_path], page_view_path(row[:page_path]))
+                  %td{class: cell_class}= number_with_delimiter(row.sessions)
+                  %td{class: cell_class}= number_with_delimiter(row.engaged_sessions)
+                  %td{class: cell_class}= metric_value(row.engagement_rate, :rate)
+                  %td{class: cell_class}= metric_value(row.average_engagement_seconds_per_session, :duration)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "landing-pages"), class: export_class do
+          = icon("download", size: 12)
+          CSV
+
+  -# Coloured by Google's LCP bands, so a slow page that still holds readers
+  -# stands apart from one that's losing them.
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "speed-engagement", title: "Speed against engagement", icon: "zap"} do
+      - points = insights.speed_points
+      - readers = insights.speed_source == :readers
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        - if readers
+          Pages with #{min_views}+ views and #{Google::Analytics::Insights::MIN_VITAL_REPORTS}+ Web Vitals reports: readers' mean load
+          time (LCP, every device) against how often their sessions were engaged in the period.
+        - else
+          Pages with #{min_views}+ views and a PageSpeed run: their lab load time on a phone (LCP) against how often their sessions
+          were engaged in the period. Readers' own load times replace it once enough are reported.
+      - if points.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No page has both enough views and a PageSpeed run. Sync PageSpeed to see them.
+      - else
+        - x_max = [(points.map(&:lcp_ms).max / 1000.0).ceil, 1].max
+        - correlation = insights.speed_correlation(points)
+        - if correlation
+          %p{class: "px-4 pt-3 text-sm text-slate-700"}= speed_correlation_sentence(correlation)
+        %div{class: "px-4 py-3"}
+          = scatter_chart(speed_scatter_points(points), x_min: 0, x_max: x_max, x_ticks: [0, x_max / 2.0, x_max],
+            x_tick: ->(seconds) { "#{number_with_precision(seconds, precision: 1, strip_insignificant_zeros: true)} s" },
+            y_tick: ->(rate) { "#{rate.round}%" }, x_title: (readers ? "Readers' mean LCP" : "Lab LCP on a phone"), y_title: "Engagement rate",
+            label: "Each page's load time on a phone against its engagement rate", key: AnalyticsReportsHelper::SPEED_BANDS.values)
+      - if readers && (lab_correlation = insights.speed_correlation(insights.speed_points(source: :lab)))
+        %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          By PageSpeed's lab LCP instead: #{speed_correlation_sentence(lab_correlation)}
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Bands are Google's: good up to 2.5 s, poor past 4 s#{", applied to a mean as a guide, since Google rates the 75th percentile" if readers}.
+        Every country for speed; engagement follows the country picked.
+        - if readers && @period.from < Google::Analytics::TrackedSince::WEB_VITALS
+          Readers' load times only count from #{l(Google::Analytics::TrackedSince::WEB_VITALS)},
+          so each page's speed is from those days alone.
+
+  -# Engagement and reads per kind of entry, so whether tutorials hold
+  -# readers better than posts is read off rather than page by page.
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    - [["content-groups", "Content types", :content_group, "Type"], ["categories", "Categories", :content_category, "Category"]].each do |id, title, grouping, heading|
+      = render layout: "shared/card", locals: {id: id, title: title, icon: "grid"} do
+        - rows = insights.content_groups(grouping)
+        %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          Pages grouped by the #{heading.downcase} the blog tags each view with; engagement and finished reads are the pages' own.
+          "(not set)" is pages viewed only before the blog sent it, from
+          #{l(Google::Analytics::TrackedSince::CONTENT_GROUPS)}.
+        - if !insights.content_groups?
+          %p{class: "px-4 py-3 text-sm text-slate-500"}
+            No content groups in this period. GA keeps categories and tags out of reports until they're registered (see Analytics settings).
+        - else
+          %div{class: "overflow-x-auto"}
+            %table{class: table_class}
+              %thead{class: "text-slate-500"}
+                %tr
+                  %th{scope: "col", class: "#{th_class} text-left"}= heading
+                  %th{scope: "col", class: "#{th_class} text-right"} Pages
+                  %th{scope: "col", class: "#{th_class} text-right"} Views
+                  %th{scope: "col", class: "#{th_class} text-right"} Engagement rate
+                  %th{scope: "col", class: "#{th_class} text-right", title: "Engagement time per view"} Per view
+                  %th{scope: "col", class: "#{th_class} text-right", title: "Finished reads per view"} Read
+              %tbody
+                - rows.first(10).each do |row|
+                  %tr{class: "border-t border-slate-200"}
+                    %td{class: "px-3 py-1.5 font-medium"}= row.name
+                    %td{class: cell_class}= number_with_delimiter(row.pages)
+                    %td{class: cell_class}= number_with_delimiter(row.views)
+                    %td{class: cell_class}= metric_value(row.engagement_rate, :rate)
+                    %td{class: cell_class}= row.engagement_seconds_per_view ? metric_value(row.engagement_seconds_per_view, :duration) : "—"
+                    %td{class: cell_class}= metric_value(row.read_rate, :percent)
+        %p{class: "flex justify-end gap-4 border-t border-slate-200 px-4 py-2"}
+          - if grouping == :content_category
+            = link_to list_url(@period, @filtering, format: :csv, export: "tags"), class: export_class do
+              = icon("download", size: 12)
+              Tags as CSV
+          = link_to list_url(@period, @filtering, format: :csv, export: id), class: export_class do
+            = icon("download", size: 12)
+            CSV
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "reading-times", title: "When readers come", icon: "calendar"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Views by weekday and hour, every country, in the GA property's time zone: a post published just before the busiest ones
+        is read soonest.
+      - if !insights.reading_times?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No figures by time in this period.
+      - else
+        - days = insights.views_by_day
+        - hours = insights.views_by_hour
+        %p{class: "px-4 pt-3 text-sm text-slate-700"}
+          Busiest: #{Google::DailyReport.value_label(:day_of_week, days.max_by(&:last).first)}, around
+          #{Google::DailyReport.value_label(:hour, hours.max_by(&:last).first)}.
+        %div{class: "grid gap-6 px-4 py-3 lg:grid-cols-2"}
+          = time_chart(days.map { |day, views| [Google::DailyReport.value_label(:day_of_week, day), views] }, x_title: "Day", y_title: "Views",
+            label: "Views by day of week", unit: " views")
+          = time_chart(hours.map { |hour, views| [Google::DailyReport.value_label(:hour, hour), views] }, x_title: "Hour", y_title: "Views",
+            label: "Views by hour of day", unit: " views")
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "times"), class: export_class do
+          = icon("download", size: 12)
+          CSV
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "outbound-links", title: "Where readers leave to", icon: "external-link"} do
+      - links = insights.outbound_links
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Links out of the blog readers clicked most, every country, with Safe Browsing's latest verdict on each.
+      - if links.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No outbound clicks in this period.
+      - else
+        %div{class: "border-b border-slate-200 px-4 py-3"}
+          = render "shared/breakdown", counts: insights.outbound_sites, heading: "Site", count_heading: "Clicks", limit: 5, empty: ""
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Link
+                %th{scope: "col", class: "#{th_class} text-right"} Clicks
+                %th{scope: "col", class: "#{th_class} text-right", title: "Pages it was clicked from"} Pages
+                %th{scope: "col", class: "#{th_class} text-right"} Safety
+            %tbody
+              - links.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "max-w-0 w-full px-3 py-1.5"}
+                    - if (href = http_url(row.url))
+                      = link_to row.url, href, target: "_blank", rel: "noopener noreferrer", class: "block truncate font-medium hover:underline", title: row.url
+                    - else
+                      %span{class: "block truncate font-medium", title: row.url}= row.url
+                  %td{class: cell_class}= number_with_delimiter(row.clicks)
+                  %td{class: cell_class}= number_with_delimiter(row.pages)
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap"}
+                    - if row.check.nil?
+                      %span{class: "text-xs text-slate-400"} Not checked
+                    - elsif row.check.flagged?
+                      %span{class: "rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800", title: row.check.threat_labels.join(", ")} Flagged
+                    - else
+                      %span{class: "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"} Safe
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to google_safe_browsing_link_checks_path, class: export_class do
+          Link safety
+          = icon("chevron-right", size: 12)
+
+    = render layout: "shared/card", locals: {id: "outbound-pages", title: "Pages readers leave from", icon: "log-out"} do
+      - rows = insights.outbound_pages
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Pages whose links out were clicked most, every country, with clicks per view: high is a page sending readers on, which
+        is its job if it's a roundup and a leak if it isn't.
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No outbound clicks in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Page
+                %th{scope: "col", class: "#{th_class} text-right"} Clicks out
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+                %th{scope: "col", class: "#{th_class} text-right"} Per view
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row.page_path, page_view_path(row.page_path))
+                  %td{class: cell_class}= number_with_delimiter(row.clicks)
+                  %td{class: cell_class}= number_with_delimiter(row.views)
+                  %td{class: cell_class}= row.rate ? metric_value(row.rate, :rate) : "—"
+
+  %div{class: "grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "new-sites", title: "New referring sites", icon: "external-link"} do
+      - rows = insights.new_referring_sites
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Sites that sent readers this period but none in the period before: a new link worth following up.
+      - if @period.compare_countries?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} GA doesn't split sources by country, so there's no other country to compare with.
+      - elsif !insights.previous?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No earlier figures to compare with yet.
+      - elsif rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} None in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Site
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium"}= row.host
+                  %td{class: cell_class}= number_with_delimiter(row.views)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "sites"), class: export_class do
+          = icon("download", size: 12)
+          Every site as CSV
+
+    = render layout: "shared/card", locals: {id: "channels", title: "Channels", icon: "globe"} do
+      - rows = insights.channels
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Views say how many readers a channel sends and new users how many it first brought; engagement rate and key events
+        say whether they stay.
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No channel figures in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Channel
+                %th{scope: "col", class: "#{th_class} text-right"} Views
+                %th{scope: "col", class: "#{th_class} text-right"} Change
+                %th{scope: "col", class: "#{th_class} text-right", title: "Readers this channel first brought to the blog"}
+                  New users
+                %th{scope: "col", class: "#{th_class} text-right"} Engagement rate
+                %th{scope: "col", class: "#{th_class} text-right"} Key events
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium"}= row.channel_group
+                  %td{class: cell_class}= number_with_delimiter(row.views)
+                  %td{class: "px-3 py-1.5 text-right"}
+                    = insights.previous_unsplit? ? growth_label(row.growth) : "—"
+                  %td{class: cell_class}= number_with_delimiter(row.new_users)
+                  %td{class: cell_class}= metric_value(row.engagement_rate, :rate)
+                  %td{class: cell_class}= number_with_delimiter(row.key_events)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "channels"), class: export_class do
+          = icon("download", size: 12)
+          CSV

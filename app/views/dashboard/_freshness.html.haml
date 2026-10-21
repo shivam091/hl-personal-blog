@@ -1,0 +1,22 @@
+-# Every figure here is only as recent as the sync behind it, so a stale or
+-# failing source is flagged where the figures are read.
+= render layout: "shared/card", locals: {id: "data-freshness", title: "Data freshness", icon: "refresh"} do
+  %div{class: "overflow-x-auto"}
+    %table{class: "w-full border-collapse text-sm"}
+      %thead{class: "text-slate-500"}
+        %tr
+          %th{scope: "col", class: "px-4 py-1.5 text-left font-medium"} Source
+          %th{scope: "col", class: "px-2 py-1.5 text-left font-medium"} Last synced
+          %th{scope: "col", class: "px-4 py-1.5 text-right font-medium"} Latest run
+      %tbody
+        - syncs.each do |kind, (completed, latest)|
+          %tr{class: "border-t border-slate-200"}
+            %td{class: "px-4 py-1.5"}
+              = link_to SyncRequest::KINDS.fetch(kind).section, sync_requests_path(section: kind), class: "font-medium hover:underline"
+            %td{class: "px-2 py-1.5 whitespace-nowrap text-slate-600"}
+              - if completed
+                %time{datetime: completed.finished_at.iso8601, title: l(completed.finished_at)}
+                  #{time_ago_in_words(completed.finished_at)} ago
+              - else
+                %span{class: "text-slate-400"} Never
+            %td{class: "px-4 py-1.5 text-right"}= latest ? sync_status_badge(latest) : tag.span("—", class: "text-slate-400")

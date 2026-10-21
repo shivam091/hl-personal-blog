@@ -17,6 +17,7 @@ module BlogStatsFilters
 
   def load_google_summaries
     @search = Google::SearchConsole::Summary.new(@period, country: @stats.country)
+    @ai = Google::SearchConsole::GenerativeAiSummary.new(@period)
     @analytics = Google::Analytics::Summary.new(@period, country: @stats.country)
     @recaptcha = Google::Recaptcha::Summary.new(@period)
   end
