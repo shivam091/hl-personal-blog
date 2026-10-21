@@ -25,6 +25,14 @@ class PageView
   field :countriesByDay, type: Hash, default: {}, as: :countries_by_day
   field :devicesByDay, type: Hash, default: {}, as: :devices_by_day
   field :referrersByDay, type: Hash, default: {}, as: :referrers_by_day
+  # Absent on pages counted before the frontend recorded consent, so it defaults to empty rather than to all unset.
+  field :consentByDay, type: Hash, default: {}, as: :consent_by_day
+  # Whether gtag loaded is the one sign of a blocker, which GA can't report itself; a view in
+  # neither tally left before it could be told.
+  field :gaByDay, type: Hash, default: {}, as: :ga_by_day
+  # Webdriver views are already left out as bots while datacentre ones stay in the human counts,
+  # so only datacentre traffic is left to explain part of GA's gap.
+  field :suspectByDay, type: Hash, default: {}, as: :suspect_by_day
   field :uniqueVisitorCount, type: Integer, default: 0, as: :unique_visitor_count
   field :visitorCount, type: Integer, default: 0, as: :visitor_count
   field :botCount, type: Integer, default: 0, as: :bot_count
@@ -63,6 +71,11 @@ class PageView
     within(referrers_by_day, period)
   end
 
+  # Cut to the period like the page's other breakdowns, so its consent split lines up with them.
+  def consent_within(period)
+    within(consent_by_day, period)
+  end
+
   # The deploy day can appear in both the legacy totals and the dated
   # breakdown, holding the counts from either side of the switch, so the two
   # are added rather than one replacing the other.
@@ -88,6 +101,56 @@ class PageView
         hits = page_view.bot_count + page_view.visitor_count
         [page_view.slug, page_view.bot_count, page_view.visitor_count, page_view.bot_count.fdiv(hits)] if hits >= MIN_HITS_FOR_BOT_SHARE
       end.sort_by { |slug, bots, _, share| [-share, -bots, slug] }.first(limit)
+    end
+
+    # Every page's together, by ISO day, since GA's views are compared with them
+    # day by day; days from before consent was recorded are absent.
+    def consent_daily(period)
+      daily_totals(:consentByDay, period)
+    end
+
+    # Same shape as consent_daily; days from before gtag's loading was recorded are absent.
+    def ga_daily(period)
+      daily_totals(:gaByDay, period)
+    end
+
+    # Same shape again; days from before automation signals were recorded are absent.
+    def suspect_daily(period)
+      daily_totals(:suspectByDay, period)
+    end
+
+    # Each field began on its own day, so the report keeps them apart to say which days it can trust.
+    def ga_first_day
+      first_day_in(%w[gaByDay])
+    end
+
+    def suspect_first_day
+      first_day_in(%w[suspectByDay])
+    end
+
+    # Per page, over the days given only, since GA's views are known for some days alone; a
+    # page counted before dated totals existed comes in through views_by_day too.
+    def views_by_slug(days)
+      only(:slug, :countriesByDay, :viewsByDay).each_with_object(Hash.new(0)) do |page_view, totals|
+        page_view.views_by_day.each { |day, count| totals[page_view.slug] += count if days.include?(day) }
+      end
+    end
+
+    # Views were only split by consent from some day, so a period reaching back
+    # before it covers fewer views than it seems to.
+    def consent_first_day
+      first_day_in(%w[consentByDay])
+    end
+
+    # One routine for every by-day tally, so consent, tag loading and automation are cut to a
+    # period the same way.
+    def daily_totals(field, period)
+      from, to = period.from.iso8601, period.to.iso8601
+      only(field).each_with_object(Hash.new { |hash, day| hash[day] = Hash.new(0) }) do |page_view, days|
+        page_view.public_send(field).each do |day, counts|
+          counts.each { |key, count| days[day][key] += count.to_i } if day.between?(from, to)
+        end
+      end
     end
 
     def to_csv(page_views = order(visitor_count: :desc), period: nil)

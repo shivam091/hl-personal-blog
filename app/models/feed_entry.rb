@@ -120,6 +120,12 @@ class FeedEntry
       end
     end
 
+    # By day, so a rise can be put down to a post.
+    def published_names(period)
+      where(published_at: period.from.beginning_of_day..period.to.end_of_day).order(published_at: :asc)
+        .only(:_id, :name, :published_at).group_by { |entry| entry.published_at.to_date }.transform_values { |entries| entries.map(&:name) }
+    end
+
     # Oldest first. Only sends that finished, since a count still going out
     # isn't one yet.
     def recently_notified(scope, limit: 12)
