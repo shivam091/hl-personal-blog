@@ -1,0 +1,11 @@
+-# Impressions shade the map, since clicks on a site this size leave most of it
+-# blank, and clicks ride along in each country's tooltip.
+- clicks, impressions = @country_map
+- metric, counts, previous = impressions
+= render layout: "shared/card", locals: {id: "countries-map", title: "Countries on the map", icon: "globe", class: "mb-6"} do
+  %div{class: "px-4 py-3"}
+    = world_map(counts, label: "Impressions and clicks by country", unit: metric.field.to_s.singularize, previous: previous, previous_name: previous_period_name,
+      also: [[clicks.first.label, clicks.second, clicks.third]],
+      links: counts.keys.to_h { |code| [code, google_search_console_performance_breakdown_path("days", **@period.query, country: code)] })
+  %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+    Search Console leaves out countries with too few searches to share, so these can add up to less than the totals above.

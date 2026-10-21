@@ -1,0 +1,551 @@
+- content_for :title, "Search insights"
+- search = @search
+- totals = search.totals
+- previous = search.previous_totals
+- dates = (@period.from..@period.to).to_a
+-# What a change is measured against, named as the Compare menu names it.
+- compared = @period.compare_countries? ? country_label(@period.compare_country) : @period.previous
+-# The period compared with laid over this one day by day, cut or padded to
+-# its length, since the two can differ by a day or so.
+-# Each change is coloured as its tile's is.
+- metrics = google_search_metrics.index_by(&:field)
+- align = ->(values) { values.first(dates.size) + [nil] * [dates.size - values.size, 0].max }
+-# Summed into the buckets picked, the compared period by its own days so
+-# the two still line up bucket for bucket.
+- buckets = @granularity.dates(dates)
+- per = @granularity.by
+- bucketed = ->(field, period = @period) { @granularity.sums_for(period, search.daily(field, period)) }
+- bucket_align = ->(values) { aligned(values, buckets.size) }
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} Search insights
+  %p{class: "mt-1 text-sm text-slate-500"}
+    Google Search, every search type: what to rank higher, which titles to rewrite, and where rankings are slipping.
+  = last_sync_status(Google::SearchConsole::PerformanceController::SYNC_KIND)
+
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@granularity], likes_note: false
+
+- if !search.any?
+  = render "shared/empty_state", message: "No Search Console figures yet. Sync them from Search performance."
+- else
+  - if @stats.country
+    %p{class: "mb-4 text-sm text-slate-600"}
+      Totals, charts and queries are for #{country_label(@stats.country)}; Search Console doesn't split pages or
+      appearances by country, so those cover every country.
+
+  %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+    - google_search_metrics.each do |metric|
+      = render "dashboard/tile", label: metric.label, tile_icon: metric.icon, hint: metric.hint,
+        value: metric_value(totals.value(metric.field), metric.format),
+        spark: (search.daily(metric.field).map(&:to_i) if %i[clicks impressions].include?(metric.field)),
+        change: metric_change(totals.value(metric.field), previous&.value(metric.field), metric), compared_with: @period.previous
+
+  -# Search Console's Insights at a glance; the tables further down have
+  -# every figure.
+  - unsynced = @period.compare? ? "No earlier figures to compare with yet." : "Pick a comparison in the Compare menu to see what's trending."
+  - page_trend_note = @period.compare_countries? ? "Search Console doesn't split pages by country, so they can't be compared with another country." : unsynced
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render "search_insight_reports/movers", id: "your-content", title: "Your content", card_icon: "file-text", kind: :page, search: search,
+      more_url: google_search_console_performance_breakdown_path("pages", **@period.query),
+      tabs: [["top", "Top", search.top_pages, "No clicks in this period."],
+        ["up", "Trending up", search.trending_pages(:up), search.previous_pages? ? "No page gained clicks." : page_trend_note],
+        ["down", "Trending down", search.trending_pages(:down), search.previous_pages? ? "No page lost clicks." : page_trend_note]]
+    = render "search_insight_reports/movers", id: "queries-to-site", title: "Queries leading to your site", card_icon: "search", kind: :query,
+      search: search, more_url: "#top-queries",
+      tabs: [["top", "Top", search.top_query_movers, "No clicks in this period."],
+        ["up", "Trending up", search.trending_queries(:up), search.compared? ? "No query gained clicks." : unsynced],
+        ["down", "Trending down", search.trending_queries(:down), search.compared? ? "No query lost clicks." : unsynced]]
+
+  -# Separate charts, since impressions run far above clicks and sharing an
+  -# axis would flatten the clicks line. The period compared with is dotted,
+  -# as on the trend charts, so each day is read against its own past.
+  %div{class: "mb-6 grid gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "clicks", title: "Clicks per #{per}", icon: "mouse-pointer",
+      actions: chart_granularity_picker(@granularity, "Clicks", "clicks-by")} do
+      %div{class: "px-4 py-3"}
+        - if search.compared?
+          = stacked_chart(buckets, [ChartsHelper::Series.new(name: "Clicks", values: bucketed.(:clicks), color: ChartsHelper::BAR_COLOR)],
+            y_title: "Clicks", label: "Search clicks per #{per}", per: @granularity.per, unsettled: search_unsettled_from,
+            previous: bucket_align.(bucketed.(:clicks, @period.previous)), previous_name: compared.to_s)
+        - else
+          = time_chart(buckets.zip(bucketed.(:clicks)), y_title: "Clicks", label: "Search clicks per #{per}", per: @granularity.per, unsettled: search_unsettled_from)
+    = render layout: "shared/card", locals: {id: "impressions", title: "Impressions per #{per}", icon: "eye",
+      actions: chart_granularity_picker(@granularity, "Impressions", "impressions-by")} do
+      %div{class: "px-4 py-3"}
+        - if search.compared?
+          - impressions_now = ChartsHelper::Series.new(name: "Impressions", values: bucketed.(:impressions))
+          = line_chart(buckets, [impressions_now,
+            ChartsHelper::Series.new(name: "Impressions, #{compared}", values: bucket_align.(bucketed.(:impressions, @period.previous)),
+              dotted: true, color: ChartsHelper::LINE_COLORS.first, against: impressions_now)],
+            y_title: "Impressions", label: "Search impressions per #{per}", per: @granularity.per, unsettled: search_unsettled_from)
+        - else
+          = time_chart(buckets.zip(bucketed.(:impressions)), y_title: "Impressions", label: "Search impressions per #{per}", per: @granularity.per, style: :line,
+            unsettled: search_unsettled_from)
+
+  = render "search_insight_reports/ai_share", ai: @ai, search: search, dates: dates, country: @stats.country
+
+  -# Stacked, so a rich result's clicks read as a part of the day's, and
+  -# one that stops showing leaves a gap in its colour.
+  - appearances = search.appearances_daily
+  -# Not split by country, so another country would only be compared with
+  -# the same figures. A day's total is the sum of its parts, as its bar is.
+  - appearances_before = search.appearances_daily(@period.previous, limit: 1000).values if search.compared? && !@period.compare_countries?
+  - if appearances.any?
+    %div{class: "mb-6"}
+      = render layout: "shared/card", locals: {id: "appearances", title: "Clicks by search appearance", icon: "search",
+        actions: chart_granularity_picker(@granularity, "Clicks by search appearance", "appearances-by")} do
+        %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          Clicks on results shown with each rich result or feature. A result can show with more than one, so a day's bar
+          can add up to more than its clicks.
+          - if @stats.country
+            Every country, since Search Console doesn't split appearances by country.
+        %div{class: "px-4 py-3"}
+          = stacked_chart buckets, share_series(appearances.transform_values { |values| @granularity.sums(dates, values) }) { |appearance| humanize_state(appearance) },
+            y_title: "Clicks", label: "Search clicks per #{per} by search appearance", per: @granularity.per, unsettled: search_unsettled_from,
+            previous: (bucket_align.(appearances_before.map { |values| @granularity.sums_for(@period.previous, values) }.transpose.map { |parts| parts.compact.sum if parts.any? }) if appearances_before&.any?),
+            previous_name: compared.to_s
+
+  -# Days down and weeks across, so a long period runs sideways rather
+  -# than down the page, and a weekday is read along its row.
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "weekday-clicks", title: "Clicks by day of the week", icon: "calendar"} do
+      - weeks = search.weekday_clicks
+      - weeks_before = search.weekday_clicks(@period.previous).values if search.compared?
+      - max = weeks.values.flatten.compact.max.to_i
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Each week's clicks a day at a time, darker for more. Blank days are outside the period or not synced.
+      = chart_tooltip(label: "Search clicks by day of the week, week by week", class: "px-4 py-3") do
+        %div{class: "overflow-x-auto"}
+          %table{class: "w-full border-collapse text-xs"}
+            %thead{class: "text-slate-500"}
+              %tr
+                -# w-px keeps the labels tight so the spare width goes to the weeks.
+                %th{scope: "col", class: "w-px pr-2 text-left font-medium"}
+                  %span{class: "sr-only"} Day
+                - weeks.each_key do |start|
+                  %th{scope: "col", class: "px-0.5 pb-1 text-center font-medium whitespace-nowrap", title: "Week of #{l(start)}"}<
+                    = "Week of #{l(start, format: "%-d %b")}"
+                %th{scope: "col", class: "w-px pl-2 pb-1 text-right font-medium", title: "Average clicks on this day of the week"}<
+                  Avg
+            %tbody
+              - Date::ABBR_DAYNAMES.each_with_index do |day, index|
+                - known = weeks.values.filter_map { |days| days[index] }
+                %tr
+                  %th{scope: "row", class: "pr-2 text-left font-medium text-slate-500"}= day
+                  - weeks.each do |start, days|
+                    - value = days[index]
+                    %td{class: "p-0.5"}
+                      - if value.nil?
+                        %div{class: "h-6 min-w-8 rounded bg-slate-50"}
+                      - else
+                        %div{class: "h-6 min-w-8 rounded px-1 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(value, max)}",
+                          data: chart_tip(l(start + index, format: "%a, %-d %b, %Y"), [{value: number_with_delimiter(value), name: "Clicks"}])}<
+                          = compact_number(value)
+                  - average = known.sum.to_f / known.size if known.any?
+                  - known_before = weeks_before&.filter_map { |days| days[index] }
+                  %td{class: "pl-2 text-right tabular-nums text-slate-600 whitespace-nowrap"}<
+                    = safe_join([(number_with_precision(average, precision: 1) if average) || "—",
+                      (tag.div(row_change(average, known_before.sum.to_f / known_before.size, metrics.fetch(:clicks))) if average && known_before&.any?)].compact)
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "top-queries", title: "Top queries", icon: "search"} do
+      - rows = search.top_queries(limit: 15)
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No queries in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "border-b border-slate-200 bg-slate-50 text-slate-600"}
+              %tr
+                = report_th "Query"
+                = report_th "Clicks", :right
+                = report_th "Impressions", :right
+                = report_th "CTR", :right
+                = report_th "Position", :right
+                - if @period.compare?
+                  %th{scope: "col", class: "#{th_class} text-right", title: "Change in average position from #{compared}"}<
+                    Change
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-100"}
+                  %td{class: "px-3 py-1.5 font-medium"}= row[:query]
+                  - before = search.previous_queries[row[:query]] if search.compared?
+                  %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                    = number_with_delimiter(row.clicks)
+                    - if search.compared?
+                      %div= row_change(row.clicks, before&.clicks, metrics.fetch(:clicks))
+                  %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                    = number_with_delimiter(row.impressions)
+                    - if search.compared?
+                      %div= row_change(row.impressions, before&.impressions, metrics.fetch(:impressions))
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.ctr, :percent)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.position, :position)
+                  - if @period.compare?
+                    %td{class: "px-3 py-1.5 text-right"}<
+                      - if search.compared?
+                        = position_change(row.position, search.previous_positions[row[:query]])
+                      - else
+                        = tag.span("—", class: "text-slate-400")
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "queries"), class: export_class do
+          = icon("download", size: 12)
+          All queries as CSV
+
+  -# Branded searches find the blog however it ranks, so growth there is
+  -# reputation and growth in the rest is what ranking earns.
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "branded", title: "Branded and non-branded", icon: "search",
+      actions: chart_granularity_picker(@granularity, "Branded and non-branded clicks", "branded-by")} do
+      - daily = @query_groups.daily_brand_clicks
+      %div{class: "border-b border-slate-200 px-4 py-3"}
+        = line_chart(buckets, [ChartsHelper::Series.new(name: "Non-branded", values: @granularity.sums(dates, daily[Google::SearchConsole::QueryGroups::NON_BRANDED])),
+          ChartsHelper::Series.new(name: "Branded", values: @granularity.sums(dates, daily[Google::SearchConsole::QueryGroups::BRANDED]), dashed: true)],
+          y_title: "Clicks", label: "Search clicks per #{per} from branded and non-branded queries", per: @granularity.per, unsettled: search_unsettled_from)
+      = render "search_insight_reports/query_groups", groups: @query_groups.brand_split, heading: "Queries",
+        previous: @previous_query_groups&.brand_split
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Branded queries name the blog or its author. From the queries Search Console reports; it withholds rare ones,
+        so these add up to less than the totals.
+
+    -# Impressions rather than clicks for the bars, since a kind of search
+    -# can be shown often long before it's clicked.
+    = render layout: "shared/card", locals: {id: "intent", title: "Why people searched", icon: "text-search"} do
+      - groups = @query_groups.intent_split
+      - groups_before = @previous_query_groups&.intent_split
+      %div{class: "border-b border-slate-200 px-4 py-3"}
+        = ranking_chart(groups.map { |group| [group.name, group.impressions, "bg-slate-600", ChartsHelper::BAR_COLOR] },
+          total: groups.sum(&:impressions), x_title: "Impressions", y_title: "Intent", label: "Search impressions by what the query was after",
+          previous: groups_before&.to_h { |group| [group.name, group.impressions] }, previous_name: (compared.to_s if groups_before))
+      = render "search_insight_reports/query_groups", groups: groups, heading: "Intent",
+        previous: groups_before
+      %dl{class: "space-y-1 border-t border-slate-200 px-4 py-3 text-xs"}
+        - groups.select { |group| group.top.any? }.each do |group|
+          %div{class: "flex gap-2"}
+            %dt{class: "w-28 shrink-0 font-medium text-slate-600"}= group.name
+            %dd{class: "min-w-0 truncate text-slate-500", title: group.top.join(", ")}= group.top.join(", ")
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Read from each query's words: troubleshooting names a problem, a comparison weighs two things, a question asks one,
+        learning wants a tutorial, and a topic is a bare term. Examples are each kind's most seen queries.
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "opportunities", title: "Quick wins", icon: "trending-up"} do
+      - rows = search.opportunities
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Queries ranking around positions 5–15 with #{Google::SearchConsole::Summary::MIN_IMPRESSIONS}+ impressions: a small
+        climb puts them on the first page.
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} None in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                = report_th "Query"
+                = report_th "Impressions", :right
+                = report_th "Position", :right
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  - before = search.previous_queries[row[:query]] if search.compared?
+                  %td{class: "px-3 py-1.5 font-medium"}= row[:query]
+                  %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                    = number_with_delimiter(row.impressions)
+                    - if search.compared?
+                      %div= row_change(row.impressions, before&.impressions, metrics.fetch(:impressions))
+                  %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                    = metric_value(row.position, :position)
+                    - if search.compared?
+                      %div= position_change(row.position, before&.position)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "opportunities"), class: export_class do
+          = icon("download", size: 12)
+          CSV
+
+    = render layout: "shared/card", locals: {id: "low-ctr-pages", title: "Pages to retitle", icon: "pencil"} do
+      - rows = search.low_ctr_pages
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Pages seen #{Google::SearchConsole::Summary::MIN_IMPRESSIONS}+ times but clicked less often than the site's
+        #{metric_value(totals.ctr, :percent)}: their titles and descriptions are worth rewriting.
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} None in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                = report_th "Page"
+                = report_th "Impressions", :right
+                = report_th "CTR", :right
+                = report_th "Position", :right
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row[:page_path], page_view_path(row[:page_path]))
+                  - before = search.pages(@period.previous)[row[:page_path]] if search.previous_pages?
+                  %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                    = number_with_delimiter(row.impressions)
+                    - if search.previous_pages?
+                      %div= row_change(row.impressions, before&.impressions, metrics.fetch(:impressions))
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.ctr, :percent)
+                  %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                    = metric_value(row.position, :position)
+                    - if search.previous_pages?
+                      %div= position_change(row.position, before&.position)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "pages"), class: export_class do
+          = icon("download", size: 12)
+          CSV
+
+  -# The site's own curve, since CTR at a position depends on the kind of
+  -# queries a blog ranks for far more than on any industry average.
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "ctr-position", title: "CTR by position", icon: "mouse-pointer"} do
+      - points = search.ctr_points
+      - shortfall = number_to_percentage(Google::SearchConsole::Summary::CTR_SHORTFALL * 100, precision: 0)
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Each query with #{Google::SearchConsole::Summary::MIN_IMPRESSIONS}+ impressions in the top
+        #{Google::SearchConsole::Summary::CURVE_POSITIONS} positions, against the dashed curve of the CTR this site's
+        queries usually get there. Orange ones are clicked less than #{shortfall} of that: a better title or description is likely to pay off.
+      - if points.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No queries seen often enough in this period.
+      - else
+        %div{class: "px-4 py-3"}
+          - colors = {true => ChartsHelper::SHARE_COLORS[1], false => ChartsHelper::SHARE_COLORS[0]}
+          = scatter_chart(points.map { |point| ChartsHelper::ScatterPoint.new(x: point.position, y: point.ctr, color: colors[point.below?],
+              tip: chart_tip(point.query, [{value: metric_value(point.ctr, :percent), name: "CTR", color: colors[point.below?]},
+                {value: metric_value(point.expected, :percent), name: "Usual at this position"},
+                {value: metric_value(point.position, :position), name: "Average position"},
+                {value: number_with_delimiter(point.impressions), name: "Impressions"}])) },
+            curve: search.ctr_curve, x_max: Google::SearchConsole::Summary::CURVE_POSITIONS, x_ticks: [1, 5, 10, 15, 20, 25, 30],
+            y_tick: ->(value) { axis_value(value, :percent) }, x_title: "Average position", y_title: "CTR",
+            label: "CTR against average position for each query, with the site's usual CTR by position",
+            key: [["As usual or better", colors[false]], ["Under #{shortfall} of usual", colors[true]]])
+        - rows = search.below_curve
+        - if rows.any?
+          %div{class: "overflow-x-auto border-t border-slate-200"}
+            %table{class: table_class}
+              %caption{class: "px-4 pt-2 text-left text-xs font-medium text-slate-500"} Clicked well under usual, most seen first
+              %thead{class: "text-slate-500"}
+                %tr
+                  = report_th "Query"
+                  = report_th "Impressions", :right
+                  = report_th "Position", :right
+                  = report_th "CTR", :right
+                  = report_th "Usual CTR", :right
+              %tbody
+                - rows.each do |row|
+                  %tr{class: "border-t border-slate-200"}
+                    %td{class: "px-3 py-1.5 font-medium"}= row.query
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.impressions)
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.position, :position)
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.ctr, :percent)
+                    %td{class: "px-3 py-1.5 text-right tabular-nums text-slate-500"}= metric_value(row.expected, :percent)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "ctr"), class: export_class do
+          = icon("download", size: 12)
+          Every query against its usual CTR as CSV
+
+  -# A share bar per query, so how evenly its impressions split shows at a
+  -# glance; each page in its own colour, read in the list beside it.
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "competing-pages", title: "Pages competing for a query", icon: "copy"} do
+      - rows = search.competing_queries
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Queries with #{Google::SearchConsole::Summary::MIN_IMPRESSIONS}+ impressions where two or more pages each got
+        #{number_to_percentage(Google::SearchConsole::Summary::COMPETING_SHARE * 100, precision: 0)}+ of them. Google
+        splits its ranking between them, so merging the posts, or linking the weaker to the stronger, can lift the one that should rank.
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No query split between pages in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                = report_th "Query"
+                = report_th "Pages, by share of impressions"
+                = report_th "Impressions", :right
+                = report_th "Clicks", :right
+            %tbody
+              - rows.each do |row|
+                - pages = row.pages.first(ChartsHelper::SHARE_COLORS.size)
+                %tr{class: "border-t border-slate-200 align-top"}
+                  %td{class: "px-3 py-2 font-medium"}= row.query
+                  %td{class: "w-full min-w-64 px-3 py-2"}
+                    %div{class: "mb-1.5"}
+                      = share_bar(pages.zip(ChartsHelper::SHARE_COLORS).map { |page, color| [page[:page_path], page.impressions * 1.0 / row.impressions, color,
+                        [{value: share_of_total(page.impressions, row.impressions), name: "Share of impressions", color: color},
+                         {value: number_with_delimiter(page.impressions), name: "Impressions"}, {value: number_with_delimiter(page.clicks), name: "Clicks"}]] },
+                        label: "Pages for #{row.query}, by share of impressions", height: "h-2")
+                    %ul{class: "space-y-0.5 text-xs"}
+                      - pages.zip(ChartsHelper::SHARE_COLORS).each do |page, color|
+                        %li{class: "flex items-center gap-2"}
+                          %span{class: "size-2 shrink-0 rounded-sm", style: "background-color: #{color}", aria: {hidden: true}}
+                          = blog_page_link(page[:page_path], page_view_path(page[:page_path]))
+                          %span{class: "ml-auto shrink-0 tabular-nums text-slate-500"}
+                            #{share_of_total(page.impressions, row.impressions)} · position #{metric_value(page.position, :position)} · #{pluralize(number_with_delimiter(page.clicks), "click")}
+                  %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.impressions)
+                  %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.clicks)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "competing"), class: export_class do
+          = icon("download", size: 12)
+          CSV
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    - cards = [["new-queries", "New queries", "trending-up", search.new_queries, "new"],
+      ["lost-queries", "Lost queries", "arrow-down", search.lost_queries, "lost"]]
+    - cards.each do |id, title, card_icon, rows, export|
+      = render layout: "shared/card", locals: {id: id, title: title, icon: card_icon} do
+        %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500", hidden: !@period.compare?}
+          - if @period.compare_countries? && export == "new"
+            Queries with impressions here but none in #{compared} over the same dates: what this audience searches
+            that the other doesn't.
+          - elsif @period.compare_countries?
+            Queries with impressions in #{compared} but none here over the same dates. Figures are #{compared}'s.
+          - elsif export == "new"
+            Queries with impressions in this period but none in #{compared}: what posts are starting to
+            rank for.
+          - else
+            Queries with impressions in #{compared} but none in this period: rankings that dropped out of
+            sight. Figures are from then.
+        - if !@period.compare?
+          %p{class: "px-4 py-3 text-sm text-slate-500"} Pick a comparison in the Compare menu to see these.
+        - elsif !search.compared?
+          %p{class: "px-4 py-3 text-sm text-slate-500"}
+            Search Console figures don't reach back to #{@period.previous}, so there's nothing to compare with.
+        - elsif rows.empty?
+          %p{class: "px-4 py-3 text-sm text-slate-500"} None in this period.
+        - else
+          %div{class: "overflow-x-auto"}
+            %table{class: table_class}
+              %thead{class: "text-slate-500"}
+                %tr
+                  = report_th "Query"
+                  = report_th "Impressions", :right
+                  = report_th "Clicks", :right
+                  = report_th "Position", :right
+              %tbody
+                - rows.each do |row|
+                  %tr{class: "border-t border-slate-200"}
+                    %td{class: "px-3 py-1.5 font-medium"}= row[:query]
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.impressions)
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.clicks)
+                    %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.position, :position)
+        %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+          = link_to list_url(@period, @filtering, format: :csv, export: export), class: export_class do
+            = icon("download", size: 12)
+            CSV
+
+  %div{class: "grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "positions", title: "Queries by position", icon: "bar-chart"} do
+      - distribution = search.position_distribution
+      - distribution_before = search.position_distribution(@period.previous) if search.compared?
+      %div{class: "px-4 py-3"}
+        = time_chart distribution.map { |bucket, row| [bucket, row[:queries]] }, x_title: "Average position",
+          y_title: "Queries", label: "Queries by average position"
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              = report_th "Position"
+              = report_th "Queries", :right
+              = report_th "Clicks", :right
+          %tbody
+            - distribution.each do |bucket, row|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "px-3 py-1.5"}= bucket
+                %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                  = number_with_delimiter(row[:queries])
+                  - if distribution_before
+                    %div= row_change(row[:queries], distribution_before[bucket][:queries], metrics.fetch(:clicks))
+                %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                  = number_with_delimiter(row[:clicks])
+                  - if distribution_before
+                    %div= row_change(row[:clicks], distribution_before[bucket][:clicks], metrics.fetch(:clicks))
+
+    -# Not split by country, so another country would only be compared with
+    -# the same figures.
+    - split_before = search.compared? && !@period.compare_countries?
+    = render layout: "shared/card", locals: {id: "search-countries", title: "Clicks by country", icon: "globe"} do
+      %div{class: "px-4 py-3"}
+        = render "shared/breakdown", counts: country_counts(search.countries.transform_values(&:clicks)), heading: "Country",
+          count_heading: "Clicks", empty: "No country figures in this period.", limit: 10,
+          previous: (country_counts(search.countries(@period.previous).transform_values(&:clicks)) if split_before),
+          metric: metrics.fetch(:clicks)
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "countries"), class: export_class do
+          = icon("download", size: 12)
+          CSV with blog views
+
+    = render layout: "shared/card", locals: {id: "search-devices", title: "Clicks by device", icon: "cpu"} do
+      %div{class: "px-4 py-3"}
+        = render "shared/breakdown", counts: search.devices.transform_values(&:clicks), heading: "Device",
+          count_heading: "Clicks", empty: "No device figures in this period.",
+          previous: (search.devices(@period.previous).transform_values(&:clicks) if split_before), metric: metrics.fetch(:clicks)
+
+    -# Web search is most of the totals already; these are the readers
+    -# found some other way, as Insights' additional sources are.
+    = render layout: "shared/card", locals: {id: "search-types", title: "Other search types", icon: "image"} do
+      - types = search.search_types
+      - types_before = search.search_types(@period.previous).to_h { |type, clicks, impressions| [type, [clicks, impressions]] } if search.compared?
+      - labels = Google::SearchConsole::PerformanceController::TABS.choices
+      - if types.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} Every click and impression in this period came from web search.
+      - else
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              = report_th "Source"
+              = report_th "Clicks", :right
+              = report_th "Impressions", :right
+          %tbody
+            - types.each do |type, clicks, impressions|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "px-3 py-1.5"}
+                  = link_to labels.fetch(type).first, google_search_console_performance_path(type: type, **@period.query),
+                    class: "font-medium text-slate-900 hover:underline"
+                %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                  = number_with_delimiter(clicks)
+                  - if types_before
+                    %div= row_change(clicks, types_before.dig(type, 0), metrics.fetch(:clicks))
+                %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                  = number_with_delimiter(impressions)
+                  - if types_before
+                    %div= row_change(impressions, types_before.dig(type, 1), metrics.fetch(:impressions))
+
+-# Apart from the performance figures, as it's read from URL inspections,
+-# which sync on their own.
+- coverage = IndexCoverage.new
+- if coverage.inspected?
+  %div{class: "mt-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "crawl-ages", title: "Since Google last crawled", icon: "clock"} do
+      - ages = coverage.crawl_ages
+      %div{class: "px-4 py-3"}
+        = ranking_chart(ages.map { |bucket, count| [bucket, count, "bg-slate-600", ChartsHelper::BAR_COLOR] }, total: ages.values.sum,
+          x_title: "Pages", y_title: "Last crawled", label: "Inspected pages by how long since Google last crawled them")
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        From each page's latest URL inspection, so a page not inspected lately may have been crawled since.
+
+    = render layout: "shared/card", locals: {id: "changed-since-crawl", title: "Changed since Google's last visit", icon: "refresh"} do
+      - rows = coverage.changed_since_crawl(@stats.by_page(:views))
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Pages the sitemap says changed after Google last crawled them, so search still shows the old version. Most read in the
+        period first; requesting indexing asks Google back.
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} Google has every page as it is now.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                = report_th "Page"
+                = report_th "Crawled", :right
+                = report_th "Changed", :right
+            %tbody
+              - rows.first(10).each do |row|
+                - path = IndexCoverage.path_of(row.page.url)
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(path, crawled_pages_path(q: path), live: row.page.url)
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(row.crawled_at.to_date)
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(row.changed_at.to_date)

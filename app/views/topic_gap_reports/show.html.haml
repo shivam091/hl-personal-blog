@@ -1,0 +1,121 @@
+- content_for :title, "Topic gaps"
+- gaps = @gaps
+- more = CompareHelper::MORE_IS_BETTER
+- cell_class = "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Topic gaps
+    %p{class: "mt-1 text-sm text-slate-500"}
+      What readers look for and the blog has no entry on: searches Google shows it for that no entry answers, and site searches
+      that find nothing.
+    = last_sync_status("search_console_performance")
+  = link_to list_url(@period, @filtering, format: :csv),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "google/shared/period", period: @period, keep: [@filtering]
+= search_panel @filtering, keep: [@period]
+
+- if gaps.country
+  %p{class: "mb-4 text-sm text-slate-600"}
+    Impressions are from #{country_label(gaps.country)}; the page ranking for each query, and site search, cover every country.
+
+%div{class: "mb-6"}
+  -# Grouped, so a topic searched many ways is weighed as one, with its
+  -# queries beneath to say what exactly readers asked.
+  = render layout: "shared/card", locals: {id: "search-gaps", title: "Searches no entry answers", icon: "search"} do
+    %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+      Queries with #{number_with_delimiter(gaps.min_impressions)}+ impressions where no entry's title, description, tags or
+      categories name at least half the query's words, or where Google shows the home page, a listing or a loosely matched entry
+      for it. Grouped by their most shared word, most seen first; searches for the blog by name are left out.
+    - if !gaps.any?
+      %p{class: "px-4 py-3 text-sm text-slate-500"} No Search Console figures yet. Sync them from Search performance.
+    - else
+      - topics = gaps.topics
+      - if topics.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} Every query seen this often in #{@period} has an entry answering it.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: "w-full border-collapse text-sm"}
+            %thead{class: "text-slate-500"}
+              %tr
+                = report_th "Query"
+                = report_th "Why"
+                = report_th "Impressions", :right
+                = report_th "Clicks", :right
+                = report_th "Position", :right, title: "Average position in Google Search"
+            - topics.each do |topic|
+              %tbody
+                %tr{class: "border-t border-slate-200 bg-slate-50"}
+                  %th{scope: "rowgroup", colspan: 2, class: "px-3 py-1.5 text-left font-semibold text-slate-700"}
+                    = topic.word
+                    %span{class: "font-normal text-slate-500"} · #{pluralize(topic.gaps.size, "query", plural: "queries")}
+                  %td{class: "#{cell_class} font-semibold"}
+                    = number_with_delimiter(topic.impressions)
+                    = row_change(topic.impressions, gaps.previous_impressions(topic), more) if gaps.compared?
+                  %td{colspan: 2}
+                - topic.gaps.each do |gap|
+                  %tr{class: "border-t border-slate-100"}
+                    %td{class: "w-full px-3 py-1.5 pl-6"}= gap.query
+                    %td{class: "px-3 py-1.5 text-xs whitespace-nowrap text-slate-600"}
+                      = gap.reason
+                      - if gap.page_path
+                        %span{class: "block text-slate-500"}= gap.page_path
+                      - if gap.closest
+                        %span{class: "block"}
+                          Closest:
+                          = link_to gap.closest.name, page_view_path(IndexCoverage.path_of(gap.closest.url).chomp("/"), **@period.query), class: "hover:underline"
+                    - earlier = gaps.previous_queries&.[](gap.query)
+                    %td{class: cell_class}
+                      = number_with_delimiter(gap.impressions)
+                      = row_change(gap.impressions, earlier&.impressions, more) if gaps.compared?
+                    %td{class: cell_class}
+                      = number_with_delimiter(gap.clicks)
+                      = row_change(gap.clicks, earlier&.clicks, more) if gaps.compared?
+                    %td{class: cell_class}
+                      = gap.position ? number_with_precision(gap.position, precision: 1) : "—"
+                      -# Lower is better for a position, so a falling number shows as a gain.
+                      - if gaps.compared? && gap.position
+                        %span{class: "block text-xs"}= position_change(gap.position, earlier&.position)
+    %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+      = link_to list_url(@period, @filtering, format: :csv, export: "queries"), class: export_class do
+        = icon("download", size: 12)
+        Every query as CSV
+
+%div{class: "mb-6"}
+  = render layout: "shared/card", locals: {id: "site-search-gaps", title: "Site searches that found nothing", icon: "text-search"} do
+    - since = Google::Analytics::SiteSearch::COUNTED_SINCE
+    %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+      What readers typed into the blog's own search with no result, most searched first, from Analytics. Every country, as Analytics
+      isn't asked for search terms by one.
+      - if @period.from < since
+        %span{class: "text-amber-700"} Counted from #{l(since)}.
+    - terms = gaps.not_found_terms
+    - earlier_terms = gaps.previous_terms
+    - if terms.empty?
+      %p{class: "px-4 py-3 text-sm text-slate-500"} No search came up empty in #{@period}.
+    - else
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-sm"}
+          %thead{class: "text-slate-500"}
+            %tr
+              = report_th "Search term"
+              = report_th "Found nothing", :right
+              = report_th "Searches", :right
+          %tbody
+            - terms.each do |term|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "w-full px-3 py-1.5 font-medium"}= term.term
+                - earlier = earlier_terms&.[](term.term)
+                %td{class: cell_class}
+                  = number_with_delimiter(term.not_found)
+                  = row_change(term.not_found, earlier&.not_found, CompareHelper::LESS_IS_BETTER) if earlier_terms
+                %td{class: cell_class}
+                  = number_with_delimiter(term.searches)
+                  = row_change(term.searches, earlier&.searches, more) if earlier_terms
+    %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+      = link_to list_url(@period, @filtering, format: :csv, export: "site-search"), class: export_class do
+        = icon("download", size: 12)
+        Every term as CSV

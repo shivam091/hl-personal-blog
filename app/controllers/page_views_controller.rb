@@ -6,6 +6,7 @@ class PageViewsController < ApplicationController
 
   SEARCH_FIELDS = [
     Filtering::Contains.new(:q, field: :url, label: "URL contains", placeholder: "e.g. /post/ or css-grid"),
+    Filtering::FeedEntries.new,
     Filtering::DateRange.new(:updated, field: :updated_at, label: "Last updated")
   ].freeze
   # Each column starts in the direction most useful for it; busiest first by
