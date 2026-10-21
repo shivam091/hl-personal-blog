@@ -1,0 +1,17 @@
+-# Impressions first, since clicks on a site this size leave most of the map
+-# blank. Both are already on the page, so switching is instant.
+= render layout: "shared/card", locals: {id: "countries-map", title: "Countries on the map", icon: "globe", class: "mb-6"} do
+  %div{data: {controller: "metric-tabs", metric_tabs_param_value: ""}}
+    %div{role: "tablist", aria: {label: "Countries on the map"}, class: "flex gap-5 border-b border-slate-200 px-4", data: {action: "keydown->metric-tabs#key"}}
+      - @country_map.reverse.each_with_index do |(metric, _counts, _previous), index|
+        %button{type: "button", role: "tab", id: "countries-map-tab-#{metric.field}", tabindex: (index.zero? ? 0 : -1),
+          aria: {selected: index.zero?.to_s, controls: "countries-map-panel-#{metric.field}"},
+          class: "-mb-px cursor-pointer border-b-2 border-transparent py-2 text-sm font-medium text-slate-500 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-slate-900 aria-selected:border-slate-900 aria-selected:text-slate-900",
+          data: {metric_tabs_target: "tab", action: "metric-tabs#select", field: metric.field}}= metric.label
+    - @country_map.reverse.each_with_index do |(metric, counts, previous), index|
+      %div{role: "tabpanel", id: "countries-map-panel-#{metric.field}", aria: {labelledby: "countries-map-tab-#{metric.field}"}, hidden: !index.zero?,
+        class: "px-4 py-3", data: {metric_tabs_target: "panel"}}
+        = world_map(counts, label: "#{metric.label} by country", unit: metric.field.to_s.singularize, previous: previous, previous_name: previous_period_name,
+          links: counts.keys.to_h { |code| [code, google_search_console_performance_breakdown_path("days", **@period.query, country: code)] })
+  %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+    Search Console leaves out countries with too few searches to share, so these can add up to less than the totals above.

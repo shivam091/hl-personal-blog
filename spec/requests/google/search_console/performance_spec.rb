@@ -429,6 +429,30 @@ RSpec.describe "Search Console performance", type: :request do
       expect(Nokogiri::HTML5(response.body).at_css("thead select#breakdown-split")).to be_nil
     end
 
+    it "maps every country's impressions and clicks on the Countries tab, against the period before once compared" do
+      Google::SearchConsole::CountryStat.create!(search_type: "web", date: yesterday, country: "IN", clicks: 2, impressions: 50)
+      Google::SearchConsole::CountryStat.create!(search_type: "web", date: yesterday - 40, country: "IN", clicks: 1, impressions: 10)
+
+      get google_search_console_performance_breakdown_path("countries", compare: "off")
+
+      page = Nokogiri::HTML5(response.body)
+      panels = page.css("section[aria-labelledby=countries-map] [role=tabpanel]")
+      expect(panels.map { |panel| panel["id"] }).to eq(["countries-map-panel-impressions", "countries-map-panel-clicks"])
+      expect(panels.map { |panel| panel["hidden"] }).to eq([nil, ""])
+      india = ->(panel) { JSON.parse(panel.css("svg path[data-tip]").map { |path| path["data-tip"] }.find { |tip| tip.include?("India") })["rows"] }
+      expect(india.(panels.first).first["value"]).to eq("50")
+      expect(india.(panels.last).first["value"]).to eq("2")
+      href = JSON.parse(panels.first.css("svg path[data-tip]").map { |path| path["data-tip"] }.find { |tip| tip.include?("India") })["href"]
+      expect(href).to start_with(google_search_console_performance_breakdown_path("days"))
+      expect(href).to include("country=IN")
+      get href
+      expect(response).to have_http_status(:ok)
+      expect(Nokogiri::HTML5(response.body).at_css("select[name=country] option[selected]")&.text).to eq("IN")
+
+      get google_search_console_performance_breakdown_path("pages")
+      expect(Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=countries-map]")).to be_nil
+    end
+
     it "refuses an unknown breakdown" do
       get "/google/search-console/performance/nonsense"
 
