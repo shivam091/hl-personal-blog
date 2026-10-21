@@ -15,3 +15,5 @@ shared:
   sitemaps: {label: Sitemaps, route: google_search_console_sitemaps, controller: google/search_console/sitemaps}
   page_speed: {label: PageSpeed, route: google_page_speed_results, controller: google/page_speed/results}
   link_checks: {label: Link safety, route: google_safe_browsing_link_checks, controller: google/safe_browsing/link_checks}
+  content_decay: {label: Content decay, route: content_decay_report, controller: content_decay_reports}
+  topic_gaps: {label: Topic gaps, route: topic_gap_report, controller: topic_gap_reports}

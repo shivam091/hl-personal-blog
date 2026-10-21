@@ -112,6 +112,13 @@ class BlogStats
     sum_by(facts(metric, within, nil), &:country)
   end
 
+  # Against the compared country's total over the same dates when one is
+  # picked, so every country reads against one audience rather than itself.
+  def compared_by_country(metric)
+    previous = period.previous
+    period.compare_countries? ? Hash.new(total(metric, previous)) : by_country(metric, previous)
+  end
+
   def by_page(metric, within = period, country: within.country || self.country)
     sum_by(facts(metric, within, country), &:slug)
   end
@@ -150,11 +157,11 @@ class BlogStats
 
   # Starts from everyone who subscribed before the period, so the line shows
   # the list's real size rather than growth from zero.
-  def subscriber_totals(within = period)
-    shown = within.country || country
-    running = NewsletterSubscriber.where(:subscribed_at.lt => within.from.in_time_zone.beginning_of_day).pluck(:country)
-      .count { |code| shown.nil? || country_code(code) == shown }
-    daily(:subscribers, within).map { |count| running += count }
+  def subscriber_totals
+    before = NewsletterSubscriber.where(:subscribed_at.lt => period.from.in_time_zone.beginning_of_day).pluck(:country)
+      .count { |code| country.nil? || country_code(code) == country }
+    running = before
+    daily(:subscribers).map { |count| running += count }
   end
 
   # Weeks for a short period and months for a long one, so there are enough
@@ -203,20 +210,28 @@ class BlogStats
     :analytics_views, keyword_init: true
   ) do
     class << self
-      def to_csv(rows)
+      # AI impressions are Google's totals over the latest upload's range, so
+      # the range goes in their heading rather than following the period.
+      # A count carries its change from the period before when previous is
+      # given, as beside it in the list.
+      def to_csv(rows, ai: nil, previous: nil)
+        ai = nil unless ai&.covered
+        counted = ->(row, metric) { CompareChange.cell(row.public_send(metric), previous&.dig(metric, row.country), compare: !previous.nil?) }
+        extra = ->(row, metric) { row.public_send(metric).nil? ? nil : CompareChange.cell(row.public_send(metric), previous&.dig(metric, row.country).to_i, compare: previous&.key?(metric)) }
         CSV.generate do |csv|
-          csv << FUNNEL_CSV_HEADERS
+          csv << [*FUNNEL_CSV_HEADERS, *("AI impressions #{ai.covered.begin.iso8601} to #{ai.covered.end.iso8601}" if ai)]
           rows.each do |row|
             csv << [
               row.country,
-              row.views,
-              row.likes,
+              counted.(row, :views),
+              counted.(row, :likes),
               row.like_rate&.round(4),
-              row.subscribers,
+              counted.(row, :subscribers),
               row.subscriber_rate&.round(4),
-              row.messages,
-              row.search_clicks,
-              row.analytics_views
+              counted.(row, :messages),
+              extra.(row, :search_clicks),
+              extra.(row, :analytics_views),
+              *(ai.countries.fetch(row.country, 0) if ai)
             ]
           end
         end
