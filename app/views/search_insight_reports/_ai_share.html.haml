@@ -1,0 +1,22 @@
+-# So it's plain how much of the blog's search visibility now comes
+-# through AI answers.
+-# Site-wide only, since Google doesn't split AI impressions by country and
+-# a share of one country's impressions would mean nothing.
+- if ai.any? && !country
+  - impressions = search.daily(:impressions)
+  - shares = ai.daily.zip(impressions).map { |shown, seen| (shown.to_f / seen * 100).round(1) if shown && seen.to_i.positive? }
+  - total = ai.total
+  - all = search.totals.value(:impressions).to_i
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "ai-share", title: "Share of impressions from AI answers", icon: "sparkles"} do
+      %div{class: "px-4 py-3"}
+        - if shares.compact.any?
+          = line_chart(dates, [ChartsHelper::Series.new(name: "AI share", values: shares)], y_title: "% of impressions", unit: "%",
+            label: "AI Overviews and AI Mode impressions as a share of search impressions per day", unsettled: search_unsettled_from)
+        - else
+          %p{class: "text-sm text-slate-500"} No AI impressions uploaded for days in #{@period}.
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        - if total && all.positive?
+          #{number_with_delimiter(total)} AI impressions (#{ai.search_type}), #{number_to_percentage(total.to_f / all * 100, precision: 1)} of the period's #{number_with_delimiter(all)} search impressions.
+        From uploads of Search Console's Generative AI report; days not uploaded are left blank rather than read as none.
+        = link_to "Generative AI performance", google_search_console_generative_ai_path(**@period.query), class: "font-medium text-slate-700 underline hover:text-slate-900"

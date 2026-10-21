@@ -1,0 +1,37 @@
+-# Laid out as Search Console's Insights: a few rows a tab, each with its
+-# clicks and how far they moved, so what's working and what's slipping are
+-# a tap apart. Every tab is already on the page, so switching is instant.
+- pages = kind == :page
+= render layout: "shared/card", locals: {id: id, title: title, icon: card_icon} do
+  %div{data: {controller: "metric-tabs", metric_tabs_param_value: ""}}
+    %div{class: "flex items-end justify-between gap-3 border-b border-slate-200 px-4"}
+      %div{role: "tablist", aria: {label: title}, class: "flex gap-5", data: {action: "keydown->metric-tabs#key"}}
+        - tabs.each_with_index do |(field, label, _rows, _empty), index|
+          %button{type: "button", role: "tab", id: "#{id}-tab-#{field}", tabindex: (index.zero? ? 0 : -1),
+            aria: {selected: index.zero?.to_s, controls: "#{id}-panel-#{field}"},
+            class: "-mb-px cursor-pointer border-b-2 border-transparent py-2 text-sm font-medium text-slate-500 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-slate-900 aria-selected:border-slate-900 aria-selected:text-slate-900",
+            data: {metric_tabs_target: "tab", action: "metric-tabs#select", field: field}}= label
+      %span{class: "py-2 text-xs font-medium text-slate-500"} Clicks
+    - tabs.each_with_index do |(field, _label, rows, empty), index|
+      %div{role: "tabpanel", id: "#{id}-panel-#{field}", aria: {labelledby: "#{id}-tab-#{field}"}, hidden: !index.zero?,
+        data: {metric_tabs_target: "panel"}}
+        - if rows.empty?
+          %p{class: "px-4 py-3 text-sm text-slate-500"}= empty
+        - else
+          %ul{class: "divide-y divide-slate-100"}
+            - rows.each do |mover|
+              %li{class: "flex items-center justify-between gap-4 px-4 py-2.5"}
+                %div{class: "min-w-0"}
+                  - if pages
+                    - name = search.page_names[mover.key]
+                    = blog_page_link(name || mover.key, page_view_path(mover.key), live: mover.key, truncate: true)
+                    %p{class: "truncate text-xs text-slate-500"}= blog_live_url(mover.key) || mover.key
+                  - else
+                    %p{class: "truncate text-sm font-medium text-slate-900"}= mover.key
+                %div{class: "flex shrink-0 items-center gap-3"}
+                  = click_change(mover.clicks, mover.previous_clicks)
+                  %span{class: "min-w-8 text-right text-sm font-semibold tabular-nums"}= number_with_delimiter(mover.clicks)
+  %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+    = link_to more_url, class: "inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+      View more
+      = icon("chevron-right", size: 14)

@@ -28,6 +28,13 @@ module DashboardHelper
     Google::SearchConsole::PerformanceController::METRICS
   end
 
+  # So the search charts outside the report mark the same days as unsettled.
+  def search_unsettled_from
+    return @search_unsettled_from if defined?(@search_unsettled_from)
+
+    @search_unsettled_from = Google::SearchConsole::FinalDate.first_incomplete_date
+  end
+
   # A rate on a handful of views is noise, so it's withheld rather than
   # shown as a confident percentage.
   def rate_or_dash(rate)
@@ -114,6 +121,21 @@ module DashboardHelper
     tag.span(class: ["inline-flex items-center gap-0.5 font-medium tabular-nums", better ? "text-emerald-700" : "text-red-700"],
       title: "Was #{number_with_precision(previous, precision: 1)}") do
       safe_join([icon(better ? "arrow-up" : "arrow-down", size: 12), number_with_precision((current - previous).abs, precision: 1)])
+    end
+  end
+
+  # Worded as Search Console's Insights words it: the share it moved by, or
+  # the clicks before when there were none to take a share of. Nil when the
+  # period before wasn't synced.
+  def click_change(clicks, previous)
+    return if previous.nil?
+    return tag.span("—", class: "text-slate-400", title: "No change from the period before") if clicks == previous
+
+    up = clicks > previous
+    text = previous.zero? ? "Previously: 0" : number_to_percentage((clicks - previous).abs * 100.0 / previous, precision: 0)
+    tag.span(class: ["inline-flex items-center gap-0.5 text-xs font-medium tabular-nums", up ? "text-emerald-700" : "text-red-700"],
+      title: "#{number_with_delimiter(previous)} #{"click".pluralize(previous)} in the period before") do
+      safe_join([icon(up ? "arrow-up" : "arrow-down", size: 12), text])
     end
   end
 

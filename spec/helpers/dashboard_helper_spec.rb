@@ -44,4 +44,12 @@ RSpec.describe DashboardHelper, type: :helper do
     expect(helper.counted_from_note(Date.new(2026, 10, 20), counted)).to be_nil
     expect(helper.counted_from_note(Date.new(2026, 10, 1), nil)).to be_nil
   end
+
+  it "words a change in clicks as Search Console's Insights does" do
+    expect(helper.click_change(3, nil)).to be_nil
+    expect(helper.click_change(3, 0)).to include("Previously: 0")
+    expect(helper.click_change(3, 2)).to include("50%").and include("text-emerald-700")
+    expect(helper.click_change(1, 4)).to include("75%").and include("text-red-700")
+    expect(helper.click_change(2, 2)).to include("—")
+  end
 end
