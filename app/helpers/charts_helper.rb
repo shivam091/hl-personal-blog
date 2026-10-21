@@ -37,6 +37,8 @@ module ChartsHelper
   SHARE_OTHER_COLOR = "#a8a7a1"
   SHARE_OTHER_FILL = "fill-[#a8a7a1]"
   SHARE_OTHER_SWATCH = "bg-[#a8a7a1]"
+  # Past this a slice grows too thin to judge, so the rest fold into Other.
+  DONUT_SLICES = 5
 
   # Shapes as well as colours for charted rows, as in GA, so a line is told
   # from its neighbours by more than hue. Total gets a shape of its own.
@@ -269,7 +271,7 @@ module ChartsHelper
   # well as from its figure.
   # A row's change, when one is given, sits by its name so it's read with
   # the row rather than hunted for in the readout.
-  def ranking_chart(rows, label:, total:, x_title:, y_title:, first_series: nil, previous: nil, previous_name: nil, changes: {})
+  def ranking_chart(rows, label:, total:, x_title:, y_title:, first_series: nil, previous: nil, previous_name: nil, changes: {}, links: {})
     step, top = axis_scale(rows.map { |_, value, _| value.to_f }.max.to_f)
     ticks = (0..(top / step).round).map { |index| index * step }
     columns = "grid grid-cols-[minmax(0,11rem)_1fr] gap-x-3"
@@ -290,7 +292,7 @@ module ChartsHelper
                 data: tip) do
                 safe_join([
                   tag.span(class: "flex min-w-0 items-center gap-1 self-center") do
-                    safe_join([tag.span(name, title: name, class: "truncate font-medium text-slate-700"), (tag.span(changes[name], class: "shrink-0") if changes[name])].compact, " ")
+                    safe_join([chart_row_name(name, links[name]), (tag.span(changes[name], class: "shrink-0") if changes[name])].compact, " ")
                   end,
                   tag.div(class: "relative flex items-center py-1") do
                     safe_join([
@@ -326,8 +328,8 @@ module ChartsHelper
   # is what's read rather than either figure alone; shaped as well as
   # coloured so the two are told apart without hue. On a fixed scale, since
   # a score out of 100 means the same whatever the highest one is.
-  def dumbbell_chart(rows, keys:, label:, x_title:, y_title:, top: 100, ticks: [0, 25, 50, 75, 100])
-    columns = "grid grid-cols-[minmax(0,11rem)_1fr] gap-x-3"
+  def dumbbell_chart(rows, keys:, label:, x_title:, y_title:, top: 100, ticks: [0, 25, 50, 75, 100], links: {})
+    columns = "grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-3 sm:grid-cols-[minmax(0,11rem)_1fr]"
     left = ->(value) { (value.to_f / top * 100).clamp(0, 100).round(2) }
     tag.figure(class: "min-w-0") do
       safe_join([
@@ -347,7 +349,7 @@ module ChartsHelper
               readings << {value: number_with_delimiter((known.max - known.min).round), name: "Gap"} if known.size > 1
               tag.li(class: [columns, "min-h-8 rounded px-1 hover:bg-slate-100 data-active:bg-slate-100"], data: chart_tip(name, readings)) do
                 safe_join([
-                  tag.span(name, title: name, class: "self-center truncate font-medium text-slate-700"),
+                  chart_row_name(name, links[name], class: "self-center"),
                   tag.div(class: "relative h-8") do
                     safe_join([
                       *ticks.map { |tick| tag.span(class: "absolute inset-y-0 w-px bg-slate-200", style: "left: #{left.(tick)}%", aria: {hidden: true}) },
@@ -372,7 +374,7 @@ module ChartsHelper
           safe_join([
             tag.span,
             tag.div(class: "relative h-4") do
-              safe_join(ticks.map { |tick| tag.span(tick, style: "left: #{left.(tick)}%", class: "absolute top-0 -translate-x-1/2 tabular-nums") })
+              safe_join(ticks.map { |tick| tag.span(compact_number(tick), style: "left: #{left.(tick)}%", class: "absolute top-0 -translate-x-1/2 tabular-nums") })
             end
           ])
         end,
@@ -545,6 +547,145 @@ module ChartsHelper
     unit == :week ? "Week of #{l(start)}" : l(start, format: "%B %Y")
   end
 
+  # Only for one whole split a few ways, read at a glance. The busiest keep a
+  # colour each and the rest fold into Other, whose readout names what it
+  # holds. The key beside it gives every count and share, so no figure rests
+  # on judging an angle. Slices are cut short of each other, so touching
+  # colours stay apart.
+  def donut_chart(counts, label:, unit:, empty:)
+    rows = counts.map { |key, count| [key.to_s, count.to_i] }.reject { |_, count| count.zero? }.sort_by { |key, count| [-count, key] }
+    return tag.p(empty, class: "text-sm text-slate-500") if rows.empty?
+
+    shown = rows.size > DONUT_SLICES ? rows.first(DONUT_SLICES - 1) : rows
+    rest = rows.drop(shown.size)
+    slices = shown.zip(SHARE_COLORS, SHARE_SWATCHES).map { |(name, count), color, swatch| [name, count, color, swatch] }
+    slices << ["Other", rest.sum(&:last), SHARE_OTHER_COLOR, SHARE_OTHER_SWATCH] if rest.any?
+    total = rows.sum(&:last).to_f
+    share = ->(count) { number_to_percentage(count / total * 100, precision: 1) }
+    radius = 40
+    point = ->(turn) { [(50 + radius * Math.sin(turn * 2 * Math::PI)).round(3), (50 - radius * Math.cos(turn * 2 * Math::PI)).round(3)] }
+    gap = slices.size > 1 ? 0.004 : 0
+    start = 0.0
+    arcs = slices.map do |name, count, color, _|
+      turn = count / total
+      readings = [{value: share.(count), name: "#{number_with_delimiter(count)} #{unit.pluralize(count)}", color: color}]
+      readings += rest.map { |key, held| {value: number_with_delimiter(held), name: key} } if name == "Other"
+      data = chart_tip(name, readings)
+      mark = if slices.size == 1
+        tag.circle(cx: 50, cy: 50, r: radius, data: data, **donut_stroke(color))
+      else
+        inset = [gap, turn / 4].min
+        (x0, y0), (x1, y1) = point.(start + inset), point.(start + turn - inset)
+        tag.path(d: "M#{x0} #{y0}A#{radius} #{radius} 0 #{turn - 2 * inset > 0.5 ? 1 : 0} 1 #{x1} #{y1}", data: data, **donut_stroke(color))
+      end
+      start += turn
+      mark
+    end
+    tag.figure(class: "flex min-w-0 flex-wrap items-center gap-x-6 gap-y-4") do
+      safe_join([
+        chart_tooltip(label: label, class: "relative mx-auto size-36 shrink-0") do
+          safe_join([
+            tag.svg(viewBox: "0 0 100 100", role: "img", aria: {label: label}, class: "size-36") { safe_join(arcs) },
+            tag.div(class: "pointer-events-none absolute inset-0 flex flex-col items-center justify-center", aria: {hidden: true}) do
+              safe_join([
+                tag.span(compact_number(total), class: "text-lg font-semibold text-slate-900 tabular-nums"),
+                tag.span(unit.pluralize(total), class: "text-xs text-slate-500")
+              ])
+            end
+          ])
+        end,
+        tag.ul(class: "min-w-48 flex-1 space-y-1.5 text-sm") do
+          safe_join(slices.map do |name, count, _, swatch|
+            tag.li(class: "flex items-center gap-2") do
+              safe_join([
+                tag.span(class: "size-2.5 shrink-0 rounded-sm #{swatch}", aria: {hidden: true}),
+                tag.span(name, title: name, class: "min-w-0 flex-1 truncate font-medium text-slate-700"),
+                tag.span(number_with_delimiter(count), class: "tabular-nums text-slate-600"),
+                tag.span(share.(count), class: "w-14 shrink-0 text-right tabular-nums text-slate-900")
+              ], " ")
+            end
+          end)
+        end
+      ])
+    end
+  end
+
+  # Each step centred at its share of the first, so the narrowing reads as a
+  # funnel, over a pale bar as wide as the step before, so what was lost
+  # there is the bare part either side. Steps are counted apart and one can
+  # count more than the step before, so only a loss is marked.
+  def funnel_chart(steps, label:, unit:)
+    first = steps.first&.last.to_i
+    width = ->(count) { first.zero? ? 0 : (count.to_f / first * 100).clamp(0, 100).round(2) }
+    chart_tooltip(label: label) do
+      tag.ol(class: "space-y-1 text-sm") do
+        safe_join(steps.each_with_index.map do |(name, count), index|
+          before = steps[index - 1].last if index.positive?
+          lost = before - count if before && count < before
+          readings = [{value: number_with_delimiter(count), name: unit.pluralize(count), color: BAR_COLOR}]
+          readings << {value: number_to_percentage(width.(count), precision: 0), name: "of #{steps.first.first.downcase}"} if index.positive?
+          readings << {value: "−#{number_with_delimiter(lost)}", name: "since #{steps[index - 1].first.downcase}"} if lost
+          tag.li(class: "grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] items-center sm:grid-cols-[minmax(0,9rem)_1fr_5.5rem] gap-3 rounded px-1 hover:bg-slate-100 data-active:bg-slate-100",
+            data: chart_tip(name, readings)) do
+            safe_join([
+              tag.span(name, title: name, class: "truncate font-medium"),
+              tag.div(class: "relative flex h-6 justify-center", aria: {hidden: true}) do
+                safe_join([
+                  (tag.span(class: "absolute inset-y-0 left-1/2 -translate-x-1/2 rounded-sm bg-slate-200", style: "width: #{width.(before)}%") if lost),
+                  tag.span(class: "relative h-full rounded-sm bg-slate-600", style: "width: #{width.(count)}%")
+                ].compact)
+              end,
+              tag.span(class: "text-right tabular-nums") do
+                safe_join([
+                  number_with_delimiter(count),
+                  (tag.span(" −#{number_to_percentage(lost * 100.0 / before, precision: 0)}", class: "text-xs text-red-700") if lost)
+                ].compact)
+              end
+            ], " ")
+          end
+        end)
+      end
+    end
+  end
+
+  # Each row's whole along one bar, so rows of different sizes compare by
+  # share; the parts sit a surface gap apart so neighbours stay told apart.
+  # The readout gives each part's count, since the bar shows only shares.
+  def split_bars(rows, parts:, label:, unit:, links: {})
+    columns = "grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-x-3 sm:grid-cols-[minmax(0,14rem)_1fr]"
+    tag.figure(class: "min-w-0") do
+      safe_join([
+        swatch_legend(parts),
+        chart_tooltip(label: label) do
+          tag.ul(class: "grid text-xs") do
+            safe_join(rows.map do |name, counts|
+              total = counts.sum.to_f
+              readings = parts.zip(counts).map do |(part, color), count|
+                {value: total.zero? ? "—" : number_to_percentage(count / total * 100, precision: 1),
+                 name: "#{part} · #{number_with_delimiter(count)} #{unit.pluralize(count)}", color: color}
+              end
+              tag.li(class: [columns, "min-h-8 rounded px-1 hover:bg-slate-100 data-active:bg-slate-100"], data: chart_tip(name, readings)) do
+                safe_join([
+                  chart_row_name(name, links[name], class: "self-center"),
+                  tag.div(class: "flex h-5 gap-0.5 self-center overflow-hidden rounded-sm", aria: {hidden: true}) do
+                    next tag.span("None yet", class: "text-slate-400") if total.zero?
+
+                    safe_join(parts.zip(counts).filter_map do |(_, color), count|
+                      tag.span(style: "width: #{(count / total * 100).round(2)}%; background-color: #{color}") if count.positive?
+                    end)
+                  end
+                ])
+              end
+            end)
+          end
+        end,
+        tag.div(class: [columns, "mt-1 px-1 text-xs text-slate-400"], aria: {hidden: true}) do
+          safe_join([tag.span, tag.div(class: "flex justify-between tabular-nums") { safe_join(%w[0% 50% 100%].map { |tick| tag.span(tick) }) }])
+        end
+      ])
+    end
+  end
+
   # A share of a whole reads faster as a filled bar than as a percentage.
   def meter(part, whole, label:)
     share = whole.to_i.zero? ? 0 : part.to_f / whole * 100
@@ -602,6 +743,22 @@ module ChartsHelper
         axis_title(x_title, class: "ml-14 text-center")
       ])
     end
+  end
+
+  # A row's name, linked when it has a page of its own, cut short with the
+  # full name in its title.
+  def chart_row_name(name, url, **options)
+    classes = ["truncate font-medium text-slate-700", options[:class]]
+    return tag.span(name, title: name, class: classes) unless url
+
+    link_to(name, url, title: name, class: [*classes, "hover:text-slate-900 hover:underline"])
+  end
+
+  # Drawn as a thick stroke rather than a filled wedge, so the hole needs no
+  # second shape; faded on hover, as a map's country is.
+  def donut_stroke(color)
+    {fill: "none", stroke: color, "stroke-width": 16,
+     class: "hover:opacity-75 data-active:opacity-75"}
   end
 
   def axis_title(text, **options)

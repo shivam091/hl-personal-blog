@@ -268,6 +268,50 @@ RSpec.describe ChartsHelper, type: :helper do
     end
   end
 
+  describe "#donut_chart" do
+    it "keeps a slice each for the busiest and folds the rest into Other, naming what it holds" do
+      counts = {"a" => 50, "b" => 20, "c" => 10, "d" => 10, "e" => 6, "f" => 4, "g" => 0}
+      chart = html(helper.donut_chart(counts, label: "Views", unit: "view", empty: "None"))
+
+      expect(chart.css("path").size).to eq(5)
+      expect(tips(chart).map { |tip| tip["title"] }).to eq(%w[a b c d Other])
+      expect(tips(chart).last["rows"].map { |row| [row["name"], row["value"]] }).to eq([["10 views", "10.0%"], ["e", "6"], ["f", "4"]])
+      expect(chart.css("li").map { |row| row.text.squish }.first).to eq("a 50 50.0%")
+      expect(chart.text).to include("100")
+    end
+
+    it "draws a whole ring for a single slice, and says when there's nothing" do
+      expect(html(helper.donut_chart({"mobile" => 3}, label: "Views", unit: "view", empty: "None")).css("circle").size).to eq(1)
+      expect(helper.donut_chart({"mobile" => 0}, label: "Views", unit: "view", empty: "No device data.")).to include("No device data.")
+    end
+  end
+
+  describe "#funnel_chart" do
+    it "centres each step at its share of the first, over the step before where it lost some" do
+      chart = html(helper.funnel_chart([["Published", 10], ["Indexed", 5], ["Read", 6]], label: "Funnel", unit: "entry"))
+      steps = chart.css("li[data-tip]")
+
+      expect(steps.map { |step| step.css("span.bg-slate-600").first["style"] }).to eq(["width: 100.0%", "width: 50.0%", "width: 60.0%"])
+      expect(steps[1].at_css("span.bg-slate-200")["style"]).to eq("width: 100.0%")
+      expect(steps[2].at_css("span.bg-slate-200")).to be_nil
+      expect(JSON.parse(steps[1]["data-tip"])["rows"].map { |row| row["value"] }).to eq(["5", "50%", "−5"])
+      expect(steps[1].text.squish).to eq("Indexed 5 −50%")
+    end
+  end
+
+  describe "#split_bars" do
+    it "splits each row's whole by share, leaving out parts with none" do
+      chart = html(helper.split_bars([["A post", [1, 3, 0]], ["Quiet", [0, 0, 0]]], parts: [["Clicked", "#2a78d6"], ["Opened", "#eb6834"], ["Bounced", "#eda100"]],
+        unit: "mail", label: "Mails", links: {"A post" => "/feed_entries/a"}))
+      rows = chart.css("li[data-tip]")
+
+      expect(rows.first.css("div[aria-hidden] span").map { |part| part["style"] }).to eq(["width: 25.0%; background-color: #2a78d6", "width: 75.0%; background-color: #eb6834"])
+      expect(rows.first.at_css("a")["href"]).to eq("/feed_entries/a")
+      expect(JSON.parse(rows.first["data-tip"])["rows"].map { |row| row["value"] }).to eq(["25.0%", "75.0%", "0.0%"])
+      expect(rows.last.text).to include("None yet")
+    end
+  end
+
   describe "#scatter_chart" do
     it "places each point by its two figures over a dashed curve, position 1 at the left" do
       points = [ChartsHelper::ScatterPoint.new(x: 1, y: 0.2, color: "#2a78d6", tip: helper.chart_tip("a", [])),

@@ -204,16 +204,17 @@ module GoogleReportsHelper
 
     current = current.to_f
     previous = previous.to_f
+    before = @period.compare_countries? ? country_label(@period.compare_country) : "the period before"
     return tag.span("(–)", class: "text-xs text-slate-400", title: "None in either period") if current.zero? && previous.zero?
-    return tag.span("(new)", class: "text-xs text-emerald-700", title: "None in the period before") if previous.zero?
+    return tag.span("(new)", class: "text-xs text-emerald-700", title: "None in #{before}") if previous.zero?
 
     change = (current - previous) / previous
-    return tag.span("(0%)", class: "text-xs text-slate-500", title: "No change from the period before") if change.abs < 0.0005
+    return tag.span("(0%)", class: "text-xs text-slate-500", title: "No change from #{before}") if change.abs < 0.0005
 
     better = metric.lower_is_better ? change.negative? : change.positive?
     percent = number_to_percentage(change.abs * 100, precision: 1, strip_insignificant_zeros: true)
     tag.span("(#{change.positive? ? "+" : "−"}#{percent})", class: ["text-xs", better ? "text-emerald-700" : "text-red-700"],
-      title: "#{change.positive? ? "Up" : "Down"} from #{metric.try(:format) ? metric_value(previous, metric.format) : number_with_delimiter(previous.round)} in the period before")
+      title: "#{change.positive? ? "Up" : "Down"} from #{metric.try(:format) ? metric_value(previous, metric.format) : number_with_delimiter(previous.round)} in #{before}")
   end
 
   # Minutes and seconds read faster than a count of seconds.

@@ -111,6 +111,13 @@ class BlogStats
     sum_by(facts(metric, within, nil), &:country)
   end
 
+  # Against the compared country's total over the same dates when one is
+  # picked, so every country reads against one audience rather than itself.
+  def compared_by_country(metric)
+    previous = period.previous
+    period.compare_countries? ? Hash.new(total(metric, previous)) : by_country(metric, previous)
+  end
+
   def by_page(metric, within = period, country: within.country || self.country)
     sum_by(facts(metric, within, country), &:slug)
   end

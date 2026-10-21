@@ -417,6 +417,9 @@ RSpec.describe "Analytics engagement", type: :request do
 
     get google_analytics_engagement_path
 
-    expect(page.css("section[aria-labelledby=reader-interactions] dl > div").map { |item| item.text.squish }).to eq(["Copied code 4 (2.0)"])
+    bar = page.at_css("section[aria-labelledby=reader-interactions] li[data-tip]")
+    expect(bar.text.squish).to eq("Copied code (2.0)")
+    expect(bar.at_css("a")["href"]).to start_with(google_analytics_event_path("copy_code"))
+    expect(JSON.parse(bar["data-tip"])["rows"].first["value"]).to eq("4")
   end
 end
