@@ -301,6 +301,41 @@ RSpec.describe "Page views", type: :request do
       expect(Nokogiri::HTML5(response.body).at_css("#like-rate").parent.text).to include("too few for a like rate")
     end
 
+    it "sets the page against GA: its gap beside the median, its consent states and what its gap is put down to" do
+      travel_to(Time.zone.parse("2026-10-12 12:00")) do
+        %w[/a /b /c].each do |slug|
+          PageView.collection.insert_one("_id" => slug, "slug" => slug, "countriesByDay" => {"2026-10-10" => {"IN" => 100}})
+          Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: slug, views: 80)
+        end
+        PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a",
+          "countriesByDay" => {"2026-10-10" => {"IN" => 100}},
+          "consentByDay" => {"2026-10-10" => {"granted" => 50, "denied" => 20, "pending" => 10, "default" => 20}},
+          "gaByDay" => {"2026-10-10" => {"loaded" => 80, "blocked" => 10}})
+        Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: "/post/a", views: 50)
+
+        get page_view_path("/post/a", from: "2026-10-10", to: "2026-10-11")
+
+        page = Nokogiri::HTML5(response.body)
+        card = page.at_css("section[aria-labelledby=page-vs-ga]")
+        expect(card.text.squish).to include("GA missed 50.0% of this page's views over the 1 day it has synced (median across pages 20.0%).",
+          "Well above the median")
+        expect(card.css("[role=img]").map { it["aria-label"] }).to include(a_string_starting_with("This page's views in the period by the reader's consent state"))
+        expect(card.text).to include("No banner needed", "Pending")
+        causes = card.css("[data-tip]").map { JSON.parse(it["data-tip"]).then { |tip| [tip["title"], tip["rows"].first["value"]] } }
+        expect(causes).to include(["Declined the banner", "20 views · 40.0%"], ["Ad or tracker blocker", "7 views · 14.0%"], ["Unexplained", "6 views · 12.0%"])
+        expect(card.css("a").find { it.text.squish == "Page gaps" }["href"]).to eq(consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-11"))
+      end
+    end
+
+    it "leaves out the comparison with GA for a page without consent data in the period" do
+      PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a",
+        "countriesByDay" => {"2026-09-01" => {"IN" => 3}})
+
+      get page_view_path("/post/a")
+
+      expect(Nokogiri::HTML5(response.body).at_css("#page-vs-ga")).to be_nil
+    end
+
     it "shows the home page, whose id is just a slash" do
       PageView.collection.insert_one("_id" => "/", "slug" => "/", "url" => "https://blog.example.com/", "visitorCount" => 1)
 

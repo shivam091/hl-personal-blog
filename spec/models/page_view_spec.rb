@@ -129,4 +129,33 @@ RSpec.describe PageView, type: :model do
   it "declares no indexes" do
     expect(described_class.index_specifications).to be_empty
   end
+
+  describe "gap tracking fields" do
+    let(:period) { Period.new({from: "2026-10-10", to: "2026-10-12"}) }
+
+    before do
+      PageView.collection.insert_many([
+        {"_id" => "/a", "slug" => "/a", "countriesByDay" => {"2026-10-10" => {"IN" => 7}, "2026-10-20" => {"IN" => 9}},
+         "gaByDay" => {"2026-10-10" => {"loaded" => 5, "blocked" => 2}, "2026-10-20" => {"loaded" => 9}},
+         "suspectByDay" => {"2026-10-11" => {"datacentre" => 3}}},
+        {"_id" => "/b", "slug" => "/b", "viewsByDay" => {"2026-10-10" => 4}, "gaByDay" => {"2026-10-10" => {"loaded" => 4}}},
+        {"_id" => "/old", "slug" => "/old"}
+      ])
+    end
+
+    it "adds every page's loading and automation tallies by day inside the period" do
+      expect(PageView.ga_daily(period)).to eq("2026-10-10" => {"loaded" => 9, "blocked" => 2})
+      expect(PageView.suspect_daily(period)).to eq("2026-10-11" => {"datacentre" => 3})
+    end
+
+    it "knows the day each began, apart from consent" do
+      expect(PageView.ga_first_day).to eq(Date.new(2026, 10, 10))
+      expect(PageView.suspect_first_day).to eq(Date.new(2026, 10, 11))
+    end
+
+    it "counts each page's views on the days given only, legacy totals included" do
+      expect(PageView.views_by_slug(Set["2026-10-10"])).to eq("/a" => 7, "/b" => 4)
+      expect(PageView.views_by_slug(Set.new)).to be_empty
+    end
+  end
 end

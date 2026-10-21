@@ -5,6 +5,7 @@ class PageViewsController < ApplicationController
 
   SEARCH_FIELDS = [
     Filtering::Contains.new(:q, field: :url, label: "URL contains", placeholder: "e.g. /post/ or css-grid"),
+    Filtering::FeedEntries.new,
     Filtering::DateRange.new(:updated, field: :updated_at, label: "Last updated")
   ].freeze
   SORT_COLUMNS = {
@@ -44,6 +45,7 @@ class PageViewsController < ApplicationController
     @crawled_page = CrawledPage.where(url: same_path).first
     @page_speed = Google::PageSpeed::Result.where(url: same_path).index_by(&:strategy)
     @launch_curve = LaunchCurve.new(@page_view, @feed_entry) if @feed_entry
+    @page_consent = PageConsent.new(@page_view, @period, analytics: @analytics)
     @mixpanel = Mixpanel::Report.new(@period)
     @like_rates = {"This page" => like_rate(@page_like&.like_count.to_i, @page_view.visitor_count),
                    "Site average" => like_rate(PageLike.sum(:likeCount), PageView.hit_totals[:humans])}

@@ -23,7 +23,18 @@ Rails.application.routes.draw do
   # Reports join the blog's own figures with Google's, so they sit apart from
   # the pages of either source.
   scope "reports" do
+    resource :country_report, only: :show, path: "countries"
+    resource :search_insight_report, only: :show, path: "search-insights"
     resource :ranking_opportunity_report, only: :show, path: "ranking-opportunities"
+    resource :analytics_insight_report, only: :show, path: "analytics-insights"
+    resource :content_report, only: :show, path: "content"
+    resource :message_report, only: :show, path: "messages"
+    resource :data_quality_report, only: :show, path: "data-quality"
+    resource :consent_report, only: :show, path: "consent"
+    # Under the consent report so it is the one named in the breadcrumb and menus.
+    resource :consent_page_gap_report, only: :show, path: "consent/pages"
+    resource :content_decay_report, only: :show, path: "content-decay"
+    resource :topic_gap_report, only: :show, path: "topic-gaps"
   end
 
   # Ids are entry URLs, so dots mustn't start a format.
