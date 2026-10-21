@@ -1,0 +1,22 @@
+- dates = (period.from..period.to).to_a
+- by_date = decomposition.by_date
+- keys = granularity.dates(dates)
+- daily = ->(field) { dates.map { |date| by_date[date]&.public_send(field) } }
+- colors = ChartsHelper::SHARE_COLORS
+- series = ConsentGap::CAUSES.keys.each_with_index.map do |cause, index|
+  - ChartsHelper::Series.new(name: ConsentGap::SHORT_NAMES.fetch(cause), values: granularity.sums(dates, daily.(cause)), color: colors[index])
+- remainder = granularity.sums(dates, daily.(:remainder))
+- series << ChartsHelper::Series.new(name: "Unexplained", values: remainder, color: ChartsHelper::SHARE_OTHER_COLOR)
+- over = remainder.count { |value| value&.negative? }
+= render layout: "shared/card", locals: {id: "gap-causes-over-time", title: "Gap causes over time", icon: "bar-chart", class: "mb-6",
+  actions: chart_granularity_picker(granularity, "Gap causes", "causes-by")} do
+  %div{class: "px-4 py-3"}
+    = stacked_chart(keys, series, y_title: "Views", per: granularity.per, total_name: "Gap",
+      label: "Our views minus GA's per #{granularity.by}, split by what each missing view is put down to")
+  %p{class: footnote_class}
+    - left_out = dates.size - by_date.size
+    - if left_out.positive?
+      #{pluralize(left_out, "day")} without GA's figures or the consent split #{left_out == 1 ? "is" : "are"} left out.
+    A cause recorded only from partway through leaves its part empty on the days before.
+    - if over.positive?
+      On #{pluralize(over, granularity.by)} the causes found add up to more than the gap, so Unexplained is below zero: those bars stand taller than the gap, Unexplained isn't drawn, and the readout gives its figure.

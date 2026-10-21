@@ -1,0 +1,122 @@
+- content_for :title, "Page gaps"
+- page_gap = @page_gap
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Page gaps
+    %p{class: subtitle_class}
+      Each page's views counted by the blog against GA's. Readers who decline or block GA lose every page alike, so a page
+      losing far more than the rest has a problem of its own.
+    %p{class: "mt-1 text-sm"}= link_to "Back to the consent report", consent_report_path(**@period.query), class: "text-slate-600 hover:underline"
+  = link_to list_url(@period, @sorting, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "google/shared/period", period: @period, keep: [@sorting]
+
+- if !page_gap.any?
+  = render "shared/empty_state", message: "GA hasn't synced yet, so there is nothing to compare the blog's views with."
+- elsif @rows.empty?
+  = render "shared/empty_state", message: "No page views recorded in #{@period}."
+- else
+  - flagged = page_gap.flagged
+  - median = page_gap.median_percent
+  - before = @page_gap_before
+  - notes = ["Only the #{pluralize(page_gap.days_covered, "day")} GA has synced in #{@period} are counted."]
+  - notes << "GA has no figures for #{@period.previous}, so there is nothing to compare with." if @period.compare? && !before
+  = render "shared/period_notes", notes: notes
+  - if median
+    - share = number_to_percentage(median.abs * 100, precision: 1)
+    %p{class: "mb-3 text-sm text-slate-600"}
+      - if median.positive?
+        The median page loses #{share} of its views to GA.
+      - elsif median.negative?
+        GA counts #{share} more views than we do on the median page.
+      - else
+        GA counts as many views as we do on the median page.
+      - earlier_median = before&.median_percent
+      - if earlier_median
+        - earlier_share = number_to_percentage(earlier_median.abs * 100, precision: 1)
+        - if earlier_median.positive?
+          In #{@previous_name}, the median page lost #{earlier_share}.
+        - elsif earlier_median.negative?
+          In #{@previous_name}, GA counted #{earlier_share} more views than we did on the median page.
+        - else
+          In #{@previous_name}, GA counted as many views as we did on the median page.
+      A page is flagged when its gap is #{(PageGap::MARGIN * 100).round} points or more above the median's, with at least
+      #{PageGap::MIN_VIEWS} views.
+      - if flagged.any?
+        #{pluralize(flagged.size, "page")} flagged.
+  - if page_gap.judged.any?
+    = render layout: "shared/card", locals: {id: "gap-against-views", title: "Gap against views", icon: "target", class: "mb-6"} do
+      %p{class: lead_note_class}
+        Each page with #{PageGap::MIN_VIEWS}+ views, by how many we counted and the share of them GA missed. The solid line is the
+        median page; amber pages sit on or above the dashed line, #{(PageGap::MARGIN * 100).round} points over it. Click a page for its statistics.
+      %div{class: "px-4 py-3"}
+        = page_gap_scatter(page_gap)
+  - missing = page_gap.missing
+  - worst = page_gap.top_flagged
+  - if missing.any?
+    %div{class: worst.any? ? split_grid_class : "mb-6"}
+      = render layout: "shared/card", locals: {id: "missing-views", title: "Where the missing views are", icon: "bar-chart"} do
+        %p{class: lead_note_class}
+          The #{pluralize(missing.size, "page")} GA missed the most views on, our views minus GA's. Each share is of the
+          #{number_with_delimiter(page_gap.missing_total)} views missing over every page GA counted fewer on. Amber pages are flagged.
+        %div{class: "px-4 py-3"}
+          = ranking_chart(missing.map { |row| [row.slug, row.gap, row.flagged ? PageGapsHelper::FLAGGED_SWATCH : "bg-slate-600", row.flagged ? PageGapsHelper::FLAGGED_COLOR : ChartsHelper::BAR_COLOR] },
+            total: page_gap.missing_total, x_title: "Views missing", y_title: "Page", links: missing.to_h { |row| [row.slug, page_gap_link(row)] },
+            previous: (missing.to_h { |row| [row.slug, [@rows_before[row.slug]&.gap.to_i, 0].max] } if before), previous_name: @previous_name,
+            label: "The pages GA missed the most views on in #{@period}")
+      - if worst.any?
+        = render layout: "shared/card", locals: {id: "flagged-views", title: "Our views against GA's, flagged pages", icon: "split"} do
+          %p{class: lead_note_class}
+            - if worst.size < flagged.size
+              The #{worst.size} flagged pages missing the most views, of #{flagged.size}.
+            The wider apart the two marks, the more of the page's views GA missed.
+          %div{class: "px-4 py-3"}
+            = page_gap_dumbbell(worst)
+  - if worst.any?
+    - causes = page_gap.causes(worst.map(&:slug))
+    = render layout: "shared/card", locals: {id: "flagged-causes", title: "Causes on flagged pages", icon: "split", class: "mb-6"} do
+      %p{class: lead_note_class}
+        Each flagged page's gap over the synced days its consent split was recorded, put down to causes the way the consent report does.
+        Blocked, undetected and datacentre views count only for readers GA could otherwise have seen.
+      %div{class: "px-4 py-3"}
+        = page_gap_causes_key
+        = chart_tooltip(label: "Causes of each flagged page's gap") do
+          %ul{class: "grid text-xs"}
+            - worst.each do |row|
+              %li{class: "grid min-h-8 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-x-3 rounded px-1 sm:grid-cols-[minmax(0,11rem)_1fr]"}
+                = chart_row_name(row.slug, page_gap_link(row))
+                = page_gap_causes_bar(row, causes[row.slug])
+  %div{id: "page-gap-table", class: "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"}
+    %div{class: "relative overflow-x-auto"}
+      %table{class: "w-full border-collapse text-left text-sm"}
+        %thead{class: table_head_class}
+          %tr
+            - {"slug" => "Page", "first_party" => "Our views", "analytics" => "GA views", "gap" => "Gap", "gap_percent" => "Gap %"}.each do |column, heading|
+              = sort_header @sorting, heading, column, keep: [@period], class: ["px-3 py-2.5 font-semibold whitespace-nowrap", ("text-right" unless column == "slug")]
+            %th{scope: "col", class: "px-3 py-2.5 font-semibold whitespace-nowrap", title: "Gap % by week; a break is a week with under #{PageGap::MIN_VIEWS} of our views"} Trend
+            %th{scope: "col", class: "px-3 py-2.5 font-semibold whitespace-nowrap"} Flag
+        %tbody
+          - @rows.each do |row|
+            %tr{class: ["border-b border-slate-100 last:border-b-0 hover:bg-slate-50", ("bg-amber-50" if row.flagged)]}
+              -# Squeezed to what is left, so one long address can't push the figures off the side.
+              %td{class: "w-full px-3 py-2 md:max-w-0"}
+                %div{class: "w-40 md:w-auto"}
+                  = blog_page_link(row.slug, (page_view_path(row.slug) if row.first_party.positive?), truncate: true)
+              %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.first_party)
+              %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.analytics)
+              - row_before = @rows_before&.[](row.slug)
+              -# A change from GA counting more views than us to fewer has no percentage to read.
+              - gap_before = [row_before&.gap.to_i, 0].max
+              %td{class: "px-3 py-2 text-right tabular-nums"}
+                = number_with_delimiter(row.gap)
+                = row_change(row.gap, gap_before, DashboardHelper::LOWER_IS_BETTER) if before && row.gap.positive?
+              %td{class: "px-3 py-2 text-right tabular-nums"}
+                = row.percent ? number_to_percentage(row.percent * 100, precision: 1) : "—"
+                = row_change(row.percent, row_before.percent, DashboardHelper::LOWER_IS_BETTER) if row.percent&.positive? && row_before&.percent&.positive?
+              %td{class: "px-3 py-2"}
+                = page_gap_trend(row.slug, page_gap)
+              %td{class: "px-3 py-2 whitespace-nowrap"}= row.flagged ? "Well above the median" : ""

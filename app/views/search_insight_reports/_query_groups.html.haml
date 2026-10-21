@@ -1,0 +1,30 @@
+- clicks = groups.sum(&:clicks)
+- before = local_assigns[:previous]&.index_by(&:name)
+- metrics = google_search_metrics.index_by(&:field)
+%div{class: "overflow-x-auto"}
+  %table{class: table_class}
+    %thead{class: table_head_class}
+      %tr
+        = report_th heading
+        = report_th "Queries", :right
+        = report_th "Clicks", :right
+        = report_th "Share", :right
+        = report_th "Impressions", :right
+        = report_th "CTR", :right
+        = report_th "Position", :right
+    %tbody
+      - groups.each do |group|
+        %tr{class: "border-t border-slate-100"}
+          %td{class: "#{name_cell_class} whitespace-nowrap"}= group.name
+          %td{class: cell_class}= number_with_delimiter(group.queries)
+          %td{class: cell_class}
+            = number_with_delimiter(group.clicks)
+            - if before
+              %div= row_change(group.clicks, before[group.name]&.clicks, metrics.fetch(:clicks))
+          %td{class: cell_class}= clicks.positive? ? number_to_percentage(group.clicks * 100.0 / clicks, precision: 1) : "—"
+          %td{class: cell_class}
+            = number_with_delimiter(group.impressions)
+            - if before
+              %div= row_change(group.impressions, before[group.name]&.impressions, metrics.fetch(:impressions))
+          %td{class: cell_class}= group.ctr ? metric_value(group.ctr, :percent) : "—"
+          %td{class: cell_class}= group.position ? metric_value(group.position, :position) : "—"
