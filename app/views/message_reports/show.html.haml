@@ -1,0 +1,217 @@
+- content_for :title, "Messages report"
+- messages = @messages
+- th = "px-3 py-2 font-medium first:pl-4 last:pr-4"
+- th_wrap = "#{th} align-bottom"
+- td = "px-3 py-2 tabular-nums first:pl-4 last:pr-4"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Messages report
+    %p{class: "mt-1 text-sm text-slate-500"}
+      Contact messages against your verdicts: how far to trust the reCAPTCHA score, whether Google
+      hears back, and who's waiting for an answer.
+  = link_to list_url(@period, @filtering, format: :csv),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [(@granularity if params[:by].present?)].compact, likes_note: false
+
+- keys, by_verdict = messages.timeline
+- previous = @period.previous
+- before = messages.previous if @period.compare?
+%dl{class: "mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"}
+  = render "dashboard/tile", label: "Messages", tile_icon: "message-square", value: number_with_delimiter(messages.total),
+    hint: "Messages sent through the contact form in the period, from the country picked.",
+    spark: keys.each_index.map { |index| by_verdict.values.sum { |counts| counts[index] } },
+    change: metric_change(messages.total, messages.total(previous), DashboardHelper::HIGHER_IS_BETTER), compared_with: previous
+  = render "dashboard/tile", label: "Waiting for a verdict", tile_icon: "inbox", value: number_with_delimiter(messages.unmarked),
+    hint: "Messages not yet marked genuine or spam. Each verdict also teaches Google's model, once reported.", change: nil
+  = render "dashboard/tile", label: "Spam", tile_icon: "alert-triangle", value: number_with_delimiter(messages.count("spam")),
+    hint: "Messages marked as spam. The share beside it is of the messages marked either way, not of every message.",
+    compared_with: previous,
+    change: safe_join([metric_change(messages.count("spam"), before&.count("spam"), DashboardHelper::LOWER_IS_BETTER),
+      ("#{share_or_dash(messages.spam_share)} of marked" if messages.spam_share)].compact, " · ")
+  = render "dashboard/tile", label: "Average score", tile_icon: "shield", value: score_or_dash(messages.average_score),
+    hint: "reCAPTCHA's score for messages that got through: 1 is likely a person, 0 likely a bot. The form turns away anything under #{MessageStats::FORM_THRESHOLD}.",
+    change: metric_change(messages.average_score, before&.average_score, DashboardHelper::HIGHER_IS_BETTER, format: :score), compared_with: previous
+  = render "dashboard/tile", label: "Enterprise coverage", tile_icon: "shield-check",
+    value: share_or_dash((messages.assessed.fdiv(messages.total) if messages.any?)),
+    hint: "Share of messages checked through reCAPTCHA Enterprise, so a verdict on them can be reported to Google.",
+    compared_with: previous,
+    change: safe_join([metric_change((messages.assessed.fdiv(messages.total) if messages.any?), (before.assessed.fdiv(before.total) if before&.any?), DashboardHelper::HIGHER_IS_BETTER, format: :percent),
+      ("#{number_with_delimiter(messages.assessed)} of #{number_with_delimiter(messages.total)}" if messages.any?)].compact, " · ")
+
+- if !messages.any?
+  = render "shared/empty_state", message: "No messages in #{@period}.", icon: "inbox"
+- else
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
+    %div{class: "lg:col-span-2"}
+      = render layout: "shared/card", locals: {id: "messages-by-verdict", title: "Messages by #{messages.per}", icon: "message-square",
+        actions: chart_granularity_picker(@granularity, "Messages", "messages-by")} do
+        %div{class: "px-4 py-3"}
+          -# Bars of a different width, as with a longer compared period, wouldn't line up with these.
+          - before_totals = before.timeline.last.values.transpose.map(&:sum) if before && before.per == messages.per
+          = stacked_chart(keys, verdict_series(by_verdict),
+            label: "Contact messages per #{messages.per}, by your verdict#{", against #{previous}" if before_totals}", y_title: "Messages", per: messages.per,
+            previous: (aligned(before_totals, keys.size) if before_totals), previous_name: (previous.to_s if before_totals))
+
+    -# Whether verdicts reach Google, since one that never arrives teaches
+    -# its model nothing.
+    = render layout: "shared/card", locals: {id: "google-feedback", title: "Feedback to Google", icon: "send"} do
+      - feedback = messages.feedback
+      %ul{class: "divide-y divide-slate-100 text-sm"}
+        - MessageReportsHelper::FEEDBACK.each do |status, (label, status_icon, color)|
+          %li{class: "flex items-center justify-between gap-3 px-4 py-2"}
+            %span{class: "inline-flex items-center gap-2 text-slate-700"}
+              = icon(status_icon, size: 14, class: color)
+              = label
+            %span{class: "font-medium tabular-nums text-slate-900"}= number_with_delimiter(feedback.fetch(status, 0))
+      %dl{class: "space-y-1 border-t border-slate-200 px-4 py-3 text-xs text-slate-500"}
+        %div{class: "flex justify-between gap-3"}
+          %dt Last reported
+          %dd= messages.last_reported_at ? time_tag(messages.last_reported_at) : "Never"
+        %div{class: "flex justify-between gap-3"}
+          %dt Last message with an assessment
+          %dd= messages.last_assessed_at ? time_tag(messages.last_assessed_at) : "None"
+      - if (errors = messages.feedback_errors).any?
+        %div{class: "border-t border-slate-200 px-4 py-3"}
+          %p{class: "mb-1 text-xs font-medium text-red-700"} Why reports failed
+          %ul{class: "space-y-1 text-xs text-slate-600"}
+            - errors.first(3).each do |error, count|
+              %li{class: "break-words"}
+                %span{class: "font-medium tabular-nums"} #{count}×
+                = error
+
+  -# The score is only worth trusting if spam scores lower than real
+  -# messages, so each band shows what was marked in it.
+  - bands = messages.bands
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "score-vs-verdict", title: "Score against your verdicts", icon: "shield"} do
+      %div{class: "px-4 py-3"}
+        = stacked_chart(bands.map(&:label), band_series(bands), label: "Contact messages by reCAPTCHA score, split by your verdict",
+          y_title: "Messages", x_title: "reCAPTCHA score")
+      %div{class: "overflow-x-auto border-t border-slate-200"}
+        %table{class: "w-full border-collapse text-sm"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "#{th} text-left"} Score
+              %th{scope: "col", class: "#{th} text-right"} Messages
+              %th{scope: "col", class: "#{th} text-right"} Genuine
+              %th{scope: "col", class: "#{th} text-right"} Spam
+              %th{scope: "col", class: "#{th} text-right"} Spam of marked
+          %tbody
+            - bands.reverse_each do |band|
+              %tr{class: "border-t border-slate-100"}
+                %td{class: td}= band.label
+                %td{class: "#{td} text-right"}= number_with_delimiter(band.messages)
+                %td{class: "#{td} text-right"}= number_with_delimiter(band.genuine)
+                %td{class: "#{td} text-right"}= number_with_delimiter(band.spam)
+                %td{class: "#{td} text-right"}= share_or_dash(band.spam_share)
+
+    -# Tried against what you've marked, so raising the bar is weighed in
+    -# real messages lost against spam stopped.
+    = render layout: "shared/card", locals: {id: "threshold-check", title: "Would a stricter threshold help?", icon: "shield-check"} do
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-sm"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "#{th_wrap} text-left"} Threshold
+              %th{scope: "col", class: "#{th_wrap} text-right"} Blocked
+              %th{scope: "col", class: "#{th_wrap} text-right"} Genuine lost
+              %th{scope: "col", class: "#{th_wrap} text-right"} Spam stopped
+              %th{scope: "col", class: "#{th_wrap} text-right"} Spam let in
+          %tbody
+            - messages.thresholds.each do |threshold|
+              %tr{class: ["border-t border-slate-100", ("bg-slate-50 font-medium" if threshold.current?)]}
+                %td{class: td}
+                  = format("%.1f", threshold.score)
+                  - if threshold.current?
+                    %span{class: "ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700"} now
+                %td{class: "#{td} text-right"}= number_with_delimiter(threshold.blocked)
+                %td{class: ["#{td} text-right", ("text-red-700" if threshold.genuine_lost.positive?)]}
+                  = number_with_delimiter(threshold.genuine_lost)
+                %td{class: ["#{td} text-right", ("text-emerald-700" if threshold.spam_caught.positive?)]}
+                  = number_with_delimiter(threshold.spam_caught)
+                %td{class: "#{td} text-right"}= number_with_delimiter(threshold.spam_through)
+      %p{class: "border-t border-slate-200 px-4 py-3 text-xs text-slate-500"}
+        "Only messages you've marked count as genuine or spam. Anything under
+        #{MessageStats::FORM_THRESHOLD} was already turned away by the form, so it isn't here."
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "waiting", title: "Waiting for a verdict", icon: "inbox"} do
+      - waiting = messages.waiting
+      - if waiting.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} Every message in this period is marked.
+      - else
+        %ul{class: "divide-y divide-slate-100 text-sm"}
+          - waiting.each do |message|
+            %li{class: "flex items-center justify-between gap-3 px-4 py-2"}
+              %div{class: "min-w-0"}
+                = link_to message.name, message_path(message), class: "font-medium text-slate-900 hover:underline"
+                %p{class: "truncate text-xs text-slate-500"}= message.message
+              %div{class: "flex shrink-0 items-center gap-2"}
+                = recaptcha_score_badge(message.recaptcha_score)
+                %span{class: "text-xs whitespace-nowrap text-slate-500", title: (l(message.created_at) if message.created_at)}
+                  = message.created_at ? "#{time_ago_in_words(message.created_at)} ago" : "—"
+        - if messages.waiting_count > waiting.size
+          %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+            #{number_with_delimiter(messages.waiting_count - waiting.size)} more, oldest first above.
+            = link_to "All messages", messages_path, class: "font-medium text-slate-700 underline hover:text-slate-900"
+
+    = render layout: "shared/card", locals: {id: "repeat-senders", title: "People who wrote more than once", icon: "users"} do
+      - senders = messages.repeat_senders
+      - if senders.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} Nobody wrote more than once in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: "w-full border-collapse text-sm"}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_wrap} text-left"} Sender
+                %th{scope: "col", class: "#{th_wrap} text-right"} Messages
+                %th{scope: "col", class: "#{th_wrap} text-right"} Genuine
+                %th{scope: "col", class: "#{th_wrap} text-right"} Spam
+                %th{scope: "col", class: "#{th_wrap} text-left"} Last sent
+            %tbody
+              - senders.each do |sender|
+                %tr{class: "border-t border-slate-100"}
+                  %td{class: "py-2 pr-3 pl-4"}
+                    %span{class: "font-medium text-slate-900"}= sender.name
+                    %span{class: "block text-xs text-slate-500"}
+                      = sender.email
+                      - if sender.subscriber
+                        ·
+                        = link_to "Subscriber", newsletter_subscriber_path(sender.subscriber),
+                          class: "underline hover:text-slate-900"
+                  %td{class: "#{td} text-right"}= number_with_delimiter(sender.messages)
+                  %td{class: "#{td} text-right"}= number_with_delimiter(sender.genuine)
+                  %td{class: "#{td} text-right"}= number_with_delimiter(sender.spam)
+                  %td{class: "px-3 py-2 pr-4 text-slate-500"}= sender.last_sent_at ? l(sender.last_sent_at.to_date) : "—"
+
+  -# Spam clustering in one country points to a source, not unlucky readers.
+  = render layout: "shared/card", locals: {id: "messages-by-country", title: "Messages by country", icon: "globe"} do
+    %div{class: "border-b border-slate-200 px-4 py-3"}
+      = world_map(messages.by_country(limit: nil).to_h { |row| [row.country, row.messages] }, label: "Contact messages by country", unit: "message")
+    %div{class: "overflow-x-auto"}
+      - earlier = before&.by_country(limit: nil)&.to_h { |row| [row.country, row.messages] }
+      %table{class: "w-full border-collapse text-sm"}
+        %thead{class: "text-slate-500"}
+          %tr
+            %th{scope: "col", class: "#{th} text-left"} Country
+            %th{scope: "col", class: "#{th} text-right"} Messages
+            %th{scope: "col", class: "#{th} text-right"} Genuine
+            %th{scope: "col", class: "#{th} text-right"} Spam
+            %th{scope: "col", class: "#{th} text-right"} Spam of marked
+            %th{scope: "col", class: "#{th} text-right"} Average score
+        %tbody
+          - messages.by_country.each do |row|
+            %tr{class: "border-t border-slate-100"}
+              %td{class: "py-2 pr-3 pl-4"}= country_label(row.country)
+              %td{class: "#{td} text-right"}
+                = number_with_delimiter(row.messages)
+                = row_change(row.messages, earlier.fetch(row.country, 0), DashboardHelper::HIGHER_IS_BETTER) if earlier
+              %td{class: "#{td} text-right"}= number_with_delimiter(row.genuine)
+              %td{class: "#{td} text-right"}= number_with_delimiter(row.spam)
+              %td{class: "#{td} text-right"}= share_or_dash(row.spam_share)
+              %td{class: "#{td} text-right"}= row.average_score ? recaptcha_score_badge(row.average_score) : "—"

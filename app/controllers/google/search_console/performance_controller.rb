@@ -102,6 +102,8 @@ module Google
       DIMENSIONS = {
         query: -> { Stat.by_query }, country: -> { CountryStat.all }, device: -> { DeviceStat.all }, appearance: -> { AppearanceStat.all }
       }.freeze
+      # The edges are where a result stops being on the first screen.
+      POSITION_BUCKETS = {"Top 3" => (0...4), "4–10" => (4...11), "11–20" => (11...21), "21 and below" => (21..Float::INFINITY)}.freeze
       # Listed a row per page, so read from the per-page rows.
       PAGE_BREAKDOWNS = %w[pages query-pages].freeze
       BREAKDOWN_DIMENSIONS = {"queries" => :query, "query-pages" => :query, "countries" => :country, "devices" => :device, "appearances" => :appearance}.freeze
@@ -131,6 +133,55 @@ module Google
       def load_page
         super
         load_inspections if PAGE_BREAKDOWNS.include?(@breakdown.key)
+        return if unanswerable_search
+
+        load_country_map if @breakdown.key == "countries"
+        load_breakdown_charts
+      end
+
+      # Every row rather than a page of them, since a share or a spread is
+      # only true of the whole.
+      def load_breakdown_charts
+        return unless %w[devices appearances queries hours].include?(@breakdown.key)
+
+        rows = @rows_scope.to_a
+        @breakdown_charts = case @breakdown.key
+        when "devices", "appearances"
+          key = @breakdown.keys.first
+          {kind: :shares, shares: METRICS.first(2).map { |metric| [metric, rows.to_h { |row| [row[key].to_s.humanize.presence || "(not set)", row.value(metric.field).to_i] }] }}
+        when "queries"
+          {kind: :positions, buckets: position_buckets(rows)}
+        when "hours"
+          {kind: :hours, cells: rows.to_h { |row| [row[:hour_at].in_time_zone(HourStat::TIME_ZONE), row.value(:impressions).to_i] }}
+        end
+      end
+
+      # Weighted by impressions, since a query seen once at position 40 says
+      # less about where the blog stands than one seen thousands of times.
+      def position_buckets(rows)
+        buckets = POSITION_BUCKETS.keys.index_with(0)
+        rows.each do |row|
+          position = row.value(:position)
+          next if position.nil?
+
+          bucket = POSITION_BUCKETS.find { |_, range| range.cover?(position) }&.first
+          buckets[bucket] += row.value(:impressions).to_i if bucket
+        end
+        buckets
+      end
+
+      # Every country rather than a page of them. The earlier period only
+      # where the list shows a change, so a first sync isn't read as a jump.
+      def load_country_map
+        figures = ->(rows) { rows.to_h { |row| [row[:country], {clicks: row.value(:clicks).to_i, impressions: row.value(:impressions).to_i}] } }
+        current = figures.(@rows_scope.to_a)
+        previous = if @previous_rows
+          criteria = previous_rows_criteria(@period.previous)
+          figures.(criteria.klass.grouped(criteria, by: [:country]))
+        end
+        @country_map = METRICS.first(2).map do |metric|
+          [metric, current.transform_values { |figure| figure[metric.field] }, previous&.transform_values { |figure| figure[metric.field] }]
+        end
       end
 
       # Only for the rows shown, so Inspect opens the verdict already held on
