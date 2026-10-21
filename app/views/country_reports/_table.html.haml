@@ -1,0 +1,50 @@
+- headings = {"country" => "Country", "views" => "Views", "likes" => "Likes", "like_rate" => "Like rate",
+  "subscribers" => "Subs", "subscriber_rate" => "Subs / view", "messages" => "Messages"}
+- extras = local_assigns.fetch(:extras, [])
+- previous = local_assigns[:previous]
+- counted = ->(row, metric) { safe_join([number_with_delimiter(row.public_send(metric)),
+  (row_change(row.public_send(metric), previous[metric][row.country], DashboardHelper::HIGHER_IS_BETTER) if previous)].compact, " ") }
+- headings["search_clicks"] = "Search clicks" if extras.include?(:search_clicks)
+- headings["analytics_views"] = "GA views" if extras.include?(:analytics_views)
+-# Google's totals over the latest upload's range rather than the period's,
+-# so they can't be sorted or compared with the columns beside them.
+- uploaded_ai = local_assigns[:ai] if local_assigns[:ai]&.covered
+%div{class: "relative overflow-x-auto"}
+  %table{class: "w-full border-collapse text-left text-sm"}
+    %thead{class: table_head_class}
+      %tr
+        - headings.each do |column, heading|
+          - th_class = ["px-3 py-2.5 font-semibold whitespace-nowrap", ("text-right" unless column == "country")]
+          - if local_assigns[:sorting]
+            = sort_header sorting, heading, column, keep: [@period, @filtering], class: th_class
+          - else
+            %th{scope: "col", class: th_class}= heading
+        - if uploaded_ai
+          %th{scope: "col", class: "#{list_heading_right_class} whitespace-nowrap",
+            title: "Google's total for #{l(uploaded_ai.covered.begin)} – #{l(uploaded_ai.covered.end)}, from the latest Generative AI upload, whatever period is picked"} AI impressions
+        %th{scope: "col", class: list_heading_right_class} Trend
+    %tbody
+      - rows.each do |row|
+        %tr{class: "border-b border-slate-100 last:border-b-0 hover:bg-slate-50"}
+          %td{class: "px-3 py-2 font-medium whitespace-nowrap"}
+            - if row.country == BlogStats::UNKNOWN_COUNTRY
+              = country_label(row.country)
+            - else
+              = link_to country_label(row.country), root_path(**@period.query, country: row.country), class: "hover:underline",
+                title: "Dashboard for #{row.country}"
+          %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap"}= counted.(row, :views)
+          %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap"}= counted.(row, :likes)
+          %td{class: "px-3 py-2 text-right tabular-nums"}= rate_or_dash(row.like_rate)
+          %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap"}= counted.(row, :subscribers)
+          %td{class: "px-3 py-2 text-right tabular-nums"}= rate_or_dash(row.subscriber_rate)
+          %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap"}= counted.(row, :messages)
+          - extras.each do |extra|
+            %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap"}
+              = number_with_delimiter(row.public_send(extra).to_i)
+              - if previous&.key?(extra)
+                = row_change(row.public_send(extra).to_i, previous[extra][row.country].to_i, DashboardHelper::HIGHER_IS_BETTER)
+          - if uploaded_ai
+            %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(uploaded_ai.countries.fetch(row.country, 0))
+          %td{class: "px-3 py-2"}
+            %div{class: "flex justify-end"}
+              = sparkline(row.trend, label: "Views from #{row.country} by day")

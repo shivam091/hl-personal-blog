@@ -1,0 +1,73 @@
+- content_for :title, "Content decay"
+- th_class = "px-3 py-2 font-medium whitespace-nowrap"
+- cell_class = "px-3 py-2 text-right whitespace-nowrap tabular-nums"
+- rows = @decay.rows
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Content decay
+    %p{class: subtitle_class}
+      Entries to update, in one queue: still read though long unchanged, losing the search clicks they had, or slipping down the
+      results.
+    = last_sync_status("search_console_performance")
+  = link_to list_url(@period, @filtering, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "google/shared/period", period: @period, keep: [@filtering]
+= search_panel @filtering, keep: [@period]
+
+- unless @decay.compared?
+  %p{class: "mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "note"}
+    = icon("info", size: 16, class: "mt-0.5 shrink-0 text-amber-600")
+    %span
+      - if @period.compare?
+        Search Console wasn't synced for #{@period.previous}, so lost clicks and slipped rankings can't be told yet; only stale
+        entries still read are listed.
+      - else
+        With no comparison, lost clicks and slipped rankings can't be told; only stale entries still read are listed.
+
+- if rows.empty?
+  = render "shared/empty_state", message: (@filtering.searching? ? "No entry to update matches." : "Nothing needs updating in this period."), icon: "check-circle"
+- else
+  %p{class: "mb-3 text-sm text-slate-600"}
+    Entries with the most signs first, then the most search clicks lost, the most read in the period, and the longest since an
+    update. Stale is unchanged for over #{ContentStats::STALE_AFTER.inspect} yet read #{ContentStats::MIN_VIEWS_TO_REFRESH}+ times.
+  %div{class: table_card_class}
+    %table{class: table_class}
+      %thead{class: table_head_class}
+        %tr
+          %th{scope: "col", class: "#{th_class} text-right", aria: {label: "Rank"}} #
+          %th{scope: "col", class: "#{th_class} text-left"} Entry
+          %th{scope: "col", class: "#{th_class} text-left"} Why
+          %th{scope: "col", class: "#{th_class} text-right"} Views
+          %th{scope: "col", class: "#{th_class} text-right", title: "Clicks from Google Search, Search Console"} Clicks
+          %th{scope: "col", class: "#{th_class} text-right", title: "Average position in Google Search"} Position
+          %th{scope: "col", class: "#{th_class} text-right"} Updated
+      %tbody
+        - rows.each.with_index(1) do |row, rank|
+          - item = row.item
+          %tr{class: "border-t border-slate-100 align-top"}
+            %td{class: "px-3 py-2 text-right tabular-nums text-slate-400"}= rank
+            %td{class: "px-3 py-2"}
+              = blog_page_link(item.entry.name, page_view_path(item.path, **@period.query), live: item.path)
+              %span{class: "text-xs text-slate-500"}= item.type.capitalize
+            %td{class: "px-3 py-2"}
+              %ul{class: "space-y-1"}
+                - row.reasons.each do |reason|
+                  %li{class: "text-xs text-amber-800"}= reason
+            %td{class: cell_class}
+              = number_with_delimiter(item.views)
+              = row_change(item.views, row.previous_views, DashboardHelper::HIGHER_IS_BETTER) if row.previous_views
+            %td{class: cell_class}
+              = number_with_delimiter(row.clicks)
+              - if row.previous_clicks
+                %span{class: "block text-xs text-slate-500"} from #{number_with_delimiter(row.previous_clicks)}
+            %td{class: cell_class}
+              = row.position ? number_with_precision(row.position, precision: 1) : "—"
+              - if row.previous_position
+                %span{class: "block text-xs text-slate-500"} from #{number_with_precision(row.previous_position, precision: 1)}
+            %td{class: "#{cell_class} text-slate-500"}
+              = l(item.entry.last_modified_at.to_date)
+              %span{class: "block text-xs"}= pluralize(row.age_days, "day") + " ago"

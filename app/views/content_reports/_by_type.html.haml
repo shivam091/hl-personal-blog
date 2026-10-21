@@ -1,0 +1,46 @@
+%div{class: "overflow-x-auto"}
+  %table{class: table_class}
+    %thead{class: "text-slate-500"}
+      %tr
+        = report_th "Type"
+        = report_th "Entries", :right
+        %th{scope: "col", class: "#{th_class} text-right", title: "Published in the period"}<
+          New
+        = report_th "Views", :right
+        %th{scope: "col", class: "#{th_class} text-right", title: "Views in the period per entry"}<
+          Per entry
+        = report_th "Likes", :right
+        = report_th "Clicks", :right
+        -# Google's totals over the latest upload's range, not the period's,
+        -# so the range is given where they're headed.
+        - if ai.covered
+          %th{scope: "col", class: "#{th_class} text-right", title: "Google's total for #{l(ai.covered.begin)} – #{l(ai.covered.end)}, from the latest Generative AI upload"}<
+            AI impressions
+    %tbody
+      - rows.each do |row|
+        - earlier = previous&.[](row[:type])
+        %tr{class: table_row_class}
+          %td{class: name_cell_class}= row[:type].pluralize.capitalize
+          %td{class: cell_class}
+            = number_with_delimiter(row[:entries])
+            = row_change(row[:entries], earlier[:entries], CompareHelper::MORE_IS_BETTER) if earlier
+          %td{class: cell_class}
+            = number_with_delimiter(row[:published])
+            = row_change(row[:published], earlier[:published], CompareHelper::MORE_IS_BETTER) if earlier
+          %td{class: cell_class}
+            = number_with_delimiter(row[:views])
+            = row_change(row[:views], earlier[:views], CompareHelper::MORE_IS_BETTER) if earlier
+          %td{class: cell_class}<
+            - if row[:average_views]
+              = number_with_precision(row[:average_views], precision: 1, delimiter: ",")
+              = row_change(row[:average_views], earlier[:average_views], CompareHelper::MORE_IS_BETTER) if earlier&.[](:average_views)
+            - else
+              \—
+          %td{class: cell_class}
+            = number_with_delimiter(row[:likes])
+            = row_change(row[:likes], earlier[:likes], CompareHelper::MORE_IS_BETTER) if earlier
+          %td{class: cell_class}
+            = number_with_delimiter(row[:clicks])
+            = row_change(row[:clicks], earlier[:clicks], CompareHelper::MORE_IS_BETTER) if earlier && search_compared
+          - if ai.covered
+            %td{class: cell_class}= number_with_delimiter(ai_by_type.fetch(row[:type], 0))

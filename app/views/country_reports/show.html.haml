@@ -1,0 +1,28 @@
+- content_for :title, "Country report"
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Country report
+    %p{class: subtitle_class}
+      Views, likes, subscribers and messages per country, and the rates between them.
+  = link_to list_url(@period, @filtering, @sorting, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@sorting]
+
+%div{class: split_grid_class}
+  = render layout: "shared/card", locals: {id: "country-map", title: "Activity by country", icon: "globe"} do
+    %div{class: "px-4 py-3"}
+      = world_map(@stats.by_country(:views), label: "Activity by country, shaded by views", unit: "view", details: @map_details)
+  = render "shared/country_shares", stats: @stats
+
+- if @rows.empty?
+  = render "shared/empty_state", message: "Nothing recorded in #{@period}."
+- else
+  %div{id: "country-table", class: "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"}
+    = render "country_reports/table", rows: @rows, sorting: @sorting, extras: @extras, previous: @previous, ai: @ai
+  %p{class: "mt-2 text-xs text-slate-500"}
+    Rates show for countries with #{BlogStats::MIN_VIEWS_FOR_RATE}+ views. Visitors aren't kept long enough to
+    count per period, so rates are per view.
