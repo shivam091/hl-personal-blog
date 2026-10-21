@@ -5,6 +5,7 @@ class PageViewsController < ApplicationController
 
   SEARCH_FIELDS = [
     Filtering::Contains.new(:q, field: :url, label: "URL contains", placeholder: "e.g. /post/ or css-grid"),
+    Filtering::FeedEntries.new,
     Filtering::DateRange.new(:updated, field: :updated_at, label: "Last updated")
   ].freeze
   SORT_COLUMNS = {

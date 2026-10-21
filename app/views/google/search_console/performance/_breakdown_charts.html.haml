@@ -1,0 +1,40 @@
+- charts = @breakdown_charts
+- case charts[:kind]
+- when :shares
+  = render layout: "shared/card", locals: {id: "breakdown-shares", title: "#{@breakdown.label} share", icon: "bar-chart", class: "mb-6"} do
+    %div{class: "grid gap-6 px-4 py-3 md:grid-cols-2"}
+      - charts[:shares].each do |metric, counts|
+        %div
+          %h3{class: "mb-3 text-sm font-medium text-slate-700"}= metric.label
+          = donut_chart(counts, label: "#{metric.label} by #{@breakdown.headings.first.downcase}", unit: metric.label.downcase.singularize, empty: "No #{metric.label.downcase} in this period.")
+- when :positions
+  = render layout: "shared/card", locals: {id: "position-spread", title: "Impressions by average position", icon: "bar-chart", class: "mb-6"} do
+    %div{class: "px-4 py-3"}
+      - total = charts[:buckets].values.sum
+      - if total.zero?
+        %p{class: "text-sm text-slate-500"} No impressions with a position in this period.
+      - else
+        = ranking_chart(charts[:buckets].map { |name, count| [name, count, "bg-slate-600", ChartsHelper::BAR_COLOR] }, total: total,
+          x_title: "Impressions", y_title: "Average position", label: "Impressions of the period's queries by their average position")
+    %p{class: footnote_class}
+      Each query counts at its own average position, so impressions at the top of page two are what a better title or a sharper page can bring up.
+- when :hours
+  - cells = charts[:cells]
+  - days = cells.keys.map(&:to_date).uniq.sort
+  - max = cells.values.max.to_i
+  = render layout: "shared/card", locals: {id: "hours-heatmap", title: "Impressions by hour of day", icon: "clock", class: "mb-6"} do
+    = chart_tooltip(label: "Impressions for each hour of each day, in Pacific Time", class: "px-4 py-3") do
+      -# Not a table, so a report's own rows stay the only ones on the page.
+      %div{class: "overflow-x-auto"}
+        %div{class: "grid min-w-xl gap-0.5 text-xs", style: "grid-template-columns: max-content repeat(24, minmax(0, 1fr))"}
+          %span{class: "py-1 pr-3 font-medium text-slate-500"} Day
+          - 24.times do |hour|
+            %span{class: "px-0.5 py-1 text-center text-slate-500"}= hour
+          - days.each do |day|
+            %span{class: "py-0.5 pr-3 font-medium whitespace-nowrap"}= l(day, format: "%a %-d %b")
+            - 24.times do |hour|
+              - at = cells.keys.find { |time| time.to_date == day && time.hour == hour }
+              - if at
+                = heat_cell("", cells[at], max, class: "h-5", tip: chart_tip("#{l(day, format: "%a %-d %b")}, #{format("%02d", hour)}:00", [{value: number_with_delimiter(cells[at]), name: "Impressions"}]))
+              - else
+                %div{class: "h-5 rounded bg-slate-50", title: "Not held by Search Console"}
