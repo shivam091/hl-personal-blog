@@ -1,0 +1,235 @@
+- content_for :title, "Data quality"
+- dates = (@period.from..@period.to).to_a
+- own_total = @stats.total(:views)
+- ga_total = @analytics.views
+- before = @previous_rows
+- earlier_period = @period.previous
+- vs = ("#{earlier_period}" if before)
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Data quality
+    %p{class: subtitle_class}
+      How far the figures agree, which days are missing, and how fresh each source is.
+  = link_to list_url(@period, @filtering, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export page comparison
+
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@granularity], likes_note: false
+
+%div{class: "mb-6"}
+  = render layout: "shared/card", locals: {id: "own-vs-ga", title: "Blog views against Google Analytics", icon: "activity",
+    actions: chart_granularity_picker(@granularity, "Views", "own-vs-ga-by")} do
+    %div{class: "px-4 py-3"}
+      %p{class: "mb-3 text-sm text-slate-600"}
+        #{number_with_delimiter(own_total)} counted by the blog, #{number_with_delimiter(ga_total)}
+        by Google Analytics
+        - if own_total.positive? && @analytics.any?
+          (GA sees #{number_to_percentage(ga_total * 100.0 / own_total, precision: 1)} of them).
+        - if before
+          - earlier_own = @stats.total(:views, earlier_period)
+          - earlier_ga = @analytics.views(earlier_period)
+          %span{class: "block text-xs text-slate-500"}
+            #{vs}: #{number_with_delimiter(earlier_own)} by the blog #{metric_change(own_total, earlier_own, CompareHelper::MORE_IS_BETTER)},
+            #{number_with_delimiter(earlier_ga)} by Google Analytics #{metric_change(ga_total, earlier_ga, CompareHelper::MORE_IS_BETTER)}
+      - buckets = @granularity.dates(dates)
+      - own = ChartsHelper::Series.new(name: "Blog's own count", values: @granularity.sums(dates, @stats.daily(:views)))
+      - analytics_now = ChartsHelper::Series.new(name: "Google Analytics", values: @granularity.sums(dates, @analytics.daily_views), dashed: true)
+      - lines = [own, analytics_now]
+      - if before
+        - lines << ChartsHelper::Series.new(name: "Blog's own count, #{vs}", values: aligned(@granularity.sums_for(earlier_period, @stats.daily(:views, earlier_period)), buckets.size), dotted: true, color: ChartsHelper::LINE_COLORS[0], against: own)
+        - lines << ChartsHelper::Series.new(name: "Google Analytics, #{vs}", values: aligned(@granularity.sums_for(earlier_period, @analytics.daily_views(earlier_period)), buckets.size), dotted: true, color: ChartsHelper::LINE_COLORS[1], against: analytics_now)
+      = line_chart(buckets, lines, per: @granularity.per,
+        y_title: "Views", label: "The blog's own views against Google Analytics views, per #{@granularity.by}")
+    %p{class: footnote_class}
+      GA misses readers who block its script, and the blog leaves out hits it takes for bots, so neither count
+      is the whole truth; a gap that suddenly widens is the thing to look into.
+
+%div{class: split_grid_class}
+  = render layout: "shared/card", locals: {id: "page-comparison", title: "By page", icon: "file"} do
+    - if @rows.empty?
+      %p{class: empty_note_class} No views in this period.
+    - else
+      = report_table([report_th("Page"),
+        report_th("Blog", :right),
+        report_th("GA", :right),
+        report_th("Difference", :right, title: "GA's count against the blog's")]) do
+        - flagged = @page_gap.flagged.index_by(&:slug)
+        - @rows.first(15).each do |path, blog, google, difference|
+          -# Named the way Page gaps names a page, as GA's paths can carry a trailing slash or a query; only the
+          -# blog's own row is marked, so a page GA lists under two paths isn't flagged twice.
+          - gap = flagged[path.to_s.sub(/[?#].*\z/, "").chomp("/").presence || "/"] if blog.positive?
+          %tr{class: table_row_class}
+            %td{class: title_cell_class}
+              %div{class: "flex items-center gap-1.5"}
+                = blog_page_link(path, page_view_path(path))
+                - if gap
+                  %span{class: "inline-flex shrink-0 text-amber-600",
+                    title: "Page gaps flags this page: GA misses #{number_to_percentage(gap.percent * 100, precision: 0)} of its views, against a median of #{number_to_percentage(@page_gap.median_percent * 100, precision: 0)} across pages."}
+                    = icon("alert-triangle", size: 14)
+                    %span{class: "sr-only"} Wide gap
+            - earlier = before&.[](path)
+            %td{class: cell_class}
+              = number_with_delimiter(blog)
+              = row_change(blog, earlier&.first, CompareHelper::MORE_IS_BETTER) if before
+            %td{class: cell_class}
+              = number_with_delimiter(google)
+              = row_change(google, earlier&.[](1), CompareHelper::MORE_IS_BETTER) if before
+            %td{class: cell_class}
+              - if difference
+                %span{class: difference.abs > 0.5 ? "font-medium text-amber-700" : "text-slate-600"}
+                  #{difference.negative? ? "−" : "+"}#{number_to_percentage(difference.abs * 100, precision: 0)}
+              - else
+                %span{class: "text-slate-400"} GA only
+              -# A gap against the blog's own count, so what matters is whether it widened, not whether the figure rose.
+              - if before && earlier&.last.is_a?(Float) && difference
+                %span{class: "block text-xs text-slate-400", title: "Difference in #{vs}"}
+                  was #{earlier.last.negative? ? "−" : "+"}#{number_to_percentage(earlier.last.abs * 100, precision: 0)}
+    %p{class: "flex justify-end border-t border-slate-200 px-4 py-2 text-xs"}
+      = link_to consent_page_gap_report_path(**@period.query),
+        class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+        Page gaps
+        = icon("chevron-right", size: 14)
+
+  %div{class: "grid gap-6"}
+    = render layout: "shared/card", locals: {id: "coverage", title: "Days with data", icon: "calendar"} do
+      - sources_in = ->(within, blog_daily) { [DayCoverage.new("Blog views", blog_daily.each_with_index.filter_map { |count, index| (within.from + index) if count.positive? }),
+        DayCoverage.new("Search Console", @search.days_with_data(within)), DayCoverage.new("Google Analytics", @analytics.days_with_data(within)),
+        DayCoverage.new("reCAPTCHA", Google::Recaptcha::Stat.where(date: within.from..within.to).distinct(:date).map(&:to_date)),
+        *DayCoverage.tallies(within)] }
+      - sources = sources_in.(@period, @stats.daily(:views))
+      - earlier_sources = sources_in.(earlier_period, @stats.daily(:views, earlier_period)).index_by(&:name) if before
+      - shades = {present: "bg-slate-600", missing: "bg-amber-200", before: "bg-slate-100", quiet: "bg-slate-300"}
+      %div{class: "space-y-3 px-4 py-3"}
+        - sources.each do |source|
+          - name = source.name
+          - missing = source.missing(dates)
+          - since = source.recorded_since(dates)
+          %div
+            %p{class: "mb-1 flex justify-between gap-3 text-xs"}
+              %span{class: "font-medium text-slate-700"}
+                = name
+                - if since
+                  %span{class: "font-normal whitespace-nowrap text-slate-500"} from #{l(since, format: "%-d %b")}
+              - recorded = source.recorded?(dates)
+              - tone = if !recorded then "text-slate-500" elsif missing.zero? then "text-emerald-700" else "text-amber-700" end
+              %span{class: ["text-right", tone]}
+                - if !recorded
+                  Not recorded yet
+                - else
+                  = missing.zero? ? "Every day" : "#{pluralize(missing, "day")} missing"
+                - if earlier_sources
+                  - earlier_source = earlier_sources.fetch(name)
+                  - earlier_dates = (earlier_period.from..earlier_period.to).to_a
+                  - earlier_missing = earlier_source.missing(earlier_dates)
+                  - if earlier_source.recorded?(earlier_dates)
+                    %span{class: "text-slate-400", title: "Missing in #{vs}"}= earlier_missing.zero? ? "(was every day)" : "(was #{earlier_missing})"
+                  - else
+                    %span{class: "text-slate-400", title: "Not recorded yet in #{vs}"} (new)
+            = chart_tooltip(label: "#{name}: #{missing} of #{dates.size} days missing") do
+              %div{class: "flex gap-px"}
+                - dates.each do |date|
+                  %span{class: ["h-4 flex-1 rounded-sm hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900", shades.fetch(source.state(date))],
+                    data: chart_tip(l(date, format: "%a, %-d %b, %Y"), [{value: source.label(date), name: name}])}
+      %p{class: footnote_class}
+        Search Console fills in the last two or three days late, so they read as missing until the next sync. The palest days
+        came before the frontend recorded that tally, so they aren't missing; automation is only written on a day something is
+        flagged, so a day without it had none.
+
+    = render layout: "shared/card", locals: {id: "caveats", title: "Known gaps", icon: "info"} do
+      - bots = @lifetime_hits[:bots]
+      - hits = bots + @lifetime_hits[:humans]
+      %ul{class: "list-disc space-y-1.5 py-3 pr-4 pl-8 text-sm text-slate-700"}
+        %li
+          #{pluralize(number_with_delimiter(@stats.undated_likes), "like")} came before likes were dated, so they're in
+          no period's figures.
+        %li
+          Bots made #{number_with_delimiter(bots)} of #{number_with_delimiter(hits)}
+          hits#{" (#{number_to_percentage(bots * 100.0 / hits, precision: 1)})" if hits.positive?}, kept out of every
+          view count.
+
+%div{class: "mb-6"}
+  = render layout: "shared/card", locals: {id: "bots-by-page", title: "Bots by page", icon: "cpu"} do
+    - rows = PageView.bot_shares
+    %p{class: lead_note_class}
+      Pages with #{PageView::MIN_HITS_FOR_BOT_SHARE}+ hits, by the share of them from crawlers, all time since bots aren't dated.
+      They're already kept out of every view count; a page high here is one crawlers favour.
+    - if rows.empty?
+      %p{class: empty_note_class} No page has enough hits yet.
+    - else
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              = report_th "Page"
+              = report_th "Bot hits", :right
+              = report_th "Views", :right
+              %th{scope: "col", class: "#{th_class} w-1/3 text-right"} Bot share
+          %tbody
+            - rows.each do |slug, bots, humans, share|
+              %tr{class: table_row_class}
+                %td{class: title_cell_class}
+                  = blog_page_link(slug, page_view_path(slug))
+                %td{class: cell_class}= number_with_delimiter(bots)
+                %td{class: cell_class}= number_with_delimiter(humans)
+                %td{class: "px-3 py-1.5"}
+                  %div{class: "flex items-center gap-3"}
+                    %div{class: "flex-1"}= meter(bots, bots + humans, label: "Share of #{slug}'s hits from bots")
+                    %span{class: "w-14 shrink-0 text-right tabular-nums"}= number_to_percentage(share * 100, precision: 1)
+
+%div{class: split_grid_class}
+  = render layout: "shared/card", locals: {id: "index-waiting", title: "Waiting to be indexed", icon: "clock"} do
+    - waiting = @coverage.waiting
+    %p{class: lead_note_class}
+      Pages from the sitemap Google hasn't indexed, by how long they've waited: since indexing was requested, or else since
+      the page last changed.
+    - if waiting.empty?
+      %p{class: empty_note_class} Every crawled page is indexed.
+    - else
+      %div{class: "border-b border-slate-200 px-4 py-3"}
+        = ranking_chart(@coverage.waiting_ages.map { |bucket, count| [bucket, count, "bg-slate-600", ChartsHelper::BAR_COLOR] },
+          total: waiting.size, x_title: "Pages", y_title: "Waiting", label: "Pages not indexed, by how long they've waited")
+      = report_table([report_th("Longest waiting"), report_th("Days", :right)]) do
+        - waiting.first(8).each do |row|
+          - path = IndexCoverage.path_of(row.page.url)
+          %tr{class: table_row_class}
+            %td{class: title_cell_class}
+              %div{class: "flex items-center gap-1.5"}
+                = blog_page_link(path, crawled_page_target(row.page), live: row.page.url)
+                - if row.requested
+                  %span{class: "shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"} Requested
+            %td{class: cell_class}= number_with_delimiter(row.days)
+
+  -# The feed is what's published and the sitemap what Google is offered,
+  -# so an entry in one but not the other is either hidden from Google or
+  -# an old address still being offered.
+  = render layout: "shared/card", locals: {id: "feed-vs-sitemap", title: "Feed against sitemap", icon: "map"} do
+    - missing = @coverage.entries_missing_from_sitemap
+    - stale = @coverage.sitemap_entries_missing_from_feed
+    %div{class: "border-b border-slate-200 px-4 py-3"}
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} In the feed, not in the sitemap (#{number_with_delimiter(missing.size)})
+      - if missing.empty?
+        %p{class: "text-sm text-slate-500"} Every entry is in the sitemap.
+      - else
+        %ul{class: "space-y-1 text-sm"}
+          - missing.first(8).each do |entry|
+            %li{class: "flex justify-between gap-3"}
+              = blog_page_link(entry.name, feed_entry_path(entry.url), live: entry.url, truncate: true)
+              %span{class: "shrink-0 text-slate-500"}= l(entry.published_at.to_date)
+    %div{class: "px-4 py-3"}
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} Entry pages in the sitemap, not in the feed (#{number_with_delimiter(stale.size)})
+      - if stale.empty?
+        %p{class: "text-sm text-slate-500"} Every entry page in the sitemap is in the feed.
+      - else
+        %ul{class: "space-y-1 text-sm"}
+          - stale.first(8).each do |page|
+            - path = IndexCoverage.path_of(page.url)
+            %li{class: "flex justify-between gap-3"}
+              = blog_page_link(path, crawled_page_target(page), live: page.url, truncate: true)
+              %span{class: "shrink-0 text-slate-500"}= page.indexed ? "Indexed" : "Not indexed"
+    %p{class: footnote_class}
+      Matched by path. Only pages under /#{FeedEntry::TYPES.join("/, /")}/ are checked against the feed, since tag and listing
+      pages are never in it.
+
+= render "dashboard/freshness", syncs: @syncs

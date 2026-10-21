@@ -27,6 +27,12 @@ module DashboardHelper
     Google::SearchConsole::PerformanceController::METRICS
   end
 
+  def search_unsettled_from
+    return @search_unsettled_from if defined?(@search_unsettled_from)
+
+    @search_unsettled_from = Google::SearchConsole::FinalDate.first_incomplete_date
+  end
+
   # A rate on a handful of views is noise, so it's withheld rather than
   # shown as a confident percentage.
   def rate_or_dash(rate)

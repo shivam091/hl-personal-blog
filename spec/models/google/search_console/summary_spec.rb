@@ -84,4 +84,43 @@ RSpec.describe Google::SearchConsole::Summary do
     expect(summary.page_queries("/post/a").map { |row| row[:query] }).to eq(["css grid"])
     expect(summary.page_totals("/post/a").impressions).to eq(300)
   end
+
+  it "lists the most clicked pages and queries with their clicks the period before" do
+    expect(summary.top_pages.map { |mover| [mover.key, mover.clicks, mover.previous_clicks] }).to eq([["/post/b", 30, 0], ["/post/a", 1, 0]])
+    expect(summary.top_query_movers.map { |mover| [mover.key, mover.clicks, mover.previous_clicks] }).to eq([["css grid", 20, 2], ["git rebase", 9, 0]])
+  end
+
+  it "ranks pages and queries by how many clicks they gained or lost, counting one that lost every click" do
+    stat(date: Date.new(2026, 9, 30), page: "https://blog.example.com/post/c", page_path: "/post/c", clicks: 4, impressions: 80, position: 5.0)
+
+    expect(summary.trending_pages(:up).map(&:key)).to eq(["/post/b", "/post/a"])
+    expect(summary.trending_pages(:down).map { |mover| [mover.key, mover.change] }).to eq([["/post/c", -4]])
+    expect(summary.trending_queries(:up).map { |mover| [mover.key, mover.change] }).to eq([["css grid", 18], ["git rebase", 9]])
+    expect(summary.trending_queries(:down)).to be_empty
+  end
+
+  it "trends nothing until the period before was synced" do
+    first = described_class.new(Period.new({from: "2026-10-01", to: "2026-10-12"}, today: Date.new(2026, 10, 12)))
+
+    expect(first.trending_pages(:up)).to be_empty
+    expect(first.trending_queries(:up)).to be_empty
+    expect(first.top_pages.first.previous_clicks).to be_nil
+  end
+
+  it "doesn't trend pages when comparing countries, since pages aren't split by country" do
+    compared = Period.new({from: "2026-10-06", to: "2026-10-12", compare: "country", vs: "US"}, today: Date.new(2026, 10, 12), countries: true)
+
+    expect(described_class.new(compared, country: "IN").trending_pages(:up)).to be_empty
+  end
+
+  it "totals every search type but web" do
+    expect(summary.search_types).to eq([["image", 99, 999]])
+  end
+
+  it "names pages after their feed entries" do
+    FeedEntry.create!(url: "https://blog.example.com/post/b", name: "Post B", type: "post",
+      published_at: Time.utc(2026, 10, 1), last_modified_at: Time.utc(2026, 10, 1))
+
+    expect(summary.page_names).to eq("/post/b" => "Post B")
+  end
 end

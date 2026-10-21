@@ -58,6 +58,15 @@ class SyncRequest
       source: "Safe Browsing",
       page: :google_safe_browsing_link_checks_path,
       enqueue: ->(request) { Google::SafeBrowsing::SyncJob.perform_later(request_id: request.id.to_s) }
+    ),
+    # Not a sync from a service, but a nightly run the consent flags depend on, so it fails and goes quiet
+    # where the syncs' failures are already watched.
+    Kind.new(
+      key: "consent_snapshot",
+      section: "Consent snapshots",
+      source: "Blog views & GA",
+      page: :consent_report_path,
+      enqueue: ->(request) { ConsentSnapshotJob.perform_later(from: request.from_date, to: request.to_date, request_id: request.id.to_s) }
     )
   ].index_by(&:key).freeze
 
