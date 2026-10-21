@@ -1,0 +1,36 @@
+- dates = granularity.dates((period.from..period.to).to_a)
+- before = period.previous if comparing? && insights.previous?
+- before_dates = granularity.dates((before.from..before.to).to_a) if before
+- events = granularity.events(published)
+- tabs = analytics_trend_tabs(insights)
+
+%section{class: "mb-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm", aria: {label: "Figures over time"},
+  data: {controller: "metric-tabs"}}
+  %div{role: "tablist", aria: {label: "Figure to chart"}, class: "grid grid-cols-2 border-b border-slate-200 sm:grid-cols-4",
+    data: {action: "keydown->metric-tabs#key"}}
+    - tabs.each do |tab|
+      - selected = tab.field.to_s == trend
+      -# The label covers the whole tab, so the hint is lifted above it to stay
+      -# clickable.
+      %div{role: "presentation",
+        class: "group relative border-t-4 border-transparent bg-slate-50 px-4 py-3 has-aria-selected:border-slate-900 has-aria-selected:bg-white has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-slate-900"}
+        %p{class: "flex items-center gap-1.5 text-xs font-medium text-slate-500 group-has-aria-selected:text-slate-900"}
+          %button{type: "button", role: "tab", id: "trend-tab-#{tab.field}", tabindex: (selected ? 0 : -1),
+            aria: {selected: selected.to_s, controls: "trend-panel-#{tab.field}"},
+            class: "cursor-pointer text-left after:absolute after:inset-0 focus-visible:outline-none",
+            data: {metric_tabs_target: "tab", action: "metric-tabs#select", field: tab.field}}= tab.label
+          = render "shared/hint", label: tab.label, text: tab.hint, class: "relative"
+        %p{class: "mt-1 text-2xl font-semibold tabular-nums text-slate-900"}= metric_value(tab.value, tab.format)
+        - if comparing?
+          %p{class: "mt-1 text-xs", title: "Compared with #{period.previous}"}
+            = metric_change(tab.value, tab.previous, DashboardHelper::HIGHER_IS_BETTER, format: tab.format)
+
+  %div{class: "flex justify-end px-4 pt-3"}
+    = chart_granularity_picker(granularity, "Figures over time")
+  - tabs.each do |tab|
+    - compared = before if tab.split || insights.previous_unsplit?
+    %div{role: "tabpanel", id: "trend-panel-#{tab.field}", aria: {labelledby: "trend-tab-#{tab.field}"}, hidden: tab.field.to_s != trend,
+      class: "px-4 pt-1 pb-3", data: {metric_tabs_target: "panel"}}
+      = line_chart(dates, analytics_trend_series(insights, tab, dates, compared, before_dates), y_title: tab.label,
+        unit: (tab.format == :count ? "" : "%"), per: granularity.per, events: events, event_name: "Published",
+        label: "#{tab.label} per #{granularity.by}#{", against #{compared}" if compared}")
