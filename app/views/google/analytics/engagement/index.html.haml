@@ -1,23 +1,20 @@
 - content_for :title, "Analytics engagement"
 
--# A dl rather than a table, so it reads apart from the report's rows.
+-# Bars rather than a table, so it reads apart from the report's rows; the
+-# rate per 100 views sits by each name, as it's what compares across periods.
 - interactions = capture do
   - if @interactions
     = render layout: "shared/card", locals: {id: "reader-interactions", title: "Reader interactions", icon: "mouse-pointer", class: "mb-6"} do
       - if @interactions.empty?
         %p{class: "px-4 py-3 text-sm text-slate-500"} None of the blog's reader events in this period.
       - else
-        %dl{class: "grid gap-x-6 gap-y-1 px-4 py-3 text-sm sm:grid-cols-2 lg:grid-cols-3"}
-          - Google::Analytics::EngagementController::READER_INTERACTIONS.each do |event, label|
-            - count = @interactions[event]
-            - next unless count
-            %div{class: "flex justify-between gap-3 border-b border-slate-100 py-1"}
-              %dt
-                = link_to label, google_analytics_event_path(event, **@period.query), class: "text-slate-900 hover:underline", title: event
-              %dd{class: "tabular-nums"}
-                = number_with_delimiter(count)
-                - if @interaction_views.positive?
-                  %span{class: "text-xs text-slate-500", title: "Per 100 views"}= "(#{number_with_precision(count * 100.0 / @interaction_views, precision: 1)})"
+        - rows = Google::Analytics::EngagementController::READER_INTERACTIONS.filter_map { |event, label| [event, label, @interactions[event]] if @interactions[event] }.sort_by { |_, label, count| [-count, label] }
+        - per_hundred = ->(count) { tag.span("(#{number_with_precision(count * 100.0 / @interaction_views, precision: 1)})", class: "text-slate-500", title: "Per 100 views") }
+        %div{class: "px-4 py-3"}
+          = ranking_chart(rows.map { |_, label, count| [label, count, "bg-slate-600", ChartsHelper::BAR_COLOR] }, total: rows.sum(&:last),
+            links: rows.to_h { |event, label, _| [label, google_analytics_event_path(event, **@period.query)] },
+            changes: @interaction_views.positive? ? rows.to_h { |_, label, count| [label, per_hundred.(count)] } : {},
+            x_title: "Events", y_title: "Interaction", label: "Reader interactions in #{@period}, most first")
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
         Events the blog sends as readers use a page, with how many per 100 views. Event labels splits each by what was clicked or copied.
         - if @interactions_since.any?
