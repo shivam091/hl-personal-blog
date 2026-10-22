@@ -1,0 +1,108 @@
+- content_for :title, "Sync health"
+- syncs = @syncs
+- before = syncs.previous
+- vs = ("#{@period.previous}" if before)
+-# Good outcomes in cool hues and bad in warm ones, so a run of failures
+-# shows as colour as well as height.
+- outcome_series = {"succeeded" => ["Succeeded", ChartsHelper::SHARE_COLORS[2]], "partial" => ["With errors", ChartsHelper::SHARE_COLORS[3]],
+  "failed" => ["Failed", ChartsHelper::SHARE_COLORS[1]], "stalled" => ["Stalled", ChartsHelper::SHARE_OTHER_COLOR],
+  "in_progress" => ["In progress", ChartsHelper::SHARE_COLORS[0]]}
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Sync health
+    %p{class: subtitle_class}
+      Every sync from Google, the feed and the sitemap: which keep failing, how long they take, and what they bring in.
+  = link_to list_url(@period, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "google/shared/period", period: @period, keep: []
+
+- counts = syncs.outcome_counts
+- earlier_counts = before&.outcome_counts
+%dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+  = render "dashboard/tile", label: "Syncs", tile_icon: "refresh", value: number_with_delimiter(syncs.total),
+    change: metric_change(syncs.total, before&.total, CompareHelper::MORE_IS_BETTER), compared_with: @period.previous,
+    hint: "Sync requests made in the period, from a button, a job or a rake task."
+  = render "dashboard/tile", label: "Succeeded", tile_icon: "check-circle", value: number_with_delimiter(counts["succeeded"]),
+    change: metric_change(counts["succeeded"], earlier_counts&.[]("succeeded"), CompareHelper::MORE_IS_BETTER), compared_with: @period.previous,
+    hint: "Syncs that brought everything in without an error."
+  = render "dashboard/tile", label: "With errors", tile_icon: "alert-circle", value: number_with_delimiter(counts["partial"]),
+    change: metric_change(counts["partial"], earlier_counts&.[]("partial"), CompareHelper::LESS_IS_BETTER), compared_with: @period.previous,
+    hint: "Syncs that brought data in but hit errors on some of it."
+  = render "dashboard/tile", label: "Failed or stalled", tile_icon: "alert-triangle", value: number_with_delimiter(counts["failed"] + counts["stalled"]),
+    change: metric_change(counts["failed"] + counts["stalled"], (earlier_counts["failed"] + earlier_counts["stalled"] if earlier_counts), CompareHelper::LESS_IS_BETTER),
+    compared_with: @period.previous, hint: "Syncs that brought nothing in, or were lost midway and never finished."
+
+%div{class: "mb-6"}
+  -# Every kind, even one not run in the period, since a kind that never
+  -# runs goes stale as surely as one that fails.
+  = render layout: "shared/card", locals: {id: "sync-kinds", title: "By kind", icon: "list"} do
+    = report_table([report_th("Kind"),
+      report_th("Runs", :right),
+      report_th("Success", :right, title: "Of finished runs, those that brought data in"),
+      report_th("Failing", :right, title: "Failures in a row, up to the latest finished run"),
+      report_th("Median time", :right),
+      report_th("Longest", :right),
+      report_th("Rows", :right, title: "Rows created or updated"),
+      report_th("Last success", :right)]) do
+      - syncs.kinds.each do |row|
+        - earlier = before&.kinds_by_kind&.[](row.kind)
+        %tr{class: table_row_class}
+          %td{class: name_cell_class}
+            = link_to row.section, sync_requests_path(section: row.kind), class: "hover:underline"
+          %td{class: "#{cell_class} #{"text-slate-400" if row.runs.zero?}"}
+            = number_with_delimiter(row.runs)
+            = row_change(row.runs, earlier&.runs, CompareHelper::MORE_IS_BETTER) if before
+          %td{class: "#{cell_class} #{"text-amber-700" if row.success_rate && row.success_rate < 0.9}"}
+            = row.success_rate ? number_to_percentage(row.success_rate * 100, precision: 0) : "—"
+            = row_change(row.success_rate, earlier&.success_rate, CompareHelper::HIGHER_RATE_IS_BETTER) if before && row.success_rate && earlier&.success_rate
+          %td{class: "#{cell_class} #{"font-medium text-red-700" if row.failing_streak >= 2}"}
+            = row.failing_streak.positive? ? pluralize(row.failing_streak, "run") : "—"
+          %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}
+            = seconds_label(row.median_seconds)
+            = row_change(row.median_seconds, earlier&.median_seconds, CompareHelper::LONGER_IS_WORSE) if before && row.median_seconds && earlier&.median_seconds
+          %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}
+            = seconds_label(row.max_seconds)
+            = row_change(row.max_seconds, earlier&.max_seconds, CompareHelper::LONGER_IS_WORSE) if before && row.max_seconds && earlier&.max_seconds
+          %td{class: cell_class}
+            = number_with_delimiter(row.rows)
+            = row_change(row.rows, earlier&.rows, CompareHelper::MORE_IS_BETTER) if before
+          %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= row.last_success ? l(row.last_success, format: :short) : "Never"
+    %p{class: footnote_class}
+      Kinds failing twice or more in a row come first, in red. Last success is the latest ever, not only in the period. Each kind
+      opens its runs in the sync list.
+
+- if syncs.any?
+  %div{class: split_grid_class}
+    = render layout: "shared/card", locals: {id: "syncs-by-outcome", title: "Syncs by outcome", icon: "bar-chart"} do
+      %div{class: "px-4 py-3"}
+        = stacked_chart(syncs.dates, syncs.daily_by_outcome.map { |key, values| ChartsHelper::Series.new(name: outcome_series[key].first, values: values, color: outcome_series[key].last) },
+          y_title: "Syncs", label: "Sync requests per day, split by how they ended",
+          previous: (aligned(before.daily_totals, syncs.dates.size) if before), previous_name: vs)
+
+    = render layout: "shared/card", locals: {id: "sync-rows", title: "Rows brought in", icon: "database"} do
+      %div{class: "px-4 py-3"}
+        = compared_bars(syncs.dates, syncs.daily_rows, previous: before&.daily_rows, previous_name: vs, y_title: "Rows", label: "Rows created or updated by syncs per day")
+      %p{class: footnote_class}
+        Unchanged rows are left out, so a day of syncs that found nothing new reads as none.
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "sync-errors", title: "Recurring errors", icon: "alert-circle"} do
+      - rows = syncs.errors
+      - if rows.empty?
+        %p{class: empty_note_class} No sync hit an error in this period.
+      - else
+        = report_table([report_th("Error"), report_th("Kinds"), report_th("Times", :right), report_th("Latest", :right)]) do
+          - rows.each do |row|
+            %tr{class: table_row_class}
+              %td{class: "max-w-0 w-full truncate px-3 py-1.5", title: row.message}= row.message
+              %td{class: "px-3 py-1.5 text-xs whitespace-nowrap text-slate-600"}= row.kinds.join(", ")
+              %td{class: cell_class}
+                = number_with_delimiter(row.count)
+                = row_change(row.count, before.error_counts[row.message], CompareHelper::LESS_IS_BETTER) if before
+              %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(row.last_at, format: :short)
+        %p{class: footnote_class}
+          Numbers in a message are shown as #, so the same error on another day or row is counted together.
