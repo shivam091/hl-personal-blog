@@ -19,6 +19,9 @@ class NewsletterMailer < ApplicationMailer
       @home_url = campaign_url(blog_url, "header")
       to_emails = [subscriber.email]
       add_unsubscribe_links(subscriber)
+      # Brevo hands the tag back on every event it posts for the mail, so
+      # an open or click can be put down to the entry it announced.
+      headers["X-Mailin-Tag"] = entry.url
 
       mail(to: to_emails, subject: "New #{@type}: #{entry.name}")
     end

@@ -4,7 +4,6 @@
 - table = result.table
 - metric_label = service::METRICS.dig(result.metric, :label)
 - label = ->(key, value) { key == "country" ? country_label(value) : value }
-- select_class = "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
 - earlier = @previous&.table
 - higher = DashboardHelper::HIGHER_IS_BETTER
 -# Only the top rows and columns of the period before are kept, so one
@@ -13,7 +12,6 @@
 - row_before = ->(row) { earlier.row_totals[row].to_i if earlier && known.(earlier.rows, row, service::ROW_LIMIT) }
 - column_before = ->(column) { earlier.column_totals[column].to_i if earlier && known.(earlier.columns, column, service::COLUMN_LIMIT) }
 - cell_before = ->(row, column) { earlier[row, column].to_i if earlier && known.(earlier.rows, row, service::ROW_LIMIT) && known.(earlier.columns, column, service::COLUMN_LIMIT) }
-- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
 
 %div{class: page_header_class}
   %div
@@ -59,7 +57,7 @@
               %th{scope: "col", class: "#{th_class} pl-0 text-left"}= rows_label
               - table.columns.each do |column|
                 %th{scope: "col", class: "#{th_class} text-center"}= label.(result.columns, column)
-              %th{scope: "col", class: "#{th_class} text-right"} Total
+              = report_th "Total", :right
           %tbody
             - table.rows.each do |row|
               - row_total = table.row_totals[row]
@@ -68,12 +66,10 @@
                 - table.columns.each do |column|
                   - value = table[row, column].to_i
                   %td{class: "p-0.5"}
-                    %div{class: "h-6 min-w-14 rounded px-1 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(value, max)}",
-                      data: chart_tip("#{label.(result.rows, row)} · #{label.(result.columns, column)}",
-                        [{value: number_with_delimiter(value), name: metric_label.downcase},
-                         ({value: number_to_percentage(value * 100.0 / row_total, precision: 1), name: "of the row"} if row_total.to_i.positive?),
-                         ({value: CompareChange.label(value, cell_before.(row, column)), name: "vs #{@period.previous}"} if cell_before.(row, column))].compact)}
-                      = number_with_delimiter(value)
+                    = heat_cell(number_with_delimiter(value), value, max, class: "h-6 min-w-14",
+                      tip: chart_tip("#{label.(result.rows, row)} · #{label.(result.columns, column)}",
+                        [*cell_readings(metric_label, value, cell_before.(row, column), @period.previous.to_s),
+                         ({value: number_to_percentage(value * 100.0 / row_total, precision: 1), name: "Share of the row"} if row_total.to_i.positive?)]))
                 %td{class: "px-3 text-right font-medium tabular-nums"}
                   = number_with_delimiter(row_total)
                   - if row_before.(row)

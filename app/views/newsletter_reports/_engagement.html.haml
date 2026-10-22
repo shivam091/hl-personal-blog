@@ -1,0 +1,54 @@
+-# A mail has no earlier twin, so its rates are set against those of every mail
+-# of the period before. Mail isn't split by country, so another country's
+-# period would be the same mail.
+- previous_rates = NewsletterEngagement.new(period.previous).rates if period.compare? && !period.compare_countries?
+%div{class: "mb-6"}
+  = render layout: "shared/card", locals: {id: "opens-and-clicks", title: "Opens and clicks by entry", icon: "mouse-pointer"} do
+    %p{class: lead_note_class}
+      Readers who opened or clicked each new-entry mail sent in the period, from the events Brevo posts back; a reader counts once
+      however often they open. Rates are of mails delivered. Mail apps that load images ahead of the reader, like Apple Mail, count
+      as opens, so clicks are the surer sign.
+      #{"Rates are set against all mail sent in #{period.previous}." if previous_rates}
+      #{"#{pluralize(engagement.unreported_count, "mail")} sent before Brevo began posting events #{engagement.unreported_count == 1 ? "is" : "are"} left out." if engagement.unreported_count.positive?}
+    - rows = engagement.rows
+    - if !engagement.any_events?
+      %p{class: empty_note_class}
+        No events from Brevo yet. Add an outbound transactional webhook in Brevo that posts to /webhooks/brevo, with the token from the credentials as its bearer token, to start receiving them.
+    - elsif rows.empty?
+      %p{class: empty_note_class} No new-entry mail that Brevo reported on went out in #{period}.
+    - else
+      %div{class: "border-b border-slate-200 px-4 py-3"}
+        = split_bars(rows.map { |row| [row.entry.name, row.parts] },
+          parts: NewsletterEngagement::PARTS.zip(ChartsHelper::SHARE_COLORS.values_at(0, 1) + [ChartsHelper::SHARE_OTHER_COLOR, ChartsHelper::SHARE_COLORS[3]]),
+          links: rows.to_h { |row| [row.entry.name, feed_entry_path(row.entry.url)] },
+          unit: "mail", label: "Each new-entry mail split into clicked, opened, not opened and bounced")
+      = report_table([report_th("Entry"),
+        report_th("Sent", :right),
+        report_th("Delivered", :right),
+        report_th("Opened", :right),
+        report_th("Clicked", :right),
+        report_th("Bounced", :right, title: "Hard and soft bounces"),
+        report_th("Left", :right),
+        report_th("Spam", :right, title: "Marked as spam")]) do
+        - rows.each do |row|
+          %tr{class: table_row_class}
+            %td{class: title_cell_class}
+              = blog_page_link(row.entry.name, feed_entry_path(row.entry.url), live: row.entry.url)
+              %span{class: "block text-xs text-slate-500"} Sent #{l(row.entry.notified_at.to_date)}
+            %td{class: cell_class}= row.sent ? number_with_delimiter(row.sent) : "—"
+            %td{class: cell_class}= number_with_delimiter(row.delivered)
+            %td{class: cell_class}
+              = number_with_delimiter(row.opened)
+              - if row.open_rate
+                %span{class: "block text-xs text-slate-500"}= number_to_percentage(row.open_rate * 100, precision: 1)
+                - if previous_rates
+                  = row_change(row.open_rate, previous_rates[:open_rate], DashboardHelper::HIGHER_IS_BETTER)
+            %td{class: cell_class}
+              = number_with_delimiter(row.clicked)
+              - if row.click_rate
+                %span{class: "block text-xs text-slate-500"}= number_to_percentage(row.click_rate * 100, precision: 1)
+                - if previous_rates
+                  = row_change(row.click_rate, previous_rates[:click_rate], DashboardHelper::HIGHER_IS_BETTER)
+            %td{class: [cell_class, ("text-amber-700" if row.bounced.positive?)]}= number_with_delimiter(row.bounced)
+            %td{class: cell_class}= number_with_delimiter(row.unsubscribed)
+            %td{class: [cell_class, ("text-red-700" if row.spam.positive?)]}= number_with_delimiter(row.spam)

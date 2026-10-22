@@ -64,6 +64,14 @@ class ConsentSnapshot
       where(:day.gte => period.from.iso8601, :day.lte => period.to.iso8601).index_by(&:day)
     end
 
+    # Summed over the days before dividing, so a busy day weighs as much as its views; days GA has no
+    # figure for are left out of both sides, or they would read as GA missing every view.
+    def ga_share(period)
+      days = stored(period).values.reject { |snapshot| snapshot.analytics.nil? }
+      views = days.sum { |snapshot| snapshot.first_party.to_i }
+      days.sum(&:analytics).fdiv(views) if views >= MIN_VIEWS
+    end
+
     private
 
     def compose_attributes(inputs)
