@@ -152,6 +152,14 @@ Rails.application.routes.draw do
     end
   end
 
+  # Reports on the app's own running, apart from the lists they read, so a
+  # report's path can't be taken for a record's id.
+  scope "monitoring" do
+    resource :request_report, only: :show, path: "requests"
+    resource :external_call_report, only: :show, path: "external-calls"
+    resource :sync_report, only: :show, path: "syncs"
+  end
+
   resources :request_logs, only: %i[index show destroy], path: "request-logs" do
     collection do
       post :clear
