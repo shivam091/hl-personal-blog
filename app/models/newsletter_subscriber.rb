@@ -6,15 +6,25 @@ class NewsletterSubscriber
   include Mongoid::Document
 
   CSV_HEADERS = ["Email", "Country", "Subscribed"].freeze
+  # The blog's form ids, named as a reader would see the form.
+  SOURCES = {"footer" => "Footer", "article_end" => "End of an article", "article_inline" => "Within an article"}.freeze
 
   field :email, type: String
   field :country, type: String
   field :subscribedAt, type: Time, as: :subscribed_at
+  # Sign-ups from before the blog recorded which form they came through
+  # have neither.
+  field :source, type: String
+  field :sourcePage, type: String, as: :source_page
 
   validates :email, presence: true
 
   # People type their address in different cases on different forms.
   scope :with_email, ->(email) { where(email: /\A#{Regexp.escape(email.to_s)}\z/i) }
+
+  def source_label
+    self.class.source_label(source)
+  end
 
   def messages
     Message.with_email(email).order(created_at: :desc)
@@ -30,6 +40,11 @@ class NewsletterSubscriber
   end
 
   class << self
+    # A form the blog adds later still shows, by its id, before it's named here.
+    def source_label(source)
+      SOURCES.fetch(source.to_s) { source.presence || "Unknown" }
+    end
+
     # Blank countries counted under the blog's unknown code, so they're
     # listed apart from the map rather than lost.
     def country_counts(scope)
