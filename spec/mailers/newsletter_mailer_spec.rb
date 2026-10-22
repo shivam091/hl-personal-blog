@@ -48,6 +48,13 @@ RSpec.describe NewsletterMailer, type: :mailer do
     expect(html).to include(%(href="https://blog.example.com/unsubscribe/#{subscriber.unsubscribe_token}"))
   end
 
+  # Brevo hands the tag back on the events it posts for the mail.
+  it "tags the mail with the entry's URL" do
+    message = described_class.new_entry(entry, subscriber).message
+
+    expect(message["X-Mailin-Tag"].value).to eq("https://blog.example.com/tutorials/grid")
+  end
+
   it "shows the blog's logo from the blog itself" do
     message = described_class.new_entry(entry, subscriber).message
 

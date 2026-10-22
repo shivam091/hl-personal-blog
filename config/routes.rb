@@ -11,6 +11,11 @@ Rails.application.routes.draw do
 
   resource :session, only: %i[new create destroy]
 
+  # Posted to by other services rather than visited, so outside the session.
+  namespace :webhooks do
+    post "brevo", to: "brevo#create"
+  end
+
   # Their ids are page slugs like "/post/x" (and "/" for the home page), so
   # the slashes are escaped into one segment and dots don't start a format.
   resources :page_views, only: %i[index show], path: "page-views", constraints: {id: /.+/}
@@ -28,7 +33,10 @@ Rails.application.routes.draw do
     resource :ranking_report, only: :show, path: "ranking-opportunities"
     resource :analytics_report, only: :show, path: "analytics"
     resource :content_report, only: :show, path: "content"
+    resource :leaderboard_report, only: :show, path: "leaderboard"
     resource :message_report, only: :show, path: "messages"
+    resource :newsletter_report, only: :show, path: "newsletter"
+    resource :review_report, only: :show, path: "review"
     resource :data_quality_report, only: :show, path: "data-quality"
     resource :content_decay_report, only: :show, path: "content-decay"
     resource :topic_gap_report, only: :show, path: "topic-gaps"
