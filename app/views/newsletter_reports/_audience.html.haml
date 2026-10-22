@@ -1,0 +1,61 @@
+- lower_is_better = DashboardHelper::Kpi.new(lower_is_better: true)
+- since = audience.counted_since
+- left = audience.unsubscribe_count
+- rate = audience.churn_rate
+- median = audience.median_days_subscribed
+- previous = period.previous unless period.compare_countries?
+
+= render "shared/period_notes", notes: [("No unsubscribes recorded yet; the blog keeps one for each reader who leaves from now on." unless since)]
+
+%dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3"}
+  = render "dashboard/tile", label: "Unsubscribes", tile_icon: "log-out", value: number_with_delimiter(left),
+    change: (metric_change(left, audience.unsubscribe_count(previous), lower_is_better) if previous && audience.counted?(previous)),
+    compared_with: previous, hint: "Readers who left in the period, by the unsubscribe link or their mail app's button."
+  = render "dashboard/tile", label: "Churn rate", tile_icon: "trending-up", value: (rate ? number_to_percentage(rate * 100, precision: 1) : "—"),
+    change: (metric_change(rate, audience.churn_rate(previous), lower_is_better, format: :percent) if rate && previous),
+    compared_with: previous, hint: "Unsubscribes in the period as a share of everyone on the list as it began."
+  = render "dashboard/tile", label: "Typical stay", tile_icon: "clock", value: (median ? pluralize(median, "day") : "—"), change: nil,
+    hint: "The median time on the list of the readers who left in the period."
+
+%div{class: split_grid_class}
+  = render layout: "shared/card", locals: {id: "signups-by-source", title: "Sign-ups by form", icon: "users"} do
+    %div{class: "px-4 py-3"}
+      = donut_chart(audience.signups_by_source, label: "Sign-ups by form", unit: "sign-up", empty: "No sign-ups in this period.")
+      - if previous && period.compare?
+        = donut_comparison(audience.signups_by_source, audience.signups_by_source(previous), unit: "sign-up", previous_name: previous.to_s)
+    %p{class: footnote_class}
+      Sign-ups in the period, those who've left since included. Unknown ones came before the blog recorded the form.
+
+  = render layout: "shared/card", locals: {id: "signups-by-page", title: "Sign-ups by page", icon: "file"} do
+    %div{class: "px-4 py-3"}
+      = render "shared/breakdown", counts: audience.signups_by_page, heading: "Page", count_heading: "Sign-ups",
+        previous: (audience.signups_by_page(previous, limit: nil) if previous && period.compare?), empty: "No sign-ups in this period."
+    %p{class: footnote_class}
+      The page the form was on, top #{NewsletterAudience::PAGES}.
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
+  = render layout: "shared/card", locals: {id: "unsubscribes-by-week", title: "Unsubscribes by week", icon: "log-out"} do
+    %div{class: "px-4 py-3"}
+      - weeks = audience.weekly_unsubscribes
+      - if weeks.sum(&:last).zero?
+        %p{class: "text-sm text-slate-500"} Nobody left in this period.
+      - else
+        -# Unsubscribes weren't recorded before some day, so an earlier period before it would read as nobody leaving.
+        - earlier = audience.weekly_unsubscribes(previous).map(&:last) if previous && period.compare? && audience.counted?(previous)
+        = compared_bars(weeks.map(&:first), weeks.map(&:last), previous: earlier, previous_name: previous.to_s,
+          label: "Readers who left the list each week", y_title: "Unsubscribes", per: :week)
+
+  = render layout: "shared/card", locals: {id: "unsubscribe-methods", title: "How they left", icon: "mouse-pointer"} do
+    %div{class: "px-4 py-3"}
+      = donut_chart(audience.by_method, label: "Readers who left by how they left", unit: "reader", empty: "Nobody left in this period.")
+      - if previous && period.compare? && audience.counted?(previous)
+        = donut_comparison(audience.by_method, audience.by_method(previous), unit: "reader", previous_name: previous.to_s)
+
+  = render layout: "shared/card", locals: {id: "time-to-unsubscribe", title: "Time on the list before leaving", icon: "timer"} do
+    - stays = audience.stays
+    %div{class: "px-4 py-3"}
+      - if stays.values.sum.zero?
+        %p{class: "text-sm text-slate-500"} Nobody left in this period.
+      - else
+        = ranking_chart(stays.reject { |band, count| band == NewsletterAudience::UNKNOWN_STAY && count.zero? }.map { |band, count| [band, count, "bg-slate-600", ChartsHelper::BAR_COLOR] },
+          total: stays.values.sum, x_title: "Readers", y_title: "Stayed", label: "Readers who left in the period by how long they'd been subscribed")
