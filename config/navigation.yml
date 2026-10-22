@@ -163,15 +163,24 @@ shared:
         - label: Request logs
           icon: list
           route: request_logs
+        - label: Request report
+          icon: bar-chart
+          route: request_report
         - label: Sync requests
           icon: refresh
           route: sync_requests
+        - label: Sync health
+          icon: check-circle
+          route: sync_health_report
         - label: Export requests
           icon: download
           route: export_requests
         - label: External calls
           icon: send
           route: external_calls
+        - label: API health
+          icon: activity
+          route: api_health_report
         - label: Analytics quota
           icon: gauge
           route: google_analytics_quota
