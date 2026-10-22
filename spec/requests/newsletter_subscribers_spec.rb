@@ -76,6 +76,18 @@ RSpec.describe "Newsletter subscribers", type: :request do
     expect(response.body).not_to include("Not theirs")
   end
 
+  it "shows which form a subscriber signed up through" do
+    subscriber = NewsletterSubscriber.create!(email: "a@example.com", subscribed_at: Time.current, source: "article_end", source_page: "/post/a")
+    NewsletterSubscriber.create!(email: "b@example.com", subscribed_at: Time.current)
+
+    get newsletter_subscribers_path(q: "example.com")
+    rows = Nokogiri::HTML5(response.body).css("tbody tr")
+    expect(rows.map { |row| row.css("td")[3].text.squish }).to contain_exactly("End of an article", "Unknown")
+
+    get newsletter_subscriber_path(subscriber)
+    expect(Nokogiri::HTML5(response.body).at_css("#subscriber").parent.text).to include("End of an article", "/post/a")
+  end
+
   it "unsubscribes a subscriber from the list" do
     subscriber = NewsletterSubscriber.find_by(email: "reader30@gmail.com")
     get newsletter_subscribers_path
