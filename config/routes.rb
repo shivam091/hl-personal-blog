@@ -24,7 +24,10 @@ Rails.application.routes.draw do
     resource :ranking_report, only: :show, path: "ranking-opportunities"
     resource :analytics_report, only: :show, path: "analytics"
     resource :content_report, only: :show, path: "content"
+    resource :leaderboard_report, only: :show, path: "leaderboard"
     resource :message_report, only: :show, path: "messages"
+    resource :newsletter_report, only: :show, path: "newsletter"
+    resource :review_report, only: :show, path: "review"
     resource :data_quality_report, only: :show, path: "data-quality"
   end
 
