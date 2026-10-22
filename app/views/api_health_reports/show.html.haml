@@ -1,0 +1,107 @@
+- content_for :title, "API health"
+- calls = @calls
+- before = calls.previous
+- vs = ("#{@period.previous}" if before)
+- ms = ->(value) { value ? "#{number_with_delimiter(value.round)} ms" : "—" }
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} API health
+    %p{class: "mt-1 text-sm text-slate-500"}
+      Calls the app made to Google, the blog and IP lookups: how many, how fast, and which are failing.
+  = link_to list_url(@period, format: :csv),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "google/shared/period", period: @period, keep: []
+
+- if !calls.any?
+  = render "shared/empty_state", message: "No external calls in #{@period}.", icon: "send"
+- else
+  %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+    = render "dashboard/tile", label: "Calls", tile_icon: "send", value: number_with_delimiter(calls.total),
+      change: metric_change(calls.total, before&.total, CompareHelper::MORE_IS_BETTER), compared_with: @period.previous,
+      hint: "Every call the app made to an outside service in the period."
+    = render "dashboard/tile", label: "Failed", tile_icon: "alert-triangle", value: number_with_delimiter(calls.failed),
+      change: noted_change(number_to_percentage(calls.failed * 100.0 / calls.total, precision: 1), calls.failed, before&.failed, CompareHelper::LESS_IS_BETTER),
+      compared_with: @period.previous, hint: "Calls answered with a 4xx or 5xx status, or not answered at all, as on a timeout."
+    = render "dashboard/tile", label: "Median time", tile_icon: "clock", value: ms.(calls.median_ms),
+      change: metric_change(calls.median_ms, before&.median_ms, CompareHelper::SLOWER_IS_WORSE), compared_with: @period.previous,
+      hint: "Half of all calls took less than this."
+    = render "dashboard/tile", label: "95th percentile", tile_icon: "timer", value: ms.(calls.p95_ms),
+      change: metric_change(calls.p95_ms, before&.p95_ms, CompareHelper::SLOWER_IS_WORSE), compared_with: @period.previous,
+      hint: "All but the slowest one in twenty calls took less than this."
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "calls-by-service", title: "Calls by service", icon: "bar-chart"} do
+      %div{class: "px-4 py-3"}
+        = stacked_chart(calls.dates, share_series(calls.daily_by_service) { |service| service },
+          y_title: "Calls", label: "External calls per day, split by service",
+          previous: (aligned(before.daily_totals, calls.dates.size) if before), previous_name: vs)
+
+    = render layout: "shared/card", locals: {id: "failed-calls", title: "Failed calls", icon: "alert-triangle"} do
+      %div{class: "px-4 py-3"}
+        = compared_bars(calls.dates, calls.daily_failed, previous: before&.daily_failed, previous_name: vs, y_title: "Failed calls", label: "Failed external calls per day")
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "services", title: "Services", icon: "server"} do
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              = report_th "Service"
+              = report_th "Calls", :right
+              = report_th "Failed", :right
+              = report_th "Failure rate", :right
+              = report_th "Median", :right
+              = report_th "P95", :right, title: "95th percentile"
+              = report_th "Last failure", :right
+          %tbody
+            - calls.services.each do |row|
+              - earlier = before&.services_by_name&.[](row.service)
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "px-3 py-1.5 font-medium"}
+                  = link_to row.service, external_calls_path(service: row.service), class: "hover:underline"
+                %td{class: "px-3 py-1.5 text-right tabular-nums"}
+                  = number_with_delimiter(row.calls)
+                  = row_change(row.calls, earlier&.calls, CompareHelper::MORE_IS_BETTER) if before
+                %td{class: "px-3 py-1.5 text-right tabular-nums"}
+                  = number_with_delimiter(row.failed)
+                  = row_change(row.failed, earlier&.failed, CompareHelper::LESS_IS_BETTER) if before
+                %td{class: "px-3 py-1.5 text-right tabular-nums #{"text-red-700" if row.failure_rate >= 0.05}"}
+                  = number_to_percentage(row.failure_rate * 100, precision: 1)
+                  = row_change(row.failure_rate, earlier&.failure_rate, CompareHelper::HIGHER_RATE_IS_WORSE) if before && earlier
+                %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}
+                  = ms.(row.median_ms)
+                  = row_change(row.median_ms, earlier&.median_ms, CompareHelper::SLOWER_IS_WORSE) if before
+                %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}
+                  = ms.(row.p95_ms)
+                  = row_change(row.p95_ms, earlier&.p95_ms, CompareHelper::SLOWER_IS_WORSE) if before
+                %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= row.last_failure ? l(row.last_failure, format: :short) : "—"
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        A failure rate of 5% or more is in red. Each service opens its calls in the list.
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "call-errors", title: "Errors", icon: "alert-circle"} do
+      - rows = calls.errors
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No call failed in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                = report_th "Service"
+                = report_th "Error"
+                = report_th "Times", :right
+                = report_th "Latest", :right
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium whitespace-nowrap"}= row.service
+                  %td{class: "max-w-0 w-full truncate px-3 py-1.5 text-slate-600", title: row.error}= row.error
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}
+                    = number_with_delimiter(row.count)
+                    = row_change(row.count, before.error_counts[[row.service, row.error]], CompareHelper::LESS_IS_BETTER) if before
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(row.last_at, format: :short)
