@@ -1,5 +1,7 @@
 -# Banners shown shade the map rather than the acceptance rate: most countries see a handful of banners, where one
 -# answer swings the rate from none to all, and the map's scale is built for counts.
+- before = local_assigns[:before]&.index_by(&:country)
+- earlier = ->(field) { before.transform_values(&field) if before }
 - parts = [["Accepted", ChartsHelper::SHARE_COLORS[0]], ["Declined", ChartsHelper::SHARE_COLORS[1]], ["No answer", ChartsHelper::SHARE_OTHER_COLOR]]
 = render layout: "shared/card", locals: {id: "banner-by-country", title: "Banner by country", icon: "globe", class: "mb-6"} do
   - if rows.empty?
@@ -9,7 +11,8 @@
       %div{class: "min-w-0"}
         %p{class: "mb-1 text-xs font-medium text-slate-500"} Banners shown
         = world_map(rows.to_h { |row| [row.country, row.shown] }, label: "Banners shown by country", unit: "banner",
-          also: [["Accepted", rows.to_h { |row| [row.country, row.granted] }], ["Declined", rows.to_h { |row| [row.country, row.denied] }]])
+          previous: earlier.(:shown), previous_name: local_assigns[:previous_name],
+          also: [["Accepted", rows.to_h { |row| [row.country, row.granted] }, earlier.(:granted)], ["Declined", rows.to_h { |row| [row.country, row.denied] }, earlier.(:denied)]])
       %div{class: "min-w-0"}
         %p{class: "mb-1 text-xs font-medium text-slate-500"} What each country answered
         = split_bars(rows.map { |row| [country_label(row.country), [row.granted, row.denied, row.no_answer]] }, parts: parts,
@@ -21,8 +24,13 @@
       - rows.each do |row|
         %tr{class: table_row_class}
           %td{class: "px-3 py-1.5 whitespace-nowrap"}= country_label(row.country)
-          %td{class: cell_class}= number_with_delimiter(row.shown)
+          %td{class: cell_class}
+            = number_with_delimiter(row.shown)
+            = row_change(row.shown, before[row.country]&.shown.to_i, DashboardHelper::HIGHER_IS_BETTER) if before
           %td{class: cell_class}= number_with_delimiter(row.granted)
           %td{class: cell_class}= number_with_delimiter(row.denied)
           %td{class: cell_class}= number_with_delimiter(row.no_answer)
-          %td{class: cell_class}= row.acceptance_rate ? number_to_percentage(row.acceptance_rate * 100, precision: 1) : "—"
+          %td{class: cell_class}
+            = row.acceptance_rate ? number_to_percentage(row.acceptance_rate * 100, precision: 1) : "—"
+            - rate_before = before && before[row.country]&.acceptance_rate
+            = row_change(row.acceptance_rate, rate_before, DashboardHelper::HIGHER_IS_BETTER) if rate_before && row.acceptance_rate
