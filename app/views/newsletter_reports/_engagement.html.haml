@@ -1,0 +1,53 @@
+-# Per send rather than per month, since whether readers act on a mail
+-# depends on the entry it announced.
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+- cell_class = "px-3 py-1.5 text-right tabular-nums"
+%div{class: "mb-6"}
+  = render layout: "shared/card", locals: {id: "opens-and-clicks", title: "Opens and clicks by entry", icon: "mouse-pointer"} do
+    %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+      Readers who opened or clicked each new-entry mail sent in the period, from the events Brevo posts back; a reader counts once
+      however often they open. Rates are of mails delivered. Mail apps that load images ahead of the reader, like Apple Mail, count
+      as opens, so clicks are the surer sign.
+    - rows = engagement.rows
+    - if !engagement.any_events?
+      %p{class: "px-4 py-3 text-sm text-slate-500"}
+        No events from Brevo yet. Point a transactional webhook in Brevo at /webhooks/brevo?token=… to start receiving them.
+    - elsif rows.empty?
+      %p{class: "px-4 py-3 text-sm text-slate-500"} No new-entry mail went out in #{period}.
+    - else
+      %div{class: "border-b border-slate-200 px-4 py-3"}
+        = split_bars(rows.map { |row| [row.entry.name, row.parts] },
+          parts: NewsletterEngagement::PARTS.zip(ChartsHelper::SHARE_COLORS.values_at(0, 1) + [ChartsHelper::SHARE_OTHER_COLOR, ChartsHelper::SHARE_COLORS[3]]),
+          links: rows.to_h { |row| [row.entry.name, feed_entry_path(row.entry.url)] },
+          unit: "mail", label: "Each new-entry mail split into clicked, opened, not opened and bounced")
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-sm"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "#{th_class} text-left"} Entry
+              %th{scope: "col", class: "#{th_class} text-right"} Sent
+              %th{scope: "col", class: "#{th_class} text-right"} Delivered
+              %th{scope: "col", class: "#{th_class} text-right"} Opened
+              %th{scope: "col", class: "#{th_class} text-right"} Clicked
+              %th{scope: "col", class: "#{th_class} text-right", title: "Hard and soft bounces"} Bounced
+              %th{scope: "col", class: "#{th_class} text-right"} Left
+              %th{scope: "col", class: "#{th_class} text-right", title: "Marked as spam"} Spam
+          %tbody
+            - rows.each do |row|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "w-full px-3 py-1.5"}
+                  = blog_page_link(row.entry.name, feed_entry_path(row.entry.url), live: row.entry.url)
+                  %span{class: "block text-xs text-slate-500"} Sent #{l(row.entry.notified_at.to_date)}
+                %td{class: cell_class}= row.sent ? number_with_delimiter(row.sent) : "—"
+                %td{class: cell_class}= number_with_delimiter(row.delivered)
+                %td{class: cell_class}
+                  = number_with_delimiter(row.opened)
+                  - if row.open_rate
+                    %span{class: "block text-xs text-slate-500"}= number_to_percentage(row.open_rate * 100, precision: 1)
+                %td{class: cell_class}
+                  = number_with_delimiter(row.clicked)
+                  - if row.click_rate
+                    %span{class: "block text-xs text-slate-500"}= number_to_percentage(row.click_rate * 100, precision: 1)
+                %td{class: [cell_class, ("text-amber-700" if row.bounced.positive?)]}= number_with_delimiter(row.bounced)
+                %td{class: cell_class}= number_with_delimiter(row.unsubscribed)
+                %td{class: [cell_class, ("text-red-700" if row.spam.positive?)]}= number_with_delimiter(row.spam)
