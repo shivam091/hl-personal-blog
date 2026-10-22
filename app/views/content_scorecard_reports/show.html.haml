@@ -1,0 +1,105 @@
+- content_for :title, "Content scorecard"
+- th_class = "px-3 py-2 font-medium whitespace-nowrap"
+- potential = @sort.key == "potential"
+- compared = !@scorecard.previous.nil?
+- tab = "rounded-md px-3 py-1.5 text-sm font-medium"
+- rank_class = ->(rank) { if rank.nil? then "text-slate-400" elsif rank >= 0.75 then "text-emerald-700" elsif rank < 0.25 then "text-amber-700" else "text-slate-700" end }
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Content scorecard
+    %p{class: subtitle_class}
+      Every entry ranked on each measure there is of it: how much it's read and liked, how it does in search, how far readers get,
+      and how fast it loads.
+  = link_to list_url(@period, @filtering, @sort, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@sort], likes_note: false
+
+-# Neither is split by country, so an earlier figure only means something for an earlier period.
+- consent_before = @period.previous if @period.compare? && !@period.compare_countries?
+- ga_share = @consent.ga_share
+- acceptance = @consent.acceptance_rate
+- ga_share_hint = "GA's views as a share of the blog's own, on the nightly snapshots' days GA has figures for. Lower means more readers GA can't see (declined, blocked or not yet answered), not fewer readers, so read the Analytics measures below with it. Every country."
+- acceptance_hint = "Accepted as a share of answers to the consent banner, once there are #{CountryBanners::MIN_ANSWERS_FOR_RATE}+. Only readers in the EEA, UK and Switzerland are asked. Every country."
+%dl{id: "consent-kpis", class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+  = render "dashboard/tile", label: "GA's share of our views", tile_icon: "eye",
+    value: (ga_share ? number_to_percentage(ga_share * 100, precision: 1) : "—"),
+    change: metric_change(ga_share, (@consent.ga_share(consent_before) if consent_before), CompareHelper::HIGHER_RATE_IS_BETTER),
+    compared_with: consent_before,
+    hint: ga_share_hint
+  = render "dashboard/tile", label: "Banner acceptance", tile_icon: "check",
+    value: (acceptance ? number_to_percentage(acceptance * 100, precision: 1) : "—"),
+    change: metric_change(acceptance, (@consent.acceptance_rate(consent_before) if consent_before), CompareHelper::HIGHER_RATE_IS_BETTER),
+    compared_with: consent_before,
+    hint: acceptance_hint
+
+%nav{class: "mb-4 flex flex-wrap gap-1", aria: {label: "Order"}}
+  - ContentScorecard::SORTS.each do |key, label|
+    - current = key == @sort.key
+    = link_to label, list_url(@period, @filtering, ContentScorecardReportsController::Sort.new(key)),
+      class: [tab, current ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"], aria: {current: (current ? "true" : nil)}
+
+- if @rows.empty?
+  = render "shared/empty_state", message: "No feed entries yet. Sync them from Feed entries."
+- else
+  %p{class: "mb-3 text-sm text-slate-600"}
+    - if potential
+      Seen most in search yet weakest overall first: how often Google shows an entry, times how far its score falls short.
+    - else
+      Strongest across every measure first. The score is the average of an entry's place on each measure, 100% being top on all
+      of them; a measure it has no figure for counts as middling.
+  %div{class: table_card_class}
+    %table{class: table_class}
+      %thead{class: table_head_class}
+        %tr
+          %th{scope: "col", class: "#{th_class} text-right", aria: {label: "Row number"}} #
+          %th{scope: "col", class: "#{th_class} text-left"} Entry
+          %th{scope: "col", class: "#{th_class} w-40 text-left"}= potential ? "Potential" : "Score"
+          - ContentScorecard::MEASURES.each do |measure|
+            %th{scope: "col", class: "#{th_class} text-right"}= measure.label
+          - if @ai.covered
+            %th{scope: "col", class: "#{th_class} text-right", title: "Google's total for #{l(@ai.covered.begin)} – #{l(@ai.covered.end)}, from the latest Generative AI upload; shown, not ranked"} AI impressions
+      %tbody
+        - @rows.each_with_index do |row, index|
+          - figure = potential ? row.potential : row.score
+          - earlier = @scorecard.previous_row(row)
+          %tr{class: "border-t border-slate-100"}
+            %td{class: "px-3 py-2 text-right tabular-nums text-slate-400"}= index + 1
+            %td{class: "w-full px-3 py-2"}
+              = blog_page_link(row.item.entry.name, page_view_path(row.item.path, **@period.query), live: row.item.path)
+              %span{class: "text-xs text-slate-500"} #{row.item.type.capitalize} · #{l(row.item.entry.published_at.to_date)}
+            %td{class: "px-3 py-2"}
+              - if figure
+                %div{class: "flex items-center gap-2"}
+                  %div{class: "flex-1"}= meter(figure * 100, 100, label: "#{potential ? "Potential" : "Score"} of #{row.item.entry.name}")
+                  %span{class: "w-10 shrink-0 text-right tabular-nums"}
+                    = number_to_percentage(figure * 100, precision: 0)
+                    - before_figure = (potential ? earlier&.potential : earlier&.score) if compared
+                    = row_change(figure, before_figure, CompareHelper::HIGHER_RATE_IS_BETTER) if before_figure
+              - else
+                %span{class: "text-slate-400"} —
+            - ContentScorecard::MEASURES.each do |measure|
+              - value = row.values[measure.key]
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums #{rank_class.(row.ranks[measure.key])}",
+                title: (row.ranks[measure.key] && "Ahead of #{number_to_percentage(row.ranks[measure.key] * 100, precision: 0)} of entries")}
+                - if value.nil?
+                  \—
+                - elsif measure.key == :performance
+                  = (value * 100).round
+                - else
+                  = metric_value(value, measure.format)
+                -# Speed is Lighthouse's latest score, not the period's, so there's no earlier one to compare.
+                - before_value = earlier&.values&.[](measure.key) if compared && measure.key != :performance
+                = row_change(value, before_value, CompareHelper::Measure.new(false, measure.format)) if value && before_value
+            - if @ai.covered
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums text-slate-700"}= number_with_delimiter(@scorecard.ai_impressions(row))
+  %p{class: "mt-3 text-xs text-slate-500"}
+    Green is an entry's top quarter on a measure and amber its bottom. Likes per view needs #{BlogStats::MIN_VIEWS_FOR_RATE}+ views and
+    CTR #{Google::SearchConsole::Summary::MIN_IMPRESSIONS}+ impressions; time engaged and read-through need
+    #{Google::Analytics::Insights::MIN_VIEWS}+ Analytics views. Speed is Lighthouse's phone score. Search and Analytics cover every country.
+    - if @ai.covered
+      AI impressions are Google's totals for #{l(@ai.covered.begin)} – #{l(@ai.covered.end)} from the latest Generative AI upload, whatever
+      period is picked, so they're shown but don't count toward the score.
