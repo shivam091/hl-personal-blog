@@ -1,0 +1,98 @@
+- content_for :title, "Sync health"
+- syncs = @syncs
+- table_class = "w-full border-collapse text-sm"
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+-# Good outcomes in cool hues and bad in warm ones, so a run of failures
+-# shows as colour as well as height.
+- outcome_series = {"succeeded" => ["Succeeded", ChartsHelper::SHARE_COLORS[2]], "partial" => ["With errors", ChartsHelper::SHARE_COLORS[3]],
+  "failed" => ["Failed", ChartsHelper::SHARE_COLORS[1]], "stalled" => ["Stalled", ChartsHelper::SHARE_OTHER_COLOR],
+  "in_progress" => ["In progress", ChartsHelper::SHARE_COLORS[0]]}
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} Sync health
+  %p{class: "mt-1 text-sm text-slate-500"}
+    Every sync from Google, the feed and the sitemap: which keep failing, how long they take, and what they bring in.
+
+= render "google/shared/period", period: @period, keep: [], compare: false
+
+- counts = syncs.outcome_counts
+%dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+  = render "dashboard/tile", label: "Syncs", tile_icon: "refresh", value: number_with_delimiter(syncs.total), change: nil,
+    hint: "Sync requests made in the period, from a button, a job or a rake task."
+  = render "dashboard/tile", label: "Succeeded", tile_icon: "check-circle", value: number_with_delimiter(counts["succeeded"]), change: nil,
+    hint: "Syncs that brought everything in without an error."
+  = render "dashboard/tile", label: "With errors", tile_icon: "alert-circle", value: number_with_delimiter(counts["partial"]), change: nil,
+    hint: "Syncs that brought data in but hit errors on some of it."
+  = render "dashboard/tile", label: "Failed or stalled", tile_icon: "alert-triangle", value: number_with_delimiter(counts["failed"] + counts["stalled"]),
+    change: nil, hint: "Syncs that brought nothing in, or were lost midway and never finished."
+
+%div{class: "mb-6"}
+  -# Every kind, even one not run in the period, since a kind that never
+  -# runs goes stale as surely as one that fails.
+  = render layout: "shared/card", locals: {id: "sync-kinds", title: "By kind", icon: "list"} do
+    %div{class: "overflow-x-auto"}
+      %table{class: table_class}
+        %thead{class: "text-slate-500"}
+          %tr
+            %th{scope: "col", class: "#{th_class} text-left"} Kind
+            %th{scope: "col", class: "#{th_class} text-right"} Runs
+            %th{scope: "col", class: "#{th_class} text-right", title: "Of finished runs, those that brought data in"} Success
+            %th{scope: "col", class: "#{th_class} text-right", title: "Failures in a row, up to the latest finished run"} Failing
+            %th{scope: "col", class: "#{th_class} text-right"} Median time
+            %th{scope: "col", class: "#{th_class} text-right"} Longest
+            %th{scope: "col", class: "#{th_class} text-right", title: "Rows created or updated"} Rows
+            %th{scope: "col", class: "#{th_class} text-right"} Last success
+        %tbody
+          - syncs.kinds.each do |row|
+            %tr{class: "border-t border-slate-200"}
+              %td{class: "px-3 py-1.5 font-medium"}
+                = link_to row.section, sync_requests_path(section: row.kind), class: "hover:underline"
+              %td{class: "px-3 py-1.5 text-right tabular-nums #{"text-slate-400" if row.runs.zero?}"}= number_with_delimiter(row.runs)
+              %td{class: "px-3 py-1.5 text-right tabular-nums #{"text-amber-700" if row.success_rate && row.success_rate < 0.9}"}
+                = row.success_rate ? number_to_percentage(row.success_rate * 100, precision: 0) : "—"
+              %td{class: "px-3 py-1.5 text-right tabular-nums #{"font-medium text-red-700" if row.failing_streak >= 2}"}
+                = row.failing_streak.positive? ? pluralize(row.failing_streak, "run") : "—"
+              %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}= seconds_label(row.median_seconds)
+              %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}= seconds_label(row.max_seconds)
+              %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.rows)
+              %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= row.last_success ? l(row.last_success, format: :short) : "Never"
+    %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+      Kinds failing twice or more in a row come first, in red. Last success is the latest ever, not only in the period. Each kind
+      opens its runs in the sync list.
+
+- if syncs.any?
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "syncs-by-outcome", title: "Syncs by outcome", icon: "bar-chart"} do
+      %div{class: "px-4 py-3"}
+        = stacked_chart(syncs.dates, syncs.daily_by_outcome.map { |key, values| ChartsHelper::Series.new(name: outcome_series[key].first, values: values, color: outcome_series[key].last) },
+          y_title: "Syncs", label: "Sync requests per day, split by how they ended")
+
+    = render layout: "shared/card", locals: {id: "sync-rows", title: "Rows brought in", icon: "database"} do
+      %div{class: "px-4 py-3"}
+        = time_chart(syncs.dates.zip(syncs.daily_rows), y_title: "Rows", label: "Rows created or updated by syncs per day")
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Unchanged rows are left out, so a day of syncs that found nothing new reads as none.
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "sync-errors", title: "Recurring errors", icon: "alert-circle"} do
+      - rows = syncs.errors
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No sync hit an error in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Error
+                %th{scope: "col", class: "#{th_class} text-left"} Kinds
+                %th{scope: "col", class: "#{th_class} text-right"} Times
+                %th{scope: "col", class: "#{th_class} text-right"} Latest
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "max-w-0 w-full truncate px-3 py-1.5", title: row.message}= row.message
+                  %td{class: "px-3 py-1.5 text-xs whitespace-nowrap text-slate-600"}= row.kinds.join(", ")
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.count)
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(row.last_at, format: :short)
+        %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          Numbers in a message are shown as #, so the same error on another day or row is counted together.

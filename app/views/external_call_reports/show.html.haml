@@ -1,0 +1,86 @@
+- content_for :title, "API health"
+- calls = @calls
+- table_class = "w-full border-collapse text-sm"
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+- ms = ->(value) { value ? "#{number_with_delimiter(value.round)} ms" : "—" }
+
+%div{class: "mb-6"}
+  %h1{class: "text-2xl font-semibold tracking-tight"} API health
+  %p{class: "mt-1 text-sm text-slate-500"}
+    Calls the app made to Google, the blog and IP lookups: how many, how fast, and which are failing.
+
+= render "google/shared/period", period: @period, keep: [], compare: false
+
+- if !calls.any?
+  = render "shared/empty_state", message: "No external calls in #{@period}.", icon: "send"
+- else
+  %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+    = render "dashboard/tile", label: "Calls", tile_icon: "send", value: number_with_delimiter(calls.total), change: nil,
+      hint: "Every call the app made to an outside service in the period."
+    = render "dashboard/tile", label: "Failed", tile_icon: "alert-triangle", value: number_with_delimiter(calls.failed),
+      change: number_to_percentage(calls.failed * 100.0 / calls.total, precision: 1),
+      hint: "Calls answered with a 4xx or 5xx status, or not answered at all, as on a timeout."
+    = render "dashboard/tile", label: "Median time", tile_icon: "clock", value: ms.(calls.median_ms), change: nil,
+      hint: "Half of all calls took less than this."
+    = render "dashboard/tile", label: "95th percentile", tile_icon: "timer", value: ms.(calls.p95_ms), change: nil,
+      hint: "All but the slowest one in twenty calls took less than this."
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "calls-by-service", title: "Calls by service", icon: "bar-chart"} do
+      %div{class: "px-4 py-3"}
+        = stacked_chart(calls.dates, share_series(calls.daily_by_service) { |service| service },
+          y_title: "Calls", label: "External calls per day, split by service")
+
+    = render layout: "shared/card", locals: {id: "failed-calls", title: "Failed calls", icon: "alert-triangle"} do
+      %div{class: "px-4 py-3"}
+        = time_chart(calls.dates.zip(calls.daily_failed), y_title: "Failed calls", label: "Failed external calls per day")
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "services", title: "Services", icon: "server"} do
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "#{th_class} text-left"} Service
+              %th{scope: "col", class: "#{th_class} text-right"} Calls
+              %th{scope: "col", class: "#{th_class} text-right"} Failed
+              %th{scope: "col", class: "#{th_class} text-right"} Failure rate
+              %th{scope: "col", class: "#{th_class} text-right"} Median
+              %th{scope: "col", class: "#{th_class} text-right", title: "95th percentile"} P95
+              %th{scope: "col", class: "#{th_class} text-right"} Last failure
+          %tbody
+            - calls.services.each do |row|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "px-3 py-1.5 font-medium"}
+                  = link_to row.service, external_calls_path(service: row.service), class: "hover:underline"
+                %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.calls)
+                %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.failed)
+                %td{class: "px-3 py-1.5 text-right tabular-nums #{"text-red-700" if row.failure_rate >= 0.05}"}
+                  = number_to_percentage(row.failure_rate * 100, precision: 1)
+                %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}= ms.(row.median_ms)
+                %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}= ms.(row.p95_ms)
+                %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= row.last_failure ? l(row.last_failure, format: :short) : "—"
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        A failure rate of 5% or more is in red. Each service opens its calls in the list.
+
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "call-errors", title: "Errors", icon: "alert-circle"} do
+      - rows = calls.errors
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No call failed in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Service
+                %th{scope: "col", class: "#{th_class} text-left"} Error
+                %th{scope: "col", class: "#{th_class} text-right"} Times
+                %th{scope: "col", class: "#{th_class} text-right"} Latest
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium whitespace-nowrap"}= row.service
+                  %td{class: "max-w-0 w-full truncate px-3 py-1.5 text-slate-600", title: row.error}= row.error
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row.count)
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(row.last_at, format: :short)
