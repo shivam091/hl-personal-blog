@@ -1,0 +1,196 @@
+- content_for :title, "Request report"
+- requests = @requests
+- before = requests.previous
+- vs = ("#{@period.previous}" if before)
+- table_class = "w-full border-collapse text-sm"
+- th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+- ms = ->(value) { value ? "#{number_with_delimiter(value.round)} ms" : "—" }
+-# Success and redirects in cool hues, errors in warm ones, so a day going
+-# wrong shows as colour as well as height.
+- status_colors = {"2xx" => ChartsHelper::SHARE_COLORS[2], "3xx" => ChartsHelper::SHARE_COLORS[0],
+  "4xx" => ChartsHelper::SHARE_COLORS[3], "5xx" => ChartsHelper::SHARE_COLORS[1]}
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Request report
+    %p{class: "mt-1 text-sm text-slate-500"}
+      The admin's own requests from the request log: what fails, what's slow, and who's asking. Development's requests are left out.
+  = link_to list_url(@period, format: :csv),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "google/shared/period", period: @period, keep: [@granularity]
+
+- if !requests.any?
+  = render "shared/empty_state", message: "No requests logged in #{@period}.", icon: "list"
+- else
+  %dl{class: "mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"}
+    = render "dashboard/tile", label: "Requests", tile_icon: "activity", value: number_with_delimiter(requests.total),
+      change: metric_change(requests.total, before&.total, CompareHelper::MORE_IS_BETTER), compared_with: @period.previous,
+      hint: "Every request the app logged in the period, development's left out."
+    = render "dashboard/tile", label: "Server errors", tile_icon: "alert-triangle", value: number_with_delimiter(requests.count("5xx")),
+      change: noted_change(number_to_percentage(requests.count("5xx") * 100.0 / requests.total, precision: 1),
+        requests.count("5xx"), before&.count("5xx"), CompareHelper::LESS_IS_BETTER), compared_with: @period.previous,
+      hint: "Responses with a 5xx status: the app failed, whatever was asked of it."
+    = render "dashboard/tile", label: "Client errors", tile_icon: "alert-circle", value: number_with_delimiter(requests.count("4xx")),
+      change: noted_change(number_to_percentage(requests.count("4xx") * 100.0 / requests.total, precision: 1),
+        requests.count("4xx"), before&.count("4xx"), CompareHelper::LESS_IS_BETTER), compared_with: @period.previous,
+      hint: "Responses with a 4xx status: a missing page, a form that didn't validate, or a signed-out visit."
+    = render "dashboard/tile", label: "Median time", tile_icon: "clock", value: ms.(requests.median_ms),
+      change: metric_change(requests.median_ms, before&.median_ms, CompareHelper::SLOWER_IS_WORSE), compared_with: @period.previous,
+      hint: "Half of all requests took less than this, from reaching the app to its response being sent."
+    = render "dashboard/tile", label: "95th percentile", tile_icon: "timer", value: ms.(requests.p95_ms),
+      change: metric_change(requests.p95_ms, before&.p95_ms, CompareHelper::SLOWER_IS_WORSE), compared_with: @period.previous,
+      hint: "All but the slowest one in twenty requests took less than this."
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "requests-by-status", title: "Requests by status", icon: "bar-chart",
+      actions: chart_granularity_picker(@granularity, "Requests", "requests-by")} do
+      %div{class: "px-4 py-3"}
+        - buckets = @granularity.dates(requests.dates)
+        = stacked_chart(buckets, requests.daily_by_status.map { |name, values| ChartsHelper::Series.new(name: name, values: @granularity.sums(requests.dates, values), color: status_colors[name]) },
+          y_title: "Requests", label: "Requests per #{@granularity.by}, split by status class", per: @granularity.per,
+          previous: (aligned(before.daily_by_status.transform_values { |values| @granularity.sums(before.dates, values) }.values.transpose.map(&:sum), buckets.size) if before), previous_name: vs)
+
+    -# Median and slow tail on one scale, so the gap between them shows how
+    -# uneven the day was.
+    = render layout: "shared/card", locals: {id: "response-times", title: "Response time", icon: "clock"} do
+      %div{class: "px-4 py-3"}
+        - timings = requests.daily_timings
+        - earlier = before&.daily_timings
+        - lines = [ChartsHelper::Series.new(name: "Median", values: timings[:median]),
+          ChartsHelper::Series.new(name: "95th percentile", values: timings[:p95], dashed: true)]
+        - if earlier
+          - lines << ChartsHelper::Series.new(name: "Median, #{vs}", values: aligned(earlier[:median], requests.dates.size), dotted: true, color: ChartsHelper::LINE_COLORS[0], against: lines[0])
+          - lines << ChartsHelper::Series.new(name: "95th percentile, #{vs}", values: aligned(earlier[:p95], requests.dates.size), dotted: true, color: ChartsHelper::LINE_COLORS[1], against: lines[1])
+        = line_chart(requests.dates, lines,
+          y_title: "Milliseconds", unit: " ms", label: "Median and 95th percentile response time per day")
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "slowest-paths", title: "Slowest pages", icon: "timer"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        By their 95th percentile. Ids in a path are shown as :id, so each page is one row.
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "#{th_class} text-left"} Path
+              %th{scope: "col", class: "#{th_class} text-right"} Requests
+              %th{scope: "col", class: "#{th_class} text-right"} Median
+              %th{scope: "col", class: "#{th_class} text-right", title: "95th percentile"} P95
+              %th{scope: "col", class: "#{th_class} text-right", title: "Responses with a 5xx status"} Errors
+          %tbody
+            - requests.slowest_paths.each do |row|
+              - earlier = before&.paths_by_pattern&.[](row.path)
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "max-w-0 w-full truncate px-3 py-1.5", title: row.path}= row.path
+                %td{class: "px-3 py-1.5 text-right tabular-nums"}
+                  = number_with_delimiter(row.requests)
+                  = row_change(row.requests, earlier&.requests, CompareHelper::MORE_IS_BETTER) if before
+                %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}
+                  = ms.(row.median_ms)
+                  = row_change(row.median_ms, earlier&.median_ms, CompareHelper::SLOWER_IS_WORSE) if before
+                %td{class: "px-3 py-1.5 text-right whitespace-nowrap tabular-nums"}
+                  = ms.(row.p95_ms)
+                  = row_change(row.p95_ms, earlier&.p95_ms, CompareHelper::SLOWER_IS_WORSE) if before
+                %td{class: "px-3 py-1.5 text-right tabular-nums #{"text-red-700" if row.errors.positive?}"}
+                  = number_with_delimiter(row.errors)
+                  = row_change(row.errors, earlier&.errors, CompareHelper::LESS_IS_BETTER) if before
+
+    = render layout: "shared/card", locals: {id: "exceptions", title: "Exceptions", icon: "alert-triangle"} do
+      - rows = requests.exceptions
+      - if rows.empty?
+        %p{class: "px-4 py-3 text-sm text-slate-500"} No request raised an exception in this period.
+      - else
+        %div{class: "overflow-x-auto"}
+          %table{class: table_class}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "#{th_class} text-left"} Exception
+                %th{scope: "col", class: "#{th_class} text-right"} Times
+                %th{scope: "col", class: "#{th_class} text-right"} Latest
+            %tbody
+              - rows.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "max-w-0 w-full px-3 py-1.5"}
+                    %div{class: "truncate font-mono text-xs font-medium", title: row.name}= row.name
+                    %div{class: "truncate text-xs text-slate-500", title: row.last.exception["message"]}= row.last.exception["message"]
+                  %td{class: "px-3 py-1.5 text-right tabular-nums"}
+                    = number_with_delimiter(row.count)
+                    = row_change(row.count, before.exception_counts[row.name], CompareHelper::LESS_IS_BETTER) if before
+                  %td{class: "px-3 py-1.5 text-right whitespace-nowrap"}
+                    = link_to l(row.last.time, format: :short), request_log_path(row.last.id), class: "text-slate-600 hover:underline"
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "request-countries", title: "Where requests come from", icon: "globe"} do
+      %div{class: "px-4 py-3"}
+        = world_map(requests.countries, label: "Requests by country", unit: "request",
+          previous: before&.countries, previous_name: vs)
+      -# The map outlines which countries rose or fell; the table gives by how much.
+      - if before
+        %div{class: "border-t border-slate-200 px-4 py-3"}
+          = render "shared/breakdown", counts: requests.countries.transform_keys { |code| country_label(code) }, heading: "Country", count_heading: "Requests", limit: 5,
+            empty: "No requests.", previous: before.countries.transform_keys { |code| country_label(code) }, metric: CompareHelper::MORE_IS_BETTER
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        By the IP lookup's country; a request behind a proxy or CDN is placed where that sits.
+
+    = render layout: "shared/card", locals: {id: "user-agents", title: "Clients", icon: "cpu"} do
+      %div{class: "border-b border-slate-200 px-4 py-3"}
+        %p{class: "mb-1 flex justify-between gap-3 text-xs font-medium text-slate-500"}
+          %span Scripts and crawlers
+          %span{class: "text-slate-900 tabular-nums"}
+            = number_with_delimiter(requests.bots)
+            of #{number_with_delimiter(requests.total)}
+            = metric_change(requests.bots, before&.bots, CompareHelper::LESS_IS_BETTER)
+        = meter(requests.bots, requests.total, label: "Share of requests from scripts and crawlers")
+      %div{class: "px-4 py-3"}
+        = render "shared/breakdown", counts: requests.agents, heading: "Client", count_heading: "Requests", limit: 8, empty: "No requests.",
+          previous: before&.agents, metric: CompareHelper::MORE_IS_BETTER
+
+  -# Rows are weekdays and columns hours, so a cron job shows as a column
+  -# and a working day as a block.
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "request-hours", title: "When requests come", icon: "calendar"} do
+      - cells = requests.hours
+      - max = cells.flatten.max
+      = chart_tooltip(label: "Requests by weekday and hour") do
+        %div{class: "overflow-x-auto px-4 py-3"}
+          %table{class: "w-full border-collapse text-xs"}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "px-2 py-1 text-left font-medium"} Day
+                - 24.times do |hour|
+                  %th{scope: "col", class: "px-0.5 py-1 text-center font-medium tabular-nums"}= format("%02d", hour)
+            %tbody
+              - Date::ABBR_DAYNAMES.rotate.each_with_index do |weekday, row|
+                %tr
+                  %th{scope: "row", class: "px-2 py-0.5 text-left font-medium"}= weekday
+                  - cells[row].each_with_index do |count, hour|
+                    %td{class: "p-0.5"}
+                      %div{class: "min-w-6 rounded px-0.5 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(count, max)}",
+                        data: chart_tip("#{Date::DAYNAMES.rotate[row]}, #{format("%02d:00", hour)}", [{value: number_with_delimiter(count), name: "request".pluralize(count)},
+          *(before ? [{value: number_with_delimiter(before.hours[row][hour]), name: vs, dotted: true}] : [])])}= count
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        In #{Time.zone.name}, the app's time zone.
+        - if before
+          Each cell's readout also gives the count in #{vs}.
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "memory", title: "Server memory", icon: "database"} do
+      %div{class: "px-4 py-3"}
+        - memory = [ChartsHelper::Series.new(name: "Memory", values: requests.daily_memory_mb, color: ChartsHelper::LINE_COLORS[0])]
+        - memory << ChartsHelper::Series.new(name: "Memory, #{vs}", values: aligned(before.daily_memory_mb, requests.dates.size), dotted: true, color: ChartsHelper::LINE_COLORS[0], against: memory[0]) if before
+        = line_chart(requests.dates, memory,
+          y_title: "MB", unit: " MB", label: "The most memory the server process held on each day")
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Each day's highest, as the whole process held it after a request, so a climb that never comes down shows.
+
+    = render layout: "shared/card", locals: {id: "cpu", title: "CPU per request", icon: "cpu"} do
+      %div{class: "px-4 py-3"}
+        - cpu = [ChartsHelper::Series.new(name: "CPU", values: requests.daily_cpu, color: ChartsHelper::LINE_COLORS[0])]
+        - cpu << ChartsHelper::Series.new(name: "CPU, #{vs}", values: aligned(before.daily_cpu, requests.dates.size), dotted: true, color: ChartsHelper::LINE_COLORS[0], against: cpu[0]) if before
+        = line_chart(requests.dates, cpu,
+          y_title: "% of time", unit: "%", label: "Average share of each request's time spent on the CPU, per day")
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Low on a slow day means requests were waiting on the database or the network, not working.
