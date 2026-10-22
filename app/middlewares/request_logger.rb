@@ -74,7 +74,8 @@ class RequestLogger
 
     RequestLog.create!(
       uuid: request.uuid,
-      uri: request.original_url,
+      # Filtered, as a webhook's secret rides in its query string.
+      uri: "#{request.base_url}#{request.filtered_path}",
       request_method: request.request_method,
       query_params: serializable(request.filtered_parameters.except("controller", "action")),
       session_id: session&.id&.public_id,
