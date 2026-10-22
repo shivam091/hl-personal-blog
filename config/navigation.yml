@@ -26,6 +26,9 @@ shared:
     - label: Reports
       icon: bar-chart
       items:
+        - label: Month and year review
+          icon: calendar
+          route: month_and_year_review_report
         - label: Countries
           icon: map-pin
           route: country_report
@@ -47,9 +50,15 @@ shared:
         - label: Topic gaps
           icon: text-search
           route: topic_gap_report
+        - label: Content scorecard
+          icon: trophy
+          route: content_scorecard_report
         - label: Messages
           icon: message-square
           route: message_report
+        - label: Newsletter
+          icon: send
+          route: newsletter_report
         - label: Data quality
           icon: database
           route: data_quality_report

@@ -1,0 +1,113 @@
+- content_for :title, "Review of #{@span.label}"
+- review = @review
+- chip = "rounded-md px-2.5 py-1 text-sm whitespace-nowrap"
+- chip_off = "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+- list_class = "divide-y divide-slate-100 text-sm"
+- row_class = "flex items-center justify-between gap-3 px-4 py-2"
+- empty_class = empty_note_class
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Review of #{@span.label}
+    %p{class: subtitle_class}
+      #{l(@period.from)} – #{l(@period.to)}#{", against #{@period.year_on_year? ? "the same days a year earlier" : @period.previous}" if @period.compare?}: every
+      source on one page.
+  = link_to month_and_year_review_report_path(for: @span.key, **@compare_params, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-x-4 gap-y-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"}
+  %nav{class: "min-w-0 space-y-2", aria: {label: "Review span"}}
+    - {"Months" => @spans[:months], "Years" => @spans[:years]}.each do |heading, spans|
+      %div{class: "flex flex-wrap items-center gap-1"}
+        %span{class: "mr-2 w-14 text-xs font-medium text-slate-500"}= heading
+        - spans.each do |span|
+          - current = span.key == @span.key
+          = link_to span.label, month_and_year_review_report_path(for: span.key, **@compare_params), class: [chip, current ? "bg-slate-900 text-white" : chip_off],
+            aria: {current: (current ? "true" : nil)}
+  = render "shared/period_compare", period: @period, keep: [@span_choice], filtering: nil, compare: true, right: true,
+    explicit_previous: @span.compare.present?
+
+%dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+  - review.figures.each do |figure|
+    = render "dashboard/tile", label: figure.label, tile_icon: figure.icon, hint: figure.hint,
+      value: figure.current.nil? ? "—" : number_with_delimiter(figure.current),
+      change: (metric_change(figure.current, figure.previous, DashboardHelper::HIGHER_IS_BETTER) unless figure.current.nil?),
+      compared_with: @period.previous
+
+%div{class: split_grid_class}
+  = render layout: "shared/card", locals: {id: "review-top-pages", title: "Most read", icon: "eye"} do
+    - rows = review.top_pages
+    - before = review.previous_views(:page)
+    - if rows.empty?
+      %p{class: empty_class} No views in this span.
+    - else
+      %ol{class: list_class}
+        - rows.each do |path, views|
+          %li{class: row_class}
+            = blog_page_link(review.names[path] || path, page_view_path(path, **@period.query), live: path, truncate: true)
+            %span{class: "shrink-0 tabular-nums text-slate-600"}
+              = number_with_delimiter(views)
+              = row_change(views, before.fetch(path, 0), DashboardHelper::HIGHER_IS_BETTER) if before
+
+  = render layout: "shared/card", locals: {id: "review-new-entries", title: "Published", icon: "rss"} do
+    - rows = review.new_entries
+    - if rows.empty?
+      %p{class: empty_class} Nothing published in this span.
+    - else
+      %ul{class: list_class}
+        - rows.each do |entry, views|
+          %li{class: row_class}
+            %span{class: "min-w-0"}
+              = blog_page_link(entry.name, page_view_path(IndexCoverage.path_of(entry.url), **@period.query), live: entry.url, truncate: true)
+              %span{class: "text-xs text-slate-500"} #{entry.type.capitalize} · #{l(entry.published_at.to_date)}
+            %span{class: "shrink-0 tabular-nums text-slate-600", title: "Views in the span"}= number_with_delimiter(views)
+
+%div{class: split_grid_class}
+  - rising, falling = review.movers
+  - step, top = axis_scale([*rising, *falling].flat_map { |_, now, before, _| [now, before] }.max.to_f)
+  - ticks = (0..(top / step).round).map { |index| (index * step).round }
+  - keys = [["Before", ChartsHelper::SHARE_OTHER_COLOR, :circle], ["Now", ChartsHelper::SHARE_COLORS[0], :square]]
+  - {"review-rising" => ["Rising", "arrow-up", rising], "review-falling" => ["Falling", "arrow-down", falling]}.each do |id, (title, card_icon, rows)|
+    = render layout: "shared/card", locals: {id: id, title: title, icon: card_icon} do
+      - if !@period.compare?
+        %p{class: empty_class} Pages are set against the span before, so this shows once a comparison is picked.
+      - elsif rows.empty?
+        %p{class: empty_class} No page moved by #{BlogStats::MIN_VIEWS_FOR_GROWTH}+ views.
+      - else
+        - named = rows.map { |path, now, before, _| [review.names[path] || path, [before, now], path] }
+        %div{class: "px-4 py-3"}
+          = dumbbell_chart(named.map { |name, values, _| [name, values] }, keys: keys, top: top, ticks: ticks,
+            links: named.to_h { |name, _, path| [name, page_view_path(path, **@period.query)] },
+            x_title: "Views", y_title: "Page", label: "#{title} pages, views before and now")
+        %p{class: footnote_class} Before is #{@period.previous}.
+
+%div{class: "grid items-start gap-6 lg:grid-cols-2"}
+  = render layout: "shared/card", locals: {id: "review-countries", title: "Top countries", icon: "globe"} do
+    - rows = review.top_countries
+    - before = review.previous_views(:country)
+    - if rows.empty?
+      %p{class: empty_class} No views with a country in this span.
+    - else
+      %ol{class: list_class}
+        - rows.each do |code, views|
+          %li{class: row_class}
+            %span{class: "font-medium"}= country_label(code)
+            %span{class: "tabular-nums text-slate-600"}
+              = number_with_delimiter(views)
+              = row_change(views, before.fetch(code, 0), DashboardHelper::HIGHER_IS_BETTER) if before
+
+  = render layout: "shared/card", locals: {id: "review-queries", title: "Top searches", icon: "search"} do
+    - rows = review.top_queries
+    - before = review.previous_queries
+    - if rows.empty?
+      %p{class: empty_class} No Search Console queries in this span.
+    - else
+      %ol{class: list_class}
+        - rows.each do |row|
+          %li{class: row_class}
+            %span{class: "truncate font-medium"}= row[:query]
+            %span{class: "shrink-0 tabular-nums text-slate-600"}
+              #{number_with_delimiter(row.clicks)} clicks · #{number_with_delimiter(row.impressions)} seen
+              = row_change(row.clicks, before[row[:query]]&.clicks.to_i, DashboardHelper::HIGHER_IS_BETTER) if before && review.search.compared?

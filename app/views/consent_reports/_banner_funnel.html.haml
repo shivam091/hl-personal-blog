@@ -4,7 +4,9 @@
     %p{class: empty_note_class} The banner wasn't shown in #{period}.
   - else
     %div{class: "px-4 py-3"}
-      = funnel_chart(steps.(total), label: "Banners shown, answered and accepted", unit: "banner")
+      - before = local_assigns[:before]
+      = funnel_chart(steps.(total), label: "Banners shown, answered and accepted", unit: "banner", previous: (steps.(before) if before),
+        previous_name: local_assigns[:previous_name])
     %p{class: footnote_class}
       Lost before an answer: #{number_with_delimiter(total.no_answer)} left without one.
       Lost before accepting: #{number_with_delimiter(total.denied)} declined.
