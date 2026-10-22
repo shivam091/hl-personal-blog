@@ -1,0 +1,97 @@
+- content_for :title, "Newsletter report"
+- newsletter = @newsletter
+- window = NewsletterStats::SIGNUP_WINDOW
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Newsletter report
+    %p{class: subtitle_class}
+      Whether entries bring readers onto the list, and whether the mail announcing them arrives.
+  = link_to list_url(@period, @filtering, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "shared/period_bar", period: @period, keep: [], filtering: @filtering
+
+- if @stats.country
+  %p{class: "mb-4 text-sm text-slate-600"}
+    The list and sign-ups are from #{country_label(@stats.country)}; an email goes to the whole list, so sends cover
+    every country.
+
+- sends = newsletter.sends
+- sent = sends.sum(&:sent)
+- undelivered = sends.sum(&:undelivered)
+-# Sends aren't split by country, so they're only judged against an
+-# earlier period.
+- earlier_sends = newsletter.sends(@period.previous) unless @period.compare_countries?
+- sent_before = earlier_sends&.sum(&:sent)
+- undelivered_before = earlier_sends&.sum(&:undelivered)
+%dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+  = render "dashboard/tile", label: "List size", tile_icon: "users", value: number_with_delimiter(newsletter.list_size), change: nil,
+    hint: "Everyone subscribed now. Leaving deletes a subscriber, so the list's past size can't be rebuilt."
+  = render "dashboard/tile", label: "New subscribers", tile_icon: "plus", value: number_with_delimiter(newsletter.new_subscribers),
+    change: metric_change(newsletter.new_subscribers, newsletter.new_subscribers(@period.previous), DashboardHelper::HIGHER_IS_BETTER),
+    compared_with: @period.previous, hint: "Sign-ups in the period."
+  = render "dashboard/tile", label: "Emails sent", tile_icon: "send", value: number_with_delimiter(sent),
+    change: metric_change(sent, sent_before, DashboardHelper::HIGHER_IS_BETTER), compared_with: @period.previous,
+    hint: "New-entry emails that went out in the period. Every country."
+  = render "dashboard/tile", label: "Undelivered", tile_icon: "alert-triangle", value: number_with_delimiter(undelivered),
+    compared_with: @period.previous,
+    change: safe_join([metric_change(undelivered, undelivered_before, DashboardHelper::LOWER_IS_BETTER),
+      ("#{number_to_percentage(undelivered * 100.0 / (sent + undelivered), precision: 1)} of tries" if (sent + undelivered).positive?)].compact, " · "),
+    hint: "Emails sent in the period that still failed, waiting to be sent again from Feed entries. A resend that gets through takes them off."
+
+%div{class: "mb-6"}
+  = render layout: "shared/card", locals: {id: "signups-around-entries", title: "Sign-ups around each entry", icon: "users"} do
+    - rows = newsletter.signups_around_entries
+    -# An entry has no earlier twin, so a week after is set against the average one.
+    - average = newsletter.average_signups_after(@period.previous) if @period.compare? && rows.any?
+    %p{class: lead_note_class}
+      Sign-ups in the #{window} days before each entry came out against the #{window} days from its publishing day, for entries
+      published in the period. A later entry within the same week counts in both.
+      #{"Each completed week after is set against the average for entries published in #{@period.previous}." if average}
+    - if rows.empty?
+      %p{class: empty_note_class} Nothing published in #{@period}.
+    - else
+      = report_table([report_th("Entry"),
+        report_th("Published", :right),
+        report_th("Week before", :right),
+        report_th("Week after", :right),
+        report_th("Change", :right)]) do
+        - rows.each do |row|
+          %tr{class: table_row_class}
+            %td{class: title_cell_class}
+              = blog_page_link(row.entry.name, feed_entry_path(row.entry.url), live: row.entry.url)
+            %td{class: "px-3 py-1.5 text-right whitespace-nowrap text-slate-500"}= l(row.entry.published_at.to_date)
+            %td{class: cell_class}= number_with_delimiter(row.before)
+            %td{class: cell_class}
+              = number_with_delimiter(row.after)
+              - if average && row.complete
+                = row_change(row.after, average, DashboardHelper::HIGHER_IS_BETTER)
+              - unless row.complete
+                %span{class: "ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600", title: "The week after isn't over yet"} So far
+            %td{class: ["px-3 py-1.5 text-right tabular-nums", ("text-emerald-700" if row.change.positive?), ("text-red-700" if row.change.negative?)]}
+              = row.change.positive? ? "+#{row.change}" : row.change
+      = csv_footer(list_url(@period, @filtering, format: :csv, export: "entries"))
+
+%div{class: split_grid_class}
+  - per = newsletter.sends_by
+  = render layout: "shared/card", locals: {id: "sends", title: "Emails by #{per}", icon: "send"} do
+    %div{class: "px-4 py-3"}
+      - if sends.all? { |bucket| (bucket.sent + bucket.undelivered).zero? }
+        %p{class: "text-sm text-slate-500"} No new-entry emails sent in #{@period}.
+      - else
+        = stacked_chart(sends.map(&:start), [ChartsHelper::Series.new(name: "Delivered", values: sends.map(&:sent), color: ChartsHelper::SHARE_COLORS[2]),
+          ChartsHelper::Series.new(name: "Undelivered", values: sends.map(&:undelivered), color: ChartsHelper::SHARE_COLORS[1])],
+          y_title: "Emails", label: "New-entry emails per #{per}, delivered and still undelivered", per: per)
+    = csv_footer(list_url(@period, @filtering, format: :csv, export: "sends"))
+
+  = render layout: "shared/card", locals: {id: "failure-reasons", title: "Why emails failed", icon: "alert-circle"} do
+    %div{class: "px-4 py-3"}
+      = donut_chart(newsletter.failure_reasons, label: "Undelivered emails by kind of error", unit: "email", empty: "No undelivered emails waiting.")
+    %p{class: footnote_class}
+      By the error's kind; each address and its full error are on its entry in Feed entries.
+
+= render "newsletter_reports/audience", audience: @audience, period: @period
+= render "newsletter_reports/engagement", engagement: @engagement, period: @period
