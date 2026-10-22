@@ -33,6 +33,7 @@
           - sort_keep = [@filtering, @pagination]
           = sort_header @sorting, NewsletterSubscriber.human_attribute_name(:email), "email", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
           %th{scope: "col", class: "px-3 py-2.5 font-semibold"}= NewsletterSubscriber.human_attribute_name(:country)
+          %th{scope: "col", class: "px-3 py-2.5 font-semibold"} Signed up through
           = sort_header @sorting, NewsletterSubscriber.human_attribute_name(:subscribed_at), "subscribed_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
           %th{scope: "col", class: "px-3 py-2.5"}
             %span{class: "sr-only"} Actions
@@ -43,6 +44,7 @@
             %td{class: "px-3 py-2 whitespace-nowrap"}
               = link_to subscriber.email, newsletter_subscriber_path(subscriber), class: "font-medium text-slate-900 hover:underline"
             %td{class: "px-3 py-2 text-slate-600"}= subscriber.country.presence || "—"
+            %td{class: "px-3 py-2 whitespace-nowrap text-slate-600", title: subscriber.source_page}= subscriber.source_label
             %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}= time_or_dash(subscriber.subscribed_at)
             %td{class: "px-3 py-2 text-right"}
               = button_to newsletter_subscriber_path(subscriber), method: :delete, title: "Unsubscribe",
