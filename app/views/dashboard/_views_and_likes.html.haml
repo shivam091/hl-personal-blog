@@ -1,0 +1,29 @@
+-# Two charts on one time axis rather than one chart with two scales, so neither
+-# series' height is read against the other's axis.
+- days = (stats.period.from..stats.period.to).to_a
+- dates = granularity.dates(days)
+- per = granularity.by
+- before = stats.period.previous if stats.period.compare?
+- views = stats.total(:views)
+-# Likes before they were dated would read as a drop in the earlier period.
+- likes_before = before if before && stats.likes_counted_since && before.from >= stats.likes_counted_since
+- events = granularity.events(published)
+= render layout: "shared/card", locals: {id: "views-and-likes", title: "Views and likes", icon: "activity",
+  actions: chart_granularity_picker(granularity, "Views and likes", "views-and-likes-by")} do
+  %div{class: "space-y-4 px-4 py-3"}
+    %div
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} Views per #{per}
+      - views_now = ChartsHelper::Series.new(name: "This period", values: granularity.sums(days, stats.daily(:views)))
+      = line_chart(dates, [views_now,
+        (ChartsHelper::Series.new(name: before.to_s, values: granularity.sums_for(before, stats.daily(:views, before)).first(dates.size), dashed: true, against: views_now) if before)].compact,
+        y_title: "Views", label: "Views per #{per}#{", against #{before}" if before}", per: granularity.per, events: events, event_name: "Published")
+    %div
+      %p{class: "mb-1 flex justify-between text-xs font-medium text-slate-500"}
+        %span Likes per #{per}
+        %span
+          Like rate
+          %span{class: "text-slate-900 tabular-nums"}
+            = rate_or_dash(views >= BlogStats::MIN_VIEWS_FOR_RATE ? stats.total(:likes).to_f / views : nil)
+      = compared_time_chart(dates.zip(granularity.sums(days, stats.daily(:likes))), y_title: "Likes", label: "Likes per #{per}", per: granularity.per,
+        events: events, event_name: "Published", previous_name: likes_before.to_s,
+        previous: (granularity.sums_for(likes_before, stats.daily(:likes, likes_before)) if likes_before))

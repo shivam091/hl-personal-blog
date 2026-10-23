@@ -1,0 +1,46 @@
+- dates = (analytics.period.from..analytics.period.to).to_a
+- views = analytics.views
+- sessions = analytics.sessions
+= render layout: "shared/card", locals: {id: "analytics", title: "Google Analytics", icon: "bar-chart",
+  actions: (chart_granularity_picker(granularity, "Views", "analytics-by") if analytics.any?)} do
+  - if !analytics.any?
+    %p{class: empty_note_class}
+      No Analytics figures yet.
+      = link_to "Sync them", google_analytics_acquisition_path, class: "font-medium text-slate-700 underline hover:text-slate-900"
+  - else
+    - before = analytics.period.previous if analytics.previous?
+    -# Landing pages aren't split by country, so sessions can't be judged
+    -# against another one.
+    - before_sessions = analytics.sessions(before) if before && !before.country
+    %dl{class: "grid grid-cols-2 gap-3 px-4 pt-3"}
+      = render "dashboard/tile", label: "GA views", tile_icon: "eye", value: number_with_delimiter(views), spark: analytics.daily_views.map(&:to_i),
+        hint: "Views Google Analytics recorded; the blog's own count is in the chart below.",
+        change: metric_change(views, (analytics.views(before) if before), DashboardHelper::HIGHER_IS_BETTER),
+        compared_with: analytics.period.previous
+      = render "dashboard/tile", label: "Sessions", tile_icon: "activity", value: number_with_delimiter(sessions.sessions),
+        hint: "Sessions that began on the site, for every country: GA doesn't split landing pages by country here.",
+        change: metric_change(sessions.sessions, before_sessions&.sessions, DashboardHelper::HIGHER_IS_BETTER),
+        compared_with: analytics.period.previous
+      = render "dashboard/tile", label: "Engagement rate", tile_icon: "trending-up", value: metric_value(sessions.engagement_rate, :rate),
+        hint: "The share of sessions that lasted over 10 seconds, had a key event, or had 2 or more page views. Every country.",
+        change: metric_change(sessions.engagement_rate, before_sessions&.engagement_rate, DashboardHelper::HIGHER_IS_BETTER, format: :rate),
+        compared_with: analytics.period.previous
+      = render "dashboard/tile", label: "Time per session", tile_icon: "clock",
+        value: metric_value(analytics.engagement_seconds_per_session, :duration),
+        hint: "Engagement time added up over every page, divided by sessions. Every country.",
+        change: metric_change(analytics.engagement_seconds_per_session, (analytics.engagement_seconds_per_session(before) if before_sessions), DashboardHelper::HIGHER_IS_BETTER, format: :duration),
+        compared_with: analytics.period.previous
+    %div{class: "px-4 py-3"}
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} Views per #{granularity.by}
+      = line_chart(granularity.dates(dates), [ChartsHelper::Series.new(name: "Blog's own count", values: granularity.sums(dates, @stats.daily(:views))),
+        ChartsHelper::Series.new(name: "Google Analytics", values: granularity.sums(dates, analytics.daily_views), dashed: true)],
+        y_title: "Views", label: "The blog's own views against Google Analytics views, per #{granularity.by}", per: granularity.per)
+  %p{class: "flex justify-end gap-4 border-t border-slate-200 px-4 py-2 text-xs"}
+    = link_to google_analytics_acquisition_breakdown_path("referrers", **@period.query),
+      class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+      Referrers
+      = icon("chevron-right", size: 14)
+    = link_to data_quality_report_path(**@period.query),
+      class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+      Data quality
+      = icon("chevron-right", size: 14)
