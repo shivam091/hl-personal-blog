@@ -1,0 +1,7 @@
+= render layout: "shared/card", locals: {id: "campaigns", title: "Campaigns", icon: "target"} do
+  = render "shared/campaigns", campaigns: campaigns, limit: 10, empty: "No visit came from a link tagged with utm_source in this period."
+  - notes = []
+  - notes << "Every country, as the blog doesn't split campaigns by one." if country
+  %p{class: footnote_class}
+    A visit counts once, on the page it landed on.
+    = notes.join(" ")

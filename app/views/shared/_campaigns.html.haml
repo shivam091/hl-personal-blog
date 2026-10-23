@@ -1,0 +1,19 @@
+- rows = campaign_counts(campaigns)
+- if rows.empty?
+  %p{class: empty_note_class}= empty
+- else
+  - total = rows.sum(&:last)
+  - shown = local_assigns[:limit] ? rows.first(limit) : rows
+  = report_table([report_th("Source"), report_th("Medium"), report_th("Campaign"), report_th("Content"), report_th("Term"), report_th("ID"), report_th("Visits", :right), report_th("Share", :right)]) do
+    - shown.each do |campaign, count|
+      %tr{class: table_row_class}
+        %td{class: "#{name_cell_class} break-all"}= campaign.source
+        %td{class: "px-3 py-1.5 break-all text-slate-600"}= campaign.medium
+        %td{class: "px-3 py-1.5 break-all text-slate-600"}= campaign.name
+        %td{class: "px-3 py-1.5 break-all text-slate-600"}= campaign.content
+        %td{class: "px-3 py-1.5 break-all text-slate-600"}= campaign.term
+        %td{class: "px-3 py-1.5 break-all text-slate-600"}= campaign.id
+        %td{class: cell_class}= number_with_delimiter(count)
+        %td{class: "#{cell_class} text-slate-500"}= number_to_percentage(count * 100.0 / total, precision: 1)
+  - if shown.size < rows.size
+    %p{class: "px-4 pb-2 text-xs text-slate-500"} +#{rows.size - shown.size} more

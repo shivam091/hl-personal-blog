@@ -12,6 +12,9 @@ class PageView
   PERIOD_CSV_HEADERS = ["URL", "Views", "Countries", "Created", "Last updated"].freeze
   # Below this many hits, a page's bot share is mostly noise.
   MIN_HITS_FOR_BOT_SHARE = 20
+  NO_CAMPAIGN_PART = "(none)"
+
+  Campaign = Struct.new(:source, :medium, :name, :content, :term, :id)
 
   field :slug, type: String
   field :url, type: String
@@ -25,6 +28,7 @@ class PageView
   field :countriesByDay, type: Hash, default: {}, as: :countries_by_day
   field :devicesByDay, type: Hash, default: {}, as: :devices_by_day
   field :referrersByDay, type: Hash, default: {}, as: :referrers_by_day
+  field :campaignsByDay, type: Hash, default: {}, as: :campaigns_by_day
   # Absent on pages counted before the frontend recorded consent, so it defaults to empty rather than to all unset.
   field :consentByDay, type: Hash, default: {}, as: :consent_by_day
   # Whether gtag loaded is the one sign of a blocker, which GA can't report itself; a view in
@@ -69,6 +73,10 @@ class PageView
 
   def referrers_within(period)
     within(referrers_by_day, period)
+  end
+
+  def campaigns_within(period)
+    within(campaigns_by_day, period)
   end
 
   # Cut to the period like the page's other breakdowns, so its consent split lines up with them.
@@ -151,6 +159,23 @@ class PageView
           counts.each { |key, count| days[day][key] += count.to_i } if day.between?(from, to)
         end
       end
+    end
+
+    # Every page's together, as a campaign's link can land anywhere.
+    def campaigns_within(period)
+      only(:campaignsByDay).each_with_object(Hash.new(0)) do |page_view, totals|
+        page_view.campaigns_within(period).each { |key, count| totals[key] += count }
+      end
+    end
+
+    # The blog's safeKey swaps dots for underscores, which can't be swapped
+    # back here, since campaign names have underscores of their own; and it
+    # cuts a key at 256 characters, so a long one can lose its later parts.
+    # Keys counted before content, term and id were kept have only the
+    # first three parts.
+    def campaign(key)
+      parts = key.to_s.split("|", Campaign.members.size)
+      Campaign.new(*Campaign.members.each_index.map { |index| parts[index].presence || NO_CAMPAIGN_PART })
     end
 
     def to_csv(page_views = order(visitor_count: :desc), period: nil)

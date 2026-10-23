@@ -1,0 +1,33 @@
+-# Google's index isn't dated, so this is how things stand now whatever
+-# the period.
+= render layout: "shared/card", locals: {id: "index-coverage", title: "Index coverage · now", icon: "search-check"} do
+  - if !coverage.any?
+    %p{class: empty_note_class}
+      No crawled pages yet.
+      = link_to "Sync the sitemap", crawled_pages_path, class: "font-medium text-slate-700 underline hover:text-slate-900"
+  - else
+    %div{class: "space-y-3 px-4 py-3"}
+      %div
+        %p{class: "mb-1.5 flex items-baseline justify-between text-sm"}
+          %span
+            %span{class: "font-semibold tabular-nums"}= number_with_delimiter(coverage.indexed)
+            %span{class: "text-slate-500"} of #{number_with_delimiter(coverage.total)} pages indexed
+          %span{class: "font-medium tabular-nums"}= number_to_percentage(coverage.indexed * 100.0 / coverage.total, precision: 1)
+        = meter(coverage.indexed, coverage.total, label: "Pages indexed")
+      - if (verdicts = coverage.verdicts).any?
+        %ul{class: "flex flex-wrap gap-1.5", aria: {label: "URL inspection verdicts"}}
+          - verdicts.sort_by { |verdict, count| [-count, verdict] }.each do |verdict, count|
+            %li{class: "inline-flex items-center gap-1"}
+              = verdict_badge(verdict)
+              %span{class: "text-xs tabular-nums text-slate-600"}= number_with_delimiter(count)
+      - if (pages = coverage.not_indexed(limit: 5)).any?
+        %div
+          %h3{class: "mb-1 text-xs font-medium text-slate-500"} Not indexed, newest changes first
+          %ul{class: "space-y-1 text-sm"}
+            - pages.each do |page|
+              %li{class: "flex justify-between gap-3"}
+                = link_to IndexCoverage.path_of(page.url), crawled_pages_path(q: page.url), class: "truncate hover:underline", title: page.url
+                %span{class: "shrink-0 text-xs text-slate-500"}= page.last_modified_at ? l(page.last_modified_at.to_date) : "—"
+      %div
+        %h3{class: "mb-1 text-xs font-medium text-slate-500"} Since last change
+        = time_chart(coverage.ages.to_a, x_title: "Days since the page last changed", y_title: "Pages", label: "Pages by days since they last changed")
