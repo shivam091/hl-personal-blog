@@ -79,6 +79,25 @@ class ConsentStats
     end
   end
 
+  # The four figures the morning check flags, each with the side of its usual it is flagged on and how far
+  # past the usual that is, taken from Anomalies so the chart's line and the flag never drift apart.
+  FLAG_MEASURES = {
+    ga_ratio: {name: "GA's share of our views", below: true, limit: ->(usual) { usual * Anomalies::GA_RATIO_DROP }},
+    loaded_share: {name: "GA tag loaded", below: true, limit: ->(usual) { usual - Anomalies::LOADED_SHARE_DROP }},
+    banner_per_pending: {name: "Banners per view the banner was due on", below: true, limit: ->(usual) { usual * Anomalies::BANNER_RATE_DROP }},
+    no_answer_share: {name: "Banners left unanswered", below: false, limit: ->(usual) { usual + Anomalies::NO_ANSWER_JUMP }}
+  }.freeze
+
+  # Kept together, so a chart can't pair a day's figure with another day's usual or line; nil where any can't be said.
+  FlagMeasure = Struct.new(:field, :name, :dates, :values, :usual, :threshold, :below, keyword_init: true) do
+    def flagged
+      dates.each_index.filter_map do |index|
+        value, limit = values[index], threshold[index]
+        dates[index] if value && limit && (below ? value < limit : value > limit)
+      end
+    end
+  end
+
   attr_reader :period, :country
 
   class << self
@@ -159,6 +178,27 @@ class ConsentStats
       snapshot&.analytics.nil? ? ConsentSnapshot.compose(inputs(date, first_party.fetch(date, 0), analytics[date])) : snapshot
     end
     ConsentGap.new(snapshots)
+  end
+
+  # Every day of the period, as decomposition reads them, so a figure GA doesn't hang on still shows on a day it hasn't synced.
+  def daily_snapshots(first_party, analytics)
+    stored = ConsentSnapshot.stored(period)
+    period.from.upto(period.to).to_h do |date|
+      snapshot = stored[date.iso8601]
+      ga = analytics&.[](date)
+      snapshot = ConsentSnapshot.compose(inputs(date, first_party.fetch(date, 0), ga)) if snapshot.nil? || (snapshot.analytics.nil? && !ga.nil?)
+      [date, snapshot]
+    end
+  end
+
+  def flag_measures(snapshots)
+    dates = snapshots.keys
+    FLAG_MEASURES.map do |field, rule|
+      usuals = ConsentSnapshot.usuals(field, dates)
+      usual = dates.map { |date| usuals[date] }
+      FlagMeasure.new(field: field, name: rule[:name], dates: dates, values: dates.map { |date| snapshots[date].public_send(field) },
+        usual: usual, threshold: usual.map { |value| rule[:limit].(value) if value }, below: rule[:below])
+    end
   end
 
   # Built in one place, so a live day and a stored snapshot are worked out from the same figures.
