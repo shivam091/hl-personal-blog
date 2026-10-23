@@ -1,0 +1,32 @@
+-# The busiest pages, and the countries busiest on those pages, since the long
+-# tail is mostly empty cells. Ranked on the listed pages rather than the whole
+-# blog, so a country whose views were all elsewhere doesn't take a blank column.
+- cells = stats.by_page_and_country(:views)
+- pages = ranked_counts(cells.transform_values { |countries| countries.values.sum }).first(15).map(&:first)
+- country_totals = pages.each_with_object(Hash.new(0)) { |slug, totals| cells[slug].each { |code, value| totals[code] += value.to_i } }
+- countries = ranked_counts(country_totals).reject { |_, total| total.zero? }.first(10).map(&:first)
+-# Another country's cells aren't this cell's past, so only a period before is read against.
+- before = (stats.by_page_and_country(:views, stats.period.previous) if stats.period.compare? && !stats.period.compare_countries?)
+- max = pages.flat_map { |slug| countries.map { |code| cells[slug][code] } }.max.to_i
+= render layout: "shared/card", locals: {id: "page-country-heatmap", title: "Pages by country", icon: "globe"} do
+  - if pages.empty?
+    %p{class: "px-4 py-3 text-sm text-slate-500"} No views in this period.
+  - else
+    = chart_tooltip(label: "Views of the top pages from the top countries") do
+      %div{class: "relative overflow-x-auto"}
+        %table{class: "w-full border-collapse text-xs"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium"} Page
+              - countries.each do |code|
+                %th{scope: "col", class: "px-1 py-1.5 text-center font-medium whitespace-nowrap"}= country_label(code)
+          %tbody
+            - pages.each do |slug|
+              %tr
+                %th{scope: "row", class: "px-3 py-0.5 text-left font-medium", title: slug}
+                  = blog_page_link(slug, page_view_path(slug))
+                - countries.each do |code|
+                  - value = cells[slug][code]
+                  %td{class: "p-0.5"}
+                    = heat_cell(number_with_delimiter(value), value, max,
+                      tip: chart_tip("#{slug} · #{country_label(code)}", cell_readings("Views", value, (before[slug][code] if before), stats.period.previous.to_s)))

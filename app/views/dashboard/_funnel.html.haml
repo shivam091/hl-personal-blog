@@ -1,0 +1,15 @@
+- previous = local_assigns[:previous]
+- rows = stats.funnel(extras).sort_by { |row| [-row.views, row.country] }
+= render layout: "shared/card", locals: {id: "country-funnel", title: "Country funnel", icon: "map-pin"} do
+  - if rows.empty?
+    %p{class: "px-4 py-3 text-sm text-slate-500"} Nothing recorded in this period.
+  - else
+    = render "country_reports/table", rows: rows.first(10), extras: extras.keys, previous: previous
+  %p{class: "flex flex-wrap justify-between gap-2 border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+    %span
+      Rates show for countries with #{BlogStats::MIN_VIEWS_FOR_RATE}+ views. Visitors aren't kept long enough to
+      count per period, so rates are per view.
+    = link_to country_report_path(**@period.query),
+      class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+      All countries
+      = icon("chevron-right", size: 14)
