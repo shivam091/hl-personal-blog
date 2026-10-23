@@ -1,0 +1,31 @@
+-# Bots aren't dated by the frontend, so their share can only be all time.
+- dates = (stats.period.from..stats.period.to).to_a
+- counted_since = stats.visitors_counted_since
+- views = stats.daily(:views)
+- visitors = stats.daily_unique_visitors
+- counted = dates.map { |date| counted_since && date >= counted_since }
+- bots, humans = hits.values_at(:bots, :humans)
+-# Markers don't reach back before they were first kept, so an earlier period
+-# before then would read as nobody visiting.
+- before = stats.period.previous if stats.period.compare? && stats.visitors_complete?(stats.period.previous)
+= render layout: "shared/card", locals: {id: "audience", title: "Readers and repeat views", icon: "users"} do
+  %div{class: "border-b border-slate-200 px-4 py-3"}
+    %p{class: "mb-1 flex justify-between gap-3 text-xs font-medium text-slate-500"}
+      %span Bots, all time
+      %span{class: "text-slate-900 tabular-nums"}
+        = number_with_delimiter(bots)
+        of #{number_with_delimiter(bots + humans)} hits
+        - if (bots + humans).positive?
+          (#{number_to_percentage(bots * 100.0 / (bots + humans), precision: 1)})
+    = meter(bots, bots + humans, label: "Share of all hits from bots")
+  %div{class: "px-4 py-3"}
+    - if counted.none?
+      %p{class: "text-sm text-slate-500"} No visitors counted in this period yet.
+    - else
+      = stacked_chart(dates,
+        [ChartsHelper::Series.new(name: "Unique visitors", values: dates.each_index.map { |i| visitors[i] if counted[i] }, color: ChartsHelper::SHARE_COLORS[0]),
+         ChartsHelper::Series.new(name: "Repeat views", values: dates.each_index.map { |i| [views[i] - visitors[i], 0].max if counted[i] }, color: ChartsHelper::SHARE_COLORS[1])],
+        y_title: "Views", label: "Each day's views split into unique visitors and repeat views#{", against #{before}" if before}",
+        previous: (aligned(stats.daily(:views, before), dates.size) if before), previous_name: before&.to_s)
+  %p{class: footnote_class}
+    A visitor is counted once a day by a keyed hash of their IP; every further view that day is a repeat.

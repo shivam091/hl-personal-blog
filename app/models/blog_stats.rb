@@ -150,11 +150,11 @@ class BlogStats
 
   # Starts from everyone who subscribed before the period, so the line shows
   # the list's real size rather than growth from zero.
-  def subscriber_totals
-    before = NewsletterSubscriber.where(:subscribed_at.lt => period.from.in_time_zone.beginning_of_day).pluck(:country)
-      .count { |code| country.nil? || country_code(code) == country }
-    running = before
-    daily(:subscribers).map { |count| running += count }
+  def subscriber_totals(within = period)
+    shown = within.country || country
+    running = NewsletterSubscriber.where(:subscribed_at.lt => within.from.in_time_zone.beginning_of_day).pluck(:country)
+      .count { |code| shown.nil? || country_code(code) == shown }
+    daily(:subscribers, within).map { |count| running += count }
   end
 
   # Weeks for a short period and months for a long one, so there are enough

@@ -47,6 +47,11 @@
       = render "shared/breakdown", counts: referrer_hosts(page_view.referrers_within(@period)), heading: "Referrer",
         count_heading: "Views", empty: "No referrer data in this period."
 
+-# Only the first page of a visit carries its UTM tags, so this counts the
+-# visits a campaign brought in, not every page they went on to read.
+= render layout: "shared/card", locals: {id: "period-campaigns", title: "Campaigns in the period", icon: "target", class: "mt-6"} do
+  = render "shared/campaigns", campaigns: page_view.campaigns_within(@period), empty: "No visit landed here from a tagged link in this period."
+
 %h2{class: "mt-8 mb-3 text-sm font-semibold text-slate-700"} All time
 
 %div{class: "grid items-start gap-6 lg:grid-cols-2"}
