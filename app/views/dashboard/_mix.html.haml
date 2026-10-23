@@ -1,0 +1,16 @@
+-# Only once the frontend dates devices and referrers, since all-time totals
+-# have no week to fall in.
+- since = stats.breakdowns_tracked_since
+- if since
+  - notes = ["The period's five busiest keep the same colour in every bar."]
+  - notes << "Dated from #{l(since)}; earlier views fall in no #{stats.period.days <= 120 ? "week" : "month"}." if stats.period.from < since
+  - notes << "Every country, as the blog doesn't split these by one." if stats.country
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    - devices = stats.breakdown_shares(:devices)
+    = render "shared/shares", id: "device-shares", title: "Device share by #{devices[:unit]}", icon: "cpu", shares: devices,
+      split: "device", y_title: "Share of views", key_label: ->(key) { key.to_s.capitalize }, note: notes.join(" "),
+      empty: "No device data in this period."
+    - referrers = stats.breakdown_shares(:referrers)
+    = render "shared/shares", id: "referrer-shares", title: "Referrer share by #{referrers[:unit]}", icon: "log-in", shares: referrers,
+      split: "referrer", y_title: "Share of views", key_label: ->(key) { referrer_label(key) }, note: notes.join(" "),
+      empty: "No referrer data in this period."

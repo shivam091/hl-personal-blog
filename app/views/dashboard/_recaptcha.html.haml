@@ -1,0 +1,34 @@
+-# Site-wide scores show how much of the traffic looks automated; the
+-# contact form's own scores show how close accepted messages came to being
+-# turned away, and from where.
+= render layout: "shared/card", locals: {id: "recaptcha", title: "reCAPTCHA", icon: "shield"} do
+  %div{class: "space-y-4 px-4 py-3"}
+    - if recaptcha.any?
+      %div
+        %p{class: "mb-1 flex justify-between text-xs font-medium text-slate-500"}
+          %span Site requests by score
+          %span
+            Below #{Google::Recaptcha::Stat::LOW_SCORE}:
+            %span{class: "text-slate-900 tabular-nums"}= metric_value(recaptcha.low_score_share, :percent)
+        = time_chart(recaptcha.histogram.to_a, x_title: "reCAPTCHA score", y_title: "Requests", label: "reCAPTCHA requests by score, 0 likely a bot, 1 likely a person", unit: " requests")
+    - else
+      %p{class: "text-sm text-slate-500"}
+        No reCAPTCHA scores in this period.
+        = link_to "Sync them", google_recaptcha_stats_path, class: "font-medium text-slate-700 underline hover:text-slate-900"
+    %div
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} Contact messages by score
+      = time_chart(recaptcha.message_histogram.to_a, x_title: "reCAPTCHA score", y_title: "Messages", label: "Contact messages by reCAPTCHA score", unit: " messages")
+    - if (countries = recaptcha.messages_by_country.first(5)).any?
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-sm"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "py-1 text-left font-medium"} Messages from
+              %th{scope: "col", class: "py-1 text-right font-medium"} Count
+              %th{scope: "col", class: "py-1 text-right font-medium"} Avg score
+          %tbody
+            - countries.each do |code, count, average|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "py-1"}= country_label(code)
+                %td{class: "py-1 text-right tabular-nums"}= number_with_delimiter(count)
+                %td{class: "py-1 text-right"}= average ? recaptcha_score_badge(average) : "—"

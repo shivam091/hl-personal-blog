@@ -1,0 +1,29 @@
+-# Growth is each country against itself, so another country is no
+-# baseline for it.
+- rows = stats.period.compare_countries? ? [] : stats.fastest_growing_countries
+= render layout: "shared/card", locals: {id: "growing-countries", title: "Fastest-growing countries", icon: "trending-up"} do
+  - if stats.period.compare_countries?
+    %p{class: "px-4 py-3 text-sm text-slate-500"}
+      Each country is compared with its own period before, so this shows once comparing by period.
+  - elsif rows.empty?
+    %p{class: "px-4 py-3 text-sm text-slate-500"}
+      No country reached #{BlogStats::MIN_VIEWS_FOR_GROWTH} views in this period.
+  - else
+    %div{class: "overflow-x-auto"}
+      %table{class: "w-full border-collapse text-sm"}
+        %thead{class: "text-slate-500"}
+          %tr
+            %th{scope: "col", class: "px-4 py-1.5 text-left font-medium"} Country
+            %th{scope: "col", class: "px-2 py-1.5 text-right font-medium"} Views
+            %th{scope: "col", class: "px-2 py-1.5 text-right font-medium"} Before
+            %th{scope: "col", class: "px-4 py-1.5 text-right font-medium"} Change
+        %tbody
+          - rows.each do |code, count, before, growth|
+            %tr{class: "border-t border-slate-200"}
+              %td{class: "px-4 py-1.5 font-medium"}
+                = link_to country_label(code), list_url(@period, @country_metric, country: code), class: "hover:underline"
+              %td{class: "px-2 py-1.5 text-right tabular-nums"}= number_with_delimiter(count)
+              %td{class: "px-2 py-1.5 text-right tabular-nums text-slate-500"}= number_with_delimiter(before)
+              %td{class: "px-4 py-1.5 text-right"}= growth_label(growth)
+  %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500", hidden: stats.period.compare_countries?}
+    Compared with #{stats.period.previous}; only countries with #{BlogStats::MIN_VIEWS_FOR_GROWTH}+ views in this period.
