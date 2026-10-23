@@ -72,6 +72,20 @@ module DashboardHelper
     referrers.each_with_object(Hash.new(0)) { |(key, count), hosts| hosts[referrer_host(key)] += count }
   end
 
+  # Only when the figures reach back before the fix, since a share of
+  # Internal from then says nothing about where readers came from.
+  def referrers_fixed_note(from)
+    fixed = PageView::REFERRERS_FIXED_ON
+    "Before #{l(fixed)} every view's referrer was counted as Internal, so only views from then say where readers came from." if from < fixed
+  end
+
+  # Keys cut short or written oddly can decode to the same parts, so their
+  # counts are added rather than one hiding the other.
+  def campaign_counts(campaigns)
+    campaigns.each_with_object(Hash.new(0)) { |(key, count), totals| totals[PageView.campaign(key)] += count.to_i }
+      .sort_by { |campaign, count| [-count, campaign.to_a] }
+  end
+
   # Under the week each day falls in, Monday first as weekly counts are.
   def weekly_events(events)
     events.each_with_object({}) { |(date, names), weeks| (weeks[date.beginning_of_week] ||= []).concat(names) }

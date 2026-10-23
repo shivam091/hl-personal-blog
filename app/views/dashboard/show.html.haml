@@ -1,3 +1,67 @@
 - content_for :title, "Dashboard"
 
-%h1{class: "text-2xl font-semibold tracking-tight"} Dashboard
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Dashboard
+    %p{class: "mt-1 text-sm text-slate-500"}
+      = @period.to_s
+      - if @stats.country
+        ·
+        = country_label(@stats.country)
+
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@country_metric, @granularity]
+
+= render "dashboard/kpis", stats: @stats
+
+= render "dashboard/anomalies", anomalies: @anomalies
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
+  %div{class: "lg:col-span-2"}
+    = render "dashboard/views_and_likes", stats: @stats, published: @published, granularity: @granularity
+  = render "dashboard/countries", stats: @stats, country_metric: @country_metric
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+  = render "dashboard/search", search: @search, published: @published, ai: @ai, country: @stats.country, granularity: @granularity
+  = render "dashboard/analytics", analytics: @analytics, granularity: @granularity
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+  = render "dashboard/top_pages", stats: @stats
+  %div{class: "grid gap-6"}
+    = render "dashboard/page_changes", stats: @stats
+    = render "dashboard/growing_countries", stats: @stats
+
+%div{class: "mb-6"}
+  = render "dashboard/funnel", stats: @stats, extras: @funnel_extras, previous: @previous
+
+%div{class: "mb-6"}
+  = render "shared/country_shares", stats: @stats
+
+= render "dashboard/mix", stats: @stats
+
+%div{class: "mb-6"}
+  = render "dashboard/campaigns", period: @period, campaigns: @campaigns, country: @stats.country
+
+%div{class: "mb-6"}
+  = render "dashboard/heatmap", stats: @stats
+
+%div{class: "mb-6"}
+  = render "dashboard/audience", stats: @stats, hits: @lifetime_hits
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+  = render "dashboard/subscribers", stats: @stats, published: @published
+  = render layout: "shared/card", locals: {id: "messages-by-week", title: "Messages by week", icon: "message-square"} do
+    %div{class: "px-4 py-3"}
+      - before = @period.previous if @period.compare?
+      = compared_bars(@stats.weekly(:messages).keys, @stats.weekly(:messages).values, previous_name: before.to_s, label: "Contact messages by week",
+        y_title: "Messages", previous: (@stats.weekly(:messages, before).values if before), per: :week)
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
+  = render "dashboard/content", content: @content
+  = render "dashboard/coverage", coverage: @coverage
+  = render "dashboard/recaptcha", recaptcha: @recaptcha
+
+%div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
+  = render "dashboard/lifetime", page_views: @lifetime_views, hits: @lifetime_hits, stats: @stats
+  = render "dashboard/inbox", messages: @latest_messages, subscribers: @latest_subscribers
+
+= render "dashboard/freshness", syncs: @syncs, ai: @ai
