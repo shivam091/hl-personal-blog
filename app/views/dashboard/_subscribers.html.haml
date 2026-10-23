@@ -1,0 +1,13 @@
+-# The list's size and its weekly sign-ups as two charts, since one is a
+-# running total and the other a count, and they don't share a scale.
+- dates = (stats.period.from..stats.period.to).to_a
+= render layout: "shared/card", locals: {id: "subscribers-growth", title: "Subscribers", icon: "users"} do
+  %div{class: "space-y-4 px-4 py-3"}
+    %div
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} List size
+      = time_chart(dates.zip(stats.subscriber_totals), y_title: "Subscribers", label: "Newsletter list size per day", style: :line,
+        events: published, event_name: "Published")
+    %div
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} New per week
+      = time_chart(stats.weekly(:subscribers).to_a, y_title: "New subscribers", label: "New subscribers by week", per: :week,
+        events: weekly_events(published), event_name: "Published")

@@ -1,0 +1,28 @@
+-# Each part in its own column, so one source's campaigns, or one medium
+-# across sources, can be read down a column.
+- rows = campaign_counts(campaigns)
+- if rows.empty?
+  %p{class: "px-4 py-3 text-sm text-slate-500"}= empty
+- else
+  - total = rows.sum(&:last)
+  - shown = local_assigns[:limit] ? rows.first(limit) : rows
+  - th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
+  %div{class: "overflow-x-auto"}
+    %table{class: "w-full border-collapse text-sm"}
+      %thead{class: "text-slate-500"}
+        %tr
+          %th{scope: "col", class: "#{th_class} text-left"} Source
+          %th{scope: "col", class: "#{th_class} text-left"} Medium
+          %th{scope: "col", class: "#{th_class} text-left"} Campaign
+          %th{scope: "col", class: "#{th_class} text-right"} Visits
+          %th{scope: "col", class: "#{th_class} text-right"} Share
+      %tbody
+        - shown.each do |campaign, count|
+          %tr{class: "border-t border-slate-200"}
+            %td{class: "px-3 py-1.5 font-medium break-all"}= campaign.source
+            %td{class: "px-3 py-1.5 break-all text-slate-600"}= campaign.medium
+            %td{class: "px-3 py-1.5 break-all text-slate-600"}= campaign.name
+            %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(count)
+            %td{class: "px-3 py-1.5 text-right tabular-nums text-slate-500"}= number_to_percentage(count * 100.0 / total, precision: 1)
+  - if shown.size < rows.size
+    %p{class: "px-4 pb-2 text-xs text-slate-500"} +#{rows.size - shown.size} more

@@ -1,0 +1,24 @@
+- totals = search.totals
+- previous = search.previous_totals
+= render layout: "shared/card", locals: {id: "search", title: "Google search", icon: "search"} do
+  - if !search.any?
+    %p{class: "px-4 py-3 text-sm text-slate-500"}
+      No Search Console figures yet.
+      = link_to "Sync them", google_search_console_performance_path, class: "font-medium text-slate-700 underline hover:text-slate-900"
+  - else
+    %dl{class: "grid grid-cols-2 gap-3 px-4 pt-3"}
+      - google_search_metrics.each do |metric|
+        = render "dashboard/tile", label: metric.label, tile_icon: metric.icon, hint: metric.hint,
+          value: metric_value(totals.value(metric.field), metric.format),
+          spark: (search.daily(metric.field).map(&:to_i) if %i[clicks impressions].include?(metric.field)),
+          change: metric_change(totals.value(metric.field), previous&.value(metric.field), metric), compared_with: search.period.previous
+    = render "dashboard/ai_impressions", ai: ai, country: country
+    %div{class: "px-4 py-3"}
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} Clicks per day
+      = time_chart((search.period.from..search.period.to).to_a.zip(search.daily(:clicks)), y_title: "Clicks", label: "Search clicks per day",
+        events: published, event_name: "Published", unsettled: search_unsettled_from)
+  %p{class: "flex justify-end border-t border-slate-200 px-4 py-2 text-xs"}
+    = link_to search_insight_report_path(**@period.query, **@filtering.query),
+      class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+      Search insights
+      = icon("chevron-right", size: 14)
