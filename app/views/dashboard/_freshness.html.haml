@@ -18,3 +18,16 @@
               - else
                 %span{class: "text-slate-400"} Never
             %td{class: "px-4 py-1.5 text-right"}= latest ? sync_status_badge(latest) : tag.span("—", class: "text-slate-400")
+        -# Uploaded by hand rather than synced, so it's the one source that
+        -# goes stale without anything failing.
+        - if local_assigns[:ai]&.any?
+          %tr{class: table_row_class, id: "generative-ai-freshness"}
+            %td{class: "px-4 py-1.5"}
+              = link_to "Generative AI upload", google_search_console_generative_ai_path, class: "font-medium hover:underline"
+            %td{class: "px-2 py-1.5 whitespace-nowrap text-slate-600"}
+              %time{datetime: ai.uploaded_at.iso8601, title: l(ai.uploaded_at)}
+                #{time_ago_in_words(ai.uploaded_at)} ago
+            %td{class: "px-4 py-1.5 text-right"}
+              %span{class: ["rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap", ai.stale? ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"],
+                title: ("Export the report again to bring it up to date" if ai.stale?)}
+                Up to #{l(ai.last_day)}

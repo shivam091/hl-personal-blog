@@ -124,6 +124,25 @@ RSpec.describe PageView, type: :model do
     expect(PageView.bot_shares).to eq([["/b", 15, 5, 0.75], ["/a", 10, 30, 0.25]])
   end
 
+  it "adds up each campaign's visits in a period across every page" do
+    PageView.collection.insert_many([
+      {"_id" => "/a", "slug" => "/a", "campaignsByDay" => {"2026-10-01" => {"newsletter|email|new_entry" => 3}, "2026-09-01" => {"newsletter|email|new_entry" => 9}}},
+      {"_id" => "/b", "slug" => "/b", "campaignsByDay" => {"2026-10-02" => {"newsletter|email|new_entry" => 2, "news_ycombinator_com|(none)|(none)" => 1}}}
+    ])
+
+    campaigns = described_class.campaigns_within(Period.new({from: "2026-10-01", to: "2026-10-31"}))
+
+    expect(campaigns).to eq("newsletter|email|new_entry" => 5, "news_ycombinator_com|(none)|(none)" => 1)
+  end
+
+  # safeKey can't be undone, so underscores stay as written, and a key cut
+  # at 64 characters loses its later parts.
+  it "splits a campaign key back into its source, medium and name" do
+    expect(described_class.campaign("newsletter|email|new_entry|title|tutorial|tutorials-grid").to_a)
+      .to eq(%w[newsletter email new_entry title tutorial tutorials-grid])
+    expect(described_class.campaign("#{"x" * 60}|social").to_a).to eq(["x" * 60, "social", "(none)", "(none)", "(none)", "(none)"])
+  end
+
   # The frontend owns this collection's indexes; db:mongoid:create_indexes
   # runs on every deploy and would add ours to its live collection.
   it "declares no indexes" do

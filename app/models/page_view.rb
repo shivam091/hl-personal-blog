@@ -12,6 +12,9 @@ class PageView
   PERIOD_CSV_HEADERS = ["URL", "Views", "Countries", "Created", "Last updated"].freeze
   # Below this many hits, a page's bot share is mostly noise.
   MIN_HITS_FOR_BOT_SHARE = 20
+  NO_CAMPAIGN_PART = "(none)"
+
+  Campaign = Struct.new(:source, :medium, :name, :content, :term, :id)
 
   field :slug, type: String
   field :url, type: String
@@ -25,6 +28,7 @@ class PageView
   field :countriesByDay, type: Hash, default: {}, as: :countries_by_day
   field :devicesByDay, type: Hash, default: {}, as: :devices_by_day
   field :referrersByDay, type: Hash, default: {}, as: :referrers_by_day
+  field :campaignsByDay, type: Hash, default: {}, as: :campaigns_by_day
   field :uniqueVisitorCount, type: Integer, default: 0, as: :unique_visitor_count
   field :visitorCount, type: Integer, default: 0, as: :visitor_count
   field :botCount, type: Integer, default: 0, as: :bot_count
@@ -63,6 +67,10 @@ class PageView
     within(referrers_by_day, period)
   end
 
+  def campaigns_within(period)
+    within(campaigns_by_day, period)
+  end
+
   # The deploy day can appear in both the legacy totals and the dated
   # breakdown, holding the counts from either side of the switch, so the two
   # are added rather than one replacing the other.
@@ -88,6 +96,23 @@ class PageView
         hits = page_view.bot_count + page_view.visitor_count
         [page_view.slug, page_view.bot_count, page_view.visitor_count, page_view.bot_count.fdiv(hits)] if hits >= MIN_HITS_FOR_BOT_SHARE
       end.sort_by { |slug, bots, _, share| [-share, -bots, slug] }.first(limit)
+    end
+
+    # Every page's together, as a campaign's link can land anywhere.
+    def campaigns_within(period)
+      only(:campaignsByDay).each_with_object(Hash.new(0)) do |page_view, totals|
+        page_view.campaigns_within(period).each { |key, count| totals[key] += count }
+      end
+    end
+
+    # The blog's safeKey swaps dots for underscores, which can't be swapped
+    # back here, since campaign names have underscores of their own; and it
+    # cuts a key at 256 characters, so a long one can lose its later parts.
+    # Keys counted before content, term and id were kept have only the
+    # first three parts.
+    def campaign(key)
+      parts = key.to_s.split("|", Campaign.members.size)
+      Campaign.new(*Campaign.members.each_index.map { |index| parts[index].presence || NO_CAMPAIGN_PART })
     end
 
     def to_csv(page_views = order(visitor_count: :desc), period: nil)
