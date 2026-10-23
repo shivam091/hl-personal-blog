@@ -1,0 +1,12 @@
+-# Uploaded by hand, so it's only there once something is.
+- metric = Google::SearchConsole::GenerativeAiSummary::METRIC
+- if ai.any?
+  - if country
+    %p{class: "mx-4 mt-3 flex items-start gap-2 text-xs text-slate-500"}
+      = icon("info", size: 14, class: "mt-0.5 shrink-0 text-slate-400")
+      AI impressions aren't split by country, so they're left out while one is picked.
+  - else
+    %dl{class: "grid gap-3 px-4 pt-3"}
+      = render "dashboard/tile", label: "#{metric.label} · #{ai.search_type}", tile_icon: metric.icon, hint: metric.hint,
+        value: (ai.total ? metric_value(ai.total, metric.format) : "—"), spark: ai.daily.map(&:to_i),
+        change: metric_change(ai.total, ai.previous_total, metric), compared_with: ai.period.previous

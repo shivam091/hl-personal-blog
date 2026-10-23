@@ -1,0 +1,23 @@
+- comparing = stats.period.compare?
+- rising, falling = comparing ? stats.page_changes : [[], []]
+= render layout: "shared/card", locals: {id: "page-changes", title: "Rising and falling pages", icon: "trending-up"} do
+  - if comparing
+    %div{class: "grid divide-slate-200 sm:grid-cols-2 sm:divide-x"}
+      - [["Rising", rising], ["Falling", falling]].each do |heading, rows|
+        %div{class: "px-4 py-3"}
+          %h3{class: "mb-2 text-xs font-medium text-slate-500"}= heading
+          - if rows.empty?
+            %p{class: "text-sm text-slate-500"} No page changed much.
+          - else
+            %ul{class: "space-y-1.5 text-sm"}
+              - rows.each do |slug, now, before, change|
+                %li{class: "flex items-baseline justify-between gap-3"}
+                  = blog_page_link(slug, page_view_path(slug), truncate: true)
+                  %span{class: "shrink-0 tabular-nums", title: "#{number_with_delimiter(before)} → #{number_with_delimiter(now)} views"}
+                    %span{class: change.positive? ? "text-emerald-700" : "text-red-700"} #{change.positive? ? "+" : "−"}#{number_with_delimiter(change.abs)}
+                    %span{class: "text-xs text-slate-500"}= before.zero? ? "new" : number_to_percentage(change.abs * 100.0 / before, precision: 0)
+    %p{class: footnote_class}
+      Views compared with #{stats.period.previous}; pages with #{BlogStats::MIN_VIEWS_FOR_GROWTH}+ views in either period.
+  - else
+    %p{class: empty_note_class}
+      Pages are ranked by how their views changed, so this shows once a comparison is picked.

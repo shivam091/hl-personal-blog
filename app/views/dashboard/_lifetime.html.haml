@@ -1,0 +1,31 @@
+-# By day once the frontend dates them, so they follow the period; until
+-# then, and for views from before, only the pages' all-time totals exist,
+-# so they fall back to those and say so. The frontend doesn't split them by
+-# country, so a country filter doesn't narrow them.
+- since = stats.breakdowns_tracked_since
+- dated = since.present?
+- devices = dated ? stats.devices : lifetime_totals(page_views, :devices)
+- referrers = dated ? stats.referrers : lifetime_totals(page_views, :referrers)
+- scope = dated ? "" : " · all time"
+- notes = []
+- notes << "Every country." if dated && stats.country
+- bots, humans = hits.values_at(:bots, :humans)
+-# Devices aren't split by country and a period before the dates began would read as none.
+- before = stats.period.previous if dated && stats.period.compare? && !stats.period.compare_countries? && since <= stats.period.previous.from
+= render layout: "shared/card", locals: {id: "devices", title: "Devices#{scope}", icon: "cpu"} do
+  %div{class: "px-4 py-3"}
+    = donut_chart(devices, label: "Views by device#{scope}", unit: "view", empty: "No device data #{dated ? "in this period" : "yet"}.")
+    = donut_comparison(devices, stats.devices(before), unit: "view", previous_name: before.to_s) if before
+  %p{class: footnote_class}
+    = safe_join(notes, " ") if notes.any?
+    Bots, all time: #{number_with_delimiter(bots)} of #{number_with_delimiter(bots + humans)} hits
+    - if (bots + humans).positive?
+      (#{number_to_percentage(bots * 100.0 / (bots + humans), precision: 1)}), kept out of every view count.
+= render layout: "shared/card", locals: {id: "referrers", title: "Referrers#{scope}", icon: "log-in"} do
+  %div{class: "px-4 py-3"}
+    -# Only once dated, since all-time totals have no earlier period.
+    - previous = (referrer_groups(stats.referrers(stats.period.previous)) if dated && stats.period.compare?)
+    = render "shared/breakdown", counts: referrer_groups(referrers), previous: previous,
+      heading: "Source", count_heading: "Views", empty: "No referrer data #{dated ? "in this period" : "yet"}."
+  - if notes.any?
+    %p{class: footnote_class}= safe_join(notes, " ")

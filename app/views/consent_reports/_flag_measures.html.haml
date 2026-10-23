@@ -1,0 +1,26 @@
+-# Shares read as percentages; banners per view is a plain rate, so it keeps its decimals.
+- percents = %i[ga_ratio loaded_share no_answer_share]
+- notes = {ga_ratio: "Flagged below #{(Anomalies::GA_RATIO_DROP * 100).round}% of the usual. Days under #{ConsentSnapshot::MIN_VIEWS} of our views or without GA's figures are left out.",
+  loaded_share: "Flagged #{(Anomalies::LOADED_SHARE_DROP * 100).round} points below the usual. Days under #{ConsentSnapshot::MIN_VIEWS} views with the tag checked are left out.",
+  banner_per_pending: "Flagged below #{(Anomalies::BANNER_RATE_DROP * 100).round}% of the usual. Days with no views from readers the banner was due to ask are left out.",
+  no_answer_share: "Flagged #{(Anomalies::NO_ANSWER_JUMP * 100).round} points above the usual. Only days with #{Anomalies::MIN_BANNERS} banners or more."}
+= render layout: "shared/card", locals: {id: "flag-measures", title: "What the morning check watches", icon: "alert-triangle", class: "mb-6"} do
+  %p{class: lead_note_class}
+    Each day's figure against its usual, the middle of the #{Anomalies::CONSENT_BASELINE_DAYS} days before it, and the line past which the morning check flags it.
+    A usual needs #{Anomalies::MIN_CONSENT_BASELINE} such days, so the first days of a record have none. Always by day, as the check judges single days.
+  %div{class: "grid gap-x-6 gap-y-8 px-4 py-3 lg:grid-cols-2"}
+    - measures.each do |measure|
+      - percent = percents.include?(measure.field)
+      - scale = ->(values) { values.map { |value| percent ? (value * 100).round(1) : value&.round(2) unless value.nil? } }
+      %div{class: "min-w-0"}
+        %p{class: "mb-1 text-xs font-medium text-slate-500"}= measure.name
+        - if measure.values.compact.empty?
+          %p{class: empty_note_class} No day in #{period} had enough to go on.
+        - else
+          = line_chart(measure.dates, [ChartsHelper::Series.new(name: "On the day", values: scale.(measure.values)),
+            ChartsHelper::Series.new(name: "Usual", values: scale.(measure.usual), dotted: true, color: ChartsHelper::LINE_COLORS[1]),
+            ChartsHelper::Series.new(name: "Flagged past", values: scale.(measure.threshold), dashed: true, color: "#b91c1c")],
+            y_title: (percent ? "%" : "Per view"), unit: (percent ? "%" : ""), precision: (percent ? 1 : 2),
+            events: measure.flagged.index_with { ["Past the line"] }, event_name: "Would be flagged",
+            label: "#{measure.name} by day, against its usual and the line it is flagged past")
+        %p{class: "mt-1 text-xs text-slate-500"}= notes.fetch(measure.field)

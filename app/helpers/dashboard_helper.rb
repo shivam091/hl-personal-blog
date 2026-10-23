@@ -69,6 +69,13 @@ module DashboardHelper
     referrers.each_with_object(Hash.new(0)) { |(key, count), hosts| hosts[referrer_host(key)] += count }
   end
 
+  # Keys cut short or written oddly can decode to the same parts, so their
+  # counts are added rather than one hiding the other.
+  def campaign_counts(campaigns)
+    campaigns.each_with_object(Hash.new(0)) { |(key, count), totals| totals[PageView.campaign(key)] += count.to_i }
+      .sort_by { |campaign, count| [-count, campaign.to_a] }
+  end
+
   def weekly_events(events)
     events.each_with_object({}) { |(date, names), weeks| (weeks[date.beginning_of_week] ||= []).concat(names) }
   end

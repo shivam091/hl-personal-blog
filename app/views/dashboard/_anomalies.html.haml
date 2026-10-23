@@ -1,0 +1,15 @@
+- if anomalies.any?
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "anomalies", title: "Needs attention", icon: "alert-circle"} do
+      %ul{class: "divide-y divide-slate-100"}
+        - anomalies.flags.each do |flag|
+          - route, params = flag.path
+          %li
+            = link_to public_send(route, **params), class: "flex items-start gap-3 px-4 py-2.5 text-sm hover:bg-slate-50" do
+              = icon(flag.icon, size: 16, class: ["mt-0.5", flag.level == :warning ? "text-amber-600" : "text-sky-600"])
+              %span{class: "min-w-0 flex-1"}
+                %span{class: "font-medium text-slate-900"}= flag.title
+                %span{class: "block text-slate-600"}= flag.detail
+              = icon("chevron-right", size: 14, class: "mt-1 text-slate-400")
+      %p{class: footnote_class}
+        Checked against the last few weeks, whatever period is picked above.
