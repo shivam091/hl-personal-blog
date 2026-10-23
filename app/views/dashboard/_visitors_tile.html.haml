@@ -1,0 +1,3 @@
+= render "dashboard/tile", label: "Unique visitors", tile_icon: "users", value: number_with_delimiter(stats.unique_visitors),
+  spark: stats.daily_unique_visitors, change: visitors_change(stats), compared_with: stats.period.previous,
+  hint: "Distinct readers over the whole period, by a keyed hash of their IP: someone who came back on several days counts once. Readers sharing an IP count as one."

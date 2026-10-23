@@ -56,6 +56,16 @@
         count_heading: "Views", empty: "No referrer data in this period."
     - if note
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}= note
+    - if (fixed_note = referrers_fixed_note(@period.from))
+      %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-amber-700"}= fixed_note
+
+-# Only the first page of a visit carries its UTM tags, so this counts the
+-# visits a campaign brought in, not every page they went on to read.
+= render layout: "shared/card", locals: {id: "period-campaigns", title: "Campaigns in the period", icon: "target", class: "mt-6"} do
+  = render "shared/campaigns", campaigns: page_view.campaigns_within(@period), empty: "No visit landed here from a tagged link in this period."
+  - since = PageView.campaigns_counted_since
+  - if since && @period.from < since
+    %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-amber-700"} Campaigns are counted from #{l(since)}.
 
 %h2{class: "mt-8 mb-3 text-sm font-semibold text-slate-700"} All time
 
@@ -82,3 +92,5 @@
     = render layout: "shared/card", locals: {id: "referrers", title: "Referrers", icon: "log-in"} do
       %div{class: "px-4 py-3"}
         = render "shared/breakdown", counts: referrer_hosts(page_view.referrers), heading: "Referrer", count_heading: "Views", empty: "No referrer data for this page."
+      - if (fixed_note = referrers_fixed_note((page_view.created_at || Time.at(0)).to_date))
+        %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-amber-700"}= fixed_note
