@@ -157,6 +157,13 @@ RSpec.describe "Consent report", type: :request do
       expect(card("gap-causes-over-time")).to include("the causes found add up to more than the gap, so Unexplained is below zero")
     end
 
+    it "charts the figures the morning check watches" do
+      get consent_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      expect(card("flag-measures")).to include("GA's share of our views", "GA tag loaded", "Banners per view the banner was due on", "Banners left unanswered",
+        "Flagged below #{(Anomalies::GA_RATIO_DROP * 100).round}% of the usual")
+    end
+
     it "splits views by the finer states" do
       get consent_report_path(from: "2026-10-10", to: "2026-10-12")
 

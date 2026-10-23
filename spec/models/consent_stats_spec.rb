@@ -147,6 +147,33 @@ RSpec.describe ConsentStats, type: :model do
     end
   end
 
+  describe "#daily_snapshots and #flag_measures" do
+    let(:first_party) { {Date.new(2026, 10, 10) => 100, Date.new(2026, 10, 11) => 100, Date.new(2026, 10, 12) => 100} }
+
+    it "gives every day of the period, read from its snapshot where stored and worked out where not" do
+      ConsentSnapshot.create!(day: "2026-10-10", first_party: 100, analytics: 80, ga_ratio: 0.8)
+
+      days = ConsentStats.new(period).daily_snapshots(first_party, {Date.new(2026, 10, 11) => 30})
+
+      expect(days.keys).to eq((Date.new(2026, 10, 10)..Date.new(2026, 10, 12)).to_a)
+      expect(days.values.map(&:ga_ratio)).to eq([0.8, 0.3, nil])
+      expect(days.values.map(&:persisted?)).to eq([true, false, false])
+    end
+
+    it "sets each day against its usual and the flag's line from Anomalies, and picks out the days past it" do
+      (1..5).each { |back| ConsentSnapshot.create!(day: (Date.new(2026, 10, 10) - back).iso8601, ga_ratio: 0.8) }
+      days = ConsentStats.new(period).daily_snapshots(first_party, {Date.new(2026, 10, 10) => 40, Date.new(2026, 10, 11) => 75})
+
+      ratio = ConsentStats.new(period).flag_measures(days).find { |measure| measure.field == :ga_ratio }
+
+      expect(ratio.values).to eq([0.4, 0.75, nil])
+      expect(ratio.usual.first).to eq(0.8)
+      expect(ratio.threshold.first).to be_within(1e-9).of(0.8 * Anomalies::GA_RATIO_DROP)
+      expect(ratio.flagged).to eq([Date.new(2026, 10, 10)])
+      expect(ConsentStats.new(period).flag_measures(days).map(&:field)).to eq(%i[ga_ratio loaded_share banner_per_pending no_answer_share])
+    end
+  end
+
   describe "#banner_health" do
     it "sets banners shown against the views from readers it was due to ask, and counts views with no country" do
       PageView.collection.delete_many({})

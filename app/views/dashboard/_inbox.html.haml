@@ -1,0 +1,30 @@
+= render layout: "shared/card", locals: {id: "inbox", title: "Latest", icon: "inbox"} do
+  %div{class: "divide-y divide-slate-200"}
+    %div{class: "px-4 py-3"}
+      %h3{class: "mb-2 text-xs font-medium text-slate-500"} Messages
+      - if messages.empty?
+        %p{class: "text-sm text-slate-500"} No messages yet.
+      - else
+        %ul{class: "space-y-2 text-sm"}
+          - messages.each do |message|
+            %li
+              = link_to message_path(message), class: "block hover:underline" do
+                %span{class: "font-medium text-slate-900"}= message.name
+                %span{class: "block truncate text-slate-500"}= message.message
+              %span{class: "text-xs text-slate-400"}
+                = country_label(message.country)
+                ·
+                = time_or_dash(message.created_at)
+    %div{class: "px-4 py-3"}
+      %h3{class: "mb-2 text-xs font-medium text-slate-500"} Subscribers
+      - if subscribers.empty?
+        %p{class: "text-sm text-slate-500"} No subscribers yet.
+      - else
+        %ul{class: "space-y-2 text-sm"}
+          - subscribers.each do |subscriber|
+            %li
+              = link_to subscriber.email, newsletter_subscriber_path(subscriber), class: "block truncate font-medium text-slate-900 hover:underline"
+              %span{class: "text-xs text-slate-400"}
+                = country_label(subscriber.country)
+                ·
+                = time_or_dash(subscriber.subscribed_at)
