@@ -1,0 +1,11 @@
+-# Tagged links read apart from referrers, since a newsletter or a shared
+-# post names itself in its UTM tags wherever the click came from.
+= render layout: "shared/card", locals: {id: "campaigns", title: "Campaigns", icon: "target"} do
+  = render "shared/campaigns", campaigns: campaigns, limit: 10, empty: "No visit came from a link tagged with utm_source in this period."
+  - since = PageView.campaigns_counted_since
+  - notes = []
+  - notes << counted_from_note(period.from, CountedSince.new(date: since, what: "Campaigns")) if since
+  - notes << "Every country, as the blog doesn't split campaigns by one." if country
+  %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
+    A visit counts once, on the page it landed on.
+    = notes.join(" ")

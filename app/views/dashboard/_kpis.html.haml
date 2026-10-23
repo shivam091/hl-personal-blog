@@ -1,0 +1,7 @@
+- previous = stats.period.previous
+%dl{class: "mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"}
+  - DashboardHelper::KPIS.each do |kpi|
+    - current = stats.total(kpi.metric)
+    = render "dashboard/tile", label: kpi.label, tile_icon: kpi.icon, hint: kpi.hint, value: number_with_delimiter(current),
+      spark: stats.daily(kpi.metric), change: metric_change(current, stats.total(kpi.metric, previous), kpi), compared_with: previous
+  = render "dashboard/visitors_tile", stats: stats
