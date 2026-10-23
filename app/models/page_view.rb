@@ -12,6 +12,14 @@ class PageView
   PERIOD_CSV_HEADERS = ["URL", "Views", "Countries", "Created", "Last updated"].freeze
   # Below this many hits, a page's bot share is mostly noise.
   MIN_HITS_FOR_BOT_SHARE = 20
+  # Until the blog read the referrer off the page itself, every view's came
+  # from the beacon's own request, which is always the blog, so all of them
+  # counted as internal.
+  REFERRERS_FIXED_ON = Date.new(2026, 10, 28)
+  # What the blog writes for a UTM part the landing URL left out.
+  NO_CAMPAIGN_PART = "(none)"
+
+  Campaign = Struct.new(:source, :medium, :name)
 
   field :slug, type: String
   field :url, type: String
@@ -27,6 +35,7 @@ class PageView
   field :countriesByDay, type: Hash, default: {}, as: :countries_by_day
   field :devicesByDay, type: Hash, default: {}, as: :devices_by_day
   field :referrersByDay, type: Hash, default: {}, as: :referrers_by_day
+  field :campaignsByDay, type: Hash, default: {}, as: :campaigns_by_day
   field :uniqueVisitorCount, type: Integer, default: 0, as: :unique_visitor_count
   field :visitorCount, type: Integer, default: 0, as: :visitor_count
   field :botCount, type: Integer, default: 0, as: :bot_count
@@ -67,6 +76,10 @@ class PageView
     within(referrers_by_day, period)
   end
 
+  def campaigns_within(period)
+    within(campaigns_by_day, period)
+  end
+
   # Views from before this day have no device or referrer day to fall in.
   def breakdowns_dated_since
     devices_by_day.keys.filter_map { |day| parse_day(day) }.min
@@ -103,6 +116,25 @@ class PageView
     # reaching back before it shows none rather than few.
     def first_day
       first_day_in(%w[viewsByDay countriesByDay])
+    end
+
+    # Every page's together, as a campaign's link can land anywhere.
+    def campaigns_within(period)
+      only(:campaignsByDay).each_with_object(Hash.new(0)) do |page_view, totals|
+        page_view.campaigns_within(period).each { |key, count| totals[key] += count }
+      end
+    end
+
+    def campaigns_counted_since
+      first_day_in(%w[campaignsByDay])
+    end
+
+    # The blog's safeKey swaps dots for underscores, which can't be swapped
+    # back here, since campaign names have underscores of their own; and it
+    # cuts a key at 64 characters, so a long one can lose its later parts.
+    def campaign(key)
+      source, medium, name = key.to_s.split("|", 3)
+      Campaign.new(*[source, medium, name].map { |part| part.presence || NO_CAMPAIGN_PART })
     end
 
     # Lets traffic be analysed in a spreadsheet, beyond what the list page offers.
