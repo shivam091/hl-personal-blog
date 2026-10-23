@@ -1,0 +1,31 @@
+= render layout: "shared/card", locals: {id: "content", title: "Content", icon: "book-open"} do
+  - if !content.any?
+    %p{class: empty_note_class}
+      No feed entries yet.
+      = link_to "Sync the feed", feed_entries_path, class: "font-medium text-slate-700 underline hover:text-slate-900"
+  - else
+    - before = (content.previous_views_by_type if @period.compare?)
+    %div{class: "overflow-x-auto"}
+      %table{class: table_class}
+        %thead{class: "text-slate-500"}
+          %tr
+            %th{scope: "col", class: "px-4 py-1.5 text-left font-medium"} Type
+            %th{scope: "col", class: "px-2 py-1.5 text-right font-medium"} Entries
+            %th{scope: "col", class: "px-2 py-1.5 text-right font-medium"} Views
+            %th{scope: "col", class: "px-4 py-1.5 text-right font-medium", title: "Views in the period per entry"}
+              Per entry
+        %tbody
+          - content.by_type.each do |row|
+            %tr{class: table_row_class}
+              %td{class: "px-4 py-1.5 font-medium"}= row[:type].pluralize.capitalize
+              %td{class: "px-2 py-1.5 text-right tabular-nums"}= number_with_delimiter(row[:entries])
+              %td{class: "px-2 py-1.5 text-right tabular-nums whitespace-nowrap"}
+                = number_with_delimiter(row[:views])
+                = row_change(row[:views], before[row[:type]], DashboardHelper::HIGHER_IS_BETTER) if before
+              %td{class: "px-4 py-1.5 text-right tabular-nums"}
+                = row[:average_views] ? number_with_precision(row[:average_views], precision: 1, delimiter: ",") : "—"
+  %p{class: "#{card_footer_class} text-xs"}
+    = link_to content_report_path(**@period.query, **@filtering.query),
+      class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+      Content report
+      = icon("chevron-right", size: 14)

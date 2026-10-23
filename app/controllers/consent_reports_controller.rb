@@ -25,6 +25,7 @@ class ConsentReportsController < ApplicationController
     @decomposition = @consent.decomposition(@first_party_views, @analytics_views) if @analytics.any?
     @published = FeedEntry.published_names(@period)
     @health = @consent.banner_health
+    @flag_measures = @consent.flag_measures(@consent.daily_snapshots(@first_party_views, @analytics_views))
 
     respond_to do |format|
       format.html { load_comparison if @period.compare? }
