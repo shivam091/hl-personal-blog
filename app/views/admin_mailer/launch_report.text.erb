@@ -1,0 +1,14 @@
+<%= @report.entry.name %>
+
+Its first <%= @report.age %> days, <%= l(@report.days.first) %> to <%= l(@report.days.last) %>: <%= @report.summary %>.
+
+<% @report.measures.each do |measure| %>
+- <%= measure.label %>: <%= number_with_delimiter(measure.value) %><%= " (so far)" unless measure.settled %>, typical <%= measure.typical ? number_with_delimiter(measure.typical) : "unknown" %>
+<% if measure.label == "Analytics views" %>
+  GA's share of its views: <%= (share = @report.ga_share) ? number_to_percentage(share * 100, precision: 0) : "—" %>
+<% end %>
+<% end %>
+
+Typical is the median of earlier entries over their own first <%= @report.age %> days. Google fills in recent days late, so a figure marked so far may still grow. GA's share is its views against the blog's own on the days GA has synced: GA misses readers who decline or block it, so a low share means Analytics views undercount this entry, not that it was read less.
+
+Open in the admin: <%= page_view_url(@report.path.chomp("/").presence || "/") %>

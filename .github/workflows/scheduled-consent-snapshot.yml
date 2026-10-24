@@ -1,0 +1,32 @@
+name: Scheduled consent snapshot
+
+# After the 00:00 UTC syncs have brought GA's figures in, and before the alert mail at 03:45, which
+# judges yesterday against the snapshots this stores.
+on:
+  schedule:
+    - cron: "15 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-consent-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Snapshot the last few days' views against GA's
+        run: bin/rails consent:snapshot
