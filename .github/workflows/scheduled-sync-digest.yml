@@ -1,0 +1,34 @@
+name: Scheduled sync digest
+
+# Its own workflow, a few hours after the 00:00 UTC runs, so the digest
+# covers a full day of syncs, the daily ones included, and arrives in the
+# morning.
+on:
+  schedule:
+    # 03:30 UTC (09:00 IST).
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-sync-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Mail the last 24 hours' syncs
+        run: bin/rails sync_requests:digest
