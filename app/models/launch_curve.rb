@@ -33,6 +33,12 @@ class LaunchCurve
     others.size
   end
 
+  # Each earlier entry's page and publishing day, so another measure can be
+  # judged against the same entries views are.
+  def peers
+    others
+  end
+
   private
 
   # Only posts with a full first month, published once views were being
