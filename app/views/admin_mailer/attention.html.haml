@@ -1,0 +1,18 @@
+- content_for :preheader, @flags.map(&:title).join(" · ")
+- content_for :hero, "⚠️ #{pluralize(@flags.size, "thing")} to look at"
+
+%h1.mail-h1{style: "margin:0 0 14px;font-size:26px;line-height:1.3;font-weight:800;letter-spacing:-0.4px;color:#0f172a;"}
+  Needs attention
+%p{style: "margin:0 0 24px;font-size:16px;line-height:1.65;color:#334155;"}
+  What's out of the ordinary on the blog today, checked against the last few weeks.
+
+- @flags.each do |flag|
+  - route, params = flag.path
+  %table{role: "presentation", width: "100%", cellpadding: 0, cellspacing: 0, style: "margin:0 0 12px;border:1px solid #e2e8f0;border-radius:12px;border-collapse:separate;"}
+    %tr
+      %td{style: "padding:14px 16px;"}
+        %a{href: public_send(route.to_s.sub(/_path\z/, "_url"), **params), style: "font-size:15px;font-weight:700;color:#{flag.level == :warning ? "#b45309" : "#0369a1"};text-decoration:none;"}
+          = flag.title
+        %p{style: "margin:4px 0 0;font-size:14px;line-height:1.5;color:#334155;"}= flag.detail
+
+= render "mailers/button", url: root_url, label: "Open the dashboard →"

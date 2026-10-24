@@ -27,6 +27,9 @@ Rails.application.configure do
 
   config.action_mailer.default_url_options = {host: "localhost", port: 3000}
 
+  # Beside the mailer specs, as the app keeps no test/ directory.
+  config.action_mailer.preview_paths << Rails.root.join("spec/mailers/previews").to_s
+
   config.active_support.deprecation = :log
 
   config.active_job.verbose_enqueue_logs = true
