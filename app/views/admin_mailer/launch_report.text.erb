@@ -1,0 +1,11 @@
+<%= @report.entry.name %>
+
+Its first <%= @report.age %> days, <%= l(@report.days.first) %> to <%= l(@report.days.last) %>: <%= @report.summary %>.
+
+<% @report.measures.each do |measure| %>
+- <%= measure.label %>: <%= number_with_delimiter(measure.value) %><%= " (so far)" unless measure.settled %>, typical <%= measure.typical ? number_with_delimiter(measure.typical) : "unknown" %>
+<% end %>
+
+Typical is the median of earlier entries over their own first <%= @report.age %> days. Google fills in recent days late, so a figure marked so far may still grow.
+
+Open in the admin: <%= page_view_url(@report.path.chomp("/").presence || "/") %>
