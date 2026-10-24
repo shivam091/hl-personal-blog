@@ -1,0 +1,40 @@
+- report = @report
+- entry = report.entry
+- verdict_colors = {above: "#047857", below: "#b91c1c", typical: "#64748b"}
+- content_for :preheader, "#{entry.name}, #{report.age} days in: #{report.summary}."
+- content_for :hero, "📈 Day #{report.age} of #{entry.name}"
+
+%h1.mail-h1{style: "margin:0 0 14px;font-size:26px;line-height:1.3;font-weight:800;letter-spacing:-0.4px;color:#0f172a;"}
+  = entry.name
+%p{style: "margin:0 0 24px;font-size:16px;line-height:1.65;color:#334155;"}
+  Its first #{report.age} days, #{l(report.days.first)} to #{l(report.days.last)}: #{report.summary}.
+
+%table{role: "presentation", width: "100%", cellpadding: 0, cellspacing: 0, style: "margin:0 0 12px;font-size:14px;color:#334155;"}
+  %tr
+    %th{style: "padding:6px 12px 6px 0;border-bottom:1px solid #e2e8f0;text-align:left;font-weight:600;color:#64748b;"}
+    %th{style: "padding:6px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;color:#64748b;"} This entry
+    %th{style: "padding:6px 0 6px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;color:#64748b;"} Typical
+  - report.measures.each do |measure|
+    %tr
+      %td{style: "padding:8px 12px 8px 0;border-bottom:1px solid #f1f5f9;font-weight:600;color:#0f172a;"}
+        = measure.label
+        - unless measure.settled
+          %span{style: "font-weight:400;color:#94a3b8;"} (so far)
+        - if measure.label == "Analytics views"
+          - share = report.ga_share
+          %br
+          %span{style: "font-size:12px;font-weight:400;color:#64748b;"}
+            GA's share of its views: #{share ? number_to_percentage(share * 100, precision: 0) : "—"}
+      %td{style: "padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap;color:#{verdict_colors.fetch(measure.verdict, "#0f172a")};"}
+        = number_with_delimiter(measure.value)
+        - if measure.ratio
+          %span{style: "font-size:12px;"} (#{number_to_percentage(measure.ratio * 100, precision: 0)})
+      %td{style: "padding:8px 0 8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;color:#64748b;"}
+        = measure.typical ? number_with_delimiter(measure.typical) : "—"
+%p{style: "margin:0 0 8px;font-size:13px;line-height:1.6;color:#64748b;"}
+  Typical is the median of earlier entries over their own first #{report.age} days. Google fills in recent days late, so a figure
+  marked so far may still grow.
+  GA's share is its views against the blog's own on the days GA has synced: GA misses readers who decline or block it, so a
+  low share means Analytics views undercount this entry, not that it was read less.
+
+= render "mailers/button", url: page_view_url(report.path.chomp("/").presence || "/"), label: "Open in the admin →"
