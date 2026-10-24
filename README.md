@@ -259,6 +259,28 @@ page is inspected while the blog has fewer pages than that. It runs at the
 same time as the sitemap sync, so a page the sitemap adds is first inspected
 the next day.
 
+### Sync digest
+
+[Scheduled sync digest](.github/workflows/scheduled-sync-digest.yml) runs
+`sync_requests:digest` at 03:30 UTC (09:00 IST) and mails one summary of the
+last 24 hours of syncs: how many ran and how each ended, every failed,
+partial or stalled one with its first errors, and when each kind last
+synced. A day with no syncs at all is flagged too, since it means the
+schedule itself stopped.
+
+It goes to `mailer.notify_to` in the production credentials, sent through
+Brevo like the newsletter:
+
+```yaml
+mailer:
+  from: Name <verified-sender@example.com>
+  notify_to: you@example.com
+```
+
+Without that address the task fails, so the workflow run shows as failed
+rather than quietly sending nothing. Run it by hand with
+`RAILS_ENV=production bin/rails sync_requests:digest`.
+
 ## Dates and times
 
 Shown as `12 Mar, 2026`, and times as `12 Mar, 2026 12:00 IST`
