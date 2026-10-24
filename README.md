@@ -84,10 +84,11 @@ index if there is one), creates a crawled page for each new URL, and updates las
 known ones. It never changes indexed status (only Google's crawl report
 knows that) and never deletes pages that dropped out of the sitemap.
 
-`bin/rails crawled_pages:sync_sitemap` runs the sync in its own process,
-not through Active Job, because the process exits when it's done. **Sync
-sitemap** on the crawled pages list queues
-[`SyncSitemapJob`](app/jobs/sync_sitemap_job.rb) in the web process.
+- **At 00:00 UTC daily:** the [daily workflows](#daily-workflows) run
+  `bin/rails crawled_pages:sync_sitemap`. The task runs the sync in its own
+  process, not through Active Job, because the process exits when it's done.
+- **On demand:** **Sync sitemap** on the crawled pages list queues
+  [`SyncSitemapJob`](app/jobs/sync_sitemap_job.rb) in the web process.
 
 A run with no pages synced and errors exits non-zero, so it shows as failed;
 the logs list each skipped URL.
@@ -140,8 +141,9 @@ variable overrides it, to point at another feed without re-encrypting
 credentials. **Sync feed** on the list queues
 [`SyncFeedJob`](app/jobs/sync_feed_job.rb).
 
-`bin/rails feed_entries:sync_feed` runs the sync in its own process rather
-than through Active Job, because the process exits when it's done. A run with no entries
+At 00:00 UTC daily, the [daily workflows](#daily-workflows) run
+`bin/rails feed_entries:sync_feed`, in its own process rather than through
+Active Job, because the process exits when it's done. A run with no entries
 synced and errors exits non-zero, so it shows as failed; the logs list each
 skipped entry.
 
@@ -208,6 +210,76 @@ deploy or restart. That's acceptable for the jobs here: clearing logs is a
 single `deleteMany` that MongoDB finishes even if the app goes away, and an
 unstarted one can simply be requested again. If jobs ever need to survive
 restarts, move to a persistent adapter and a Render background worker.
+Scheduled work doesn't go through the web process at all; see below.
+
+## Scheduled sync
+
+Render's free web service sleeps when idle and its Cron Jobs aren't free,
+so the syncs run as a scheduled GitHub Actions workflow,
+[.github/workflows/scheduled-sync.yml](.github/workflows/scheduled-sync.yml),
+at 00:00, 08:00 and 16:00 UTC (05:30, 13:30 and 21:30 IST). It runs
+[`bin/scheduled-sync`](bin/scheduled-sync) against the production database,
+which runs these rake tasks, each even if one before it failed:
+
+| Task | Covers |
+|---|---|
+| `google:search_console:sync` | Search Console stats, from the first day not yet final |
+| `google:analytics:sync[7]` | Google Analytics stats, last 7 days |
+| `google:recaptcha:sync` | reCAPTCHA scores, every day Google still holds |
+| `google:safe_browsing:sync` | Every outbound link readers have clicked, against Google Safe Browsing (credentials `google.api_key`) |
+| `mixpanel:sync` | Mixpanel stats, last 3 days (credentials `mixpanel.*`) |
+| `mixpanel:annotate` | Marks posts published in the last 30 days on Mixpanel's charts |
+
+`google:crux:sync` (Web Vitals history) isn't scheduled: the blog has too
+few Chrome users for the Chrome UX Report to cover, so it would fail every
+run. Run it by hand, or from the Web Vitals history page, to check whether
+it has started reporting.
+
+The same script runs by hand, against development unless told otherwise:
+
+```bash
+bin/scheduled-sync                        # development database
+RAILS_ENV=production bin/scheduled-sync   # live database
+DAYS=90 bin/scheduled-sync                # a longer window for the Analytics stats
+```
+
+Every run is listed under **Sync requests**, started by "rake". GitHub
+can start a scheduled run some minutes late, most of all on the hour.
+
+One-time setup:
+
+1. Add an Actions secret `RAILS_MASTER_KEY` with the contents of
+   `config/credentials/production.key` (repo → Settings → Secrets and
+   variables → Actions).
+2. Let GitHub's runners reach MongoDB: their addresses change, so Atlas →
+   Network Access must allow `0.0.0.0/0`.
+3. Try it from the Actions tab: **Scheduled sync** → **Run workflow**.
+
+GitHub only schedules workflows from the default branch, and in a public
+repository pauses them after 60 days without a commit.
+
+### Daily workflows
+
+More workflows run once a day, each on its own so one failing doesn't mark
+another failed. They need the same one-time setup as the scheduled sync,
+and each can be started by hand from the Actions tab.
+
+| Workflow | When (UTC) | Task | Covers |
+|---|---|---|---|
+| [Scheduled blog sync](.github/workflows/scheduled-blog-sync.yml) | 00:00 | `crawled_pages:sync_sitemap` | The blog's sitemap |
+| [Scheduled blog sync](.github/workflows/scheduled-blog-sync.yml) | 00:00 | `feed_entries:sync_feed` | The blog's Atom feed |
+| [Scheduled blog sync](.github/workflows/scheduled-blog-sync.yml) | 00:00 | `google:search_console:submit_sitemap` | Submitting the sitemap to Search Console (the service account must be an Owner or Full user) |
+| [Scheduled blog sync](.github/workflows/scheduled-blog-sync.yml) | 00:00 | `google:search_console:inspect_new_entries` | URL Inspection of entries from the last 30 days not yet indexed |
+| [Scheduled URL inspection](.github/workflows/scheduled-url-inspection.yml) | 00:00 | `google:search_console:inspect_urls[2000]` | URL Inspection of every crawled page |
+| [Scheduled PageSpeed](.github/workflows/scheduled-page-speed.yml) | 02:00 | `google:page_speed:sync` | PageSpeed Insights on the 30 least recently tested pages (credentials `google.api_key`) |
+
+A workflow listed with several tasks runs them in the order shown, each
+even if one before it failed.
+
+The URL inspection's limit is Google's daily quota per property, so every
+page is inspected while the blog has fewer pages than that. It runs at the
+same time as the sitemap sync, so a page the sitemap adds is first inspected
+the next day.
 
 ## Dates and times
 
