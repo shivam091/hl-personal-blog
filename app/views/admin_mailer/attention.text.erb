@@ -1,0 +1,10 @@
+Needs attention
+
+What's out of the ordinary on the blog today, checked against the last few weeks.
+<% @flags.each do |flag| %>
+<% route, params = flag.path %>
+- <%= flag.title %>: <%= flag.detail %>
+  <%= public_send(route.to_s.sub(/_path\z/, "_url"), **params) %>
+<% end %>
+
+Dashboard: <%= root_url %>
