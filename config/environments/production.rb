@@ -33,7 +33,10 @@ Rails.application.configure do
   # Jobs run in-process (Active Job's :async adapter); there's no job queue.
   config.active_job.queue_adapter = :async
 
-  config.action_mailer.default_url_options = {host: "example.com"}
+  # Mail linking back to the admin is sent from GitHub Actions, which can't
+  # know the app's address, so it's given one.
+  admin_url = URI.parse(ENV["ADMIN_URL"].presence || "https://example.com")
+  config.action_mailer.default_url_options = {host: admin_url.host, port: admin_url.port, protocol: admin_url.scheme}
 
   config.i18n.fallbacks = true
 end

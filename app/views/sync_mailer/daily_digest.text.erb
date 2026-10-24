@@ -1,0 +1,26 @@
+Sync digest
+
+From <%= l(@digest.from, format: :short) %> to <%= l(@digest.to, format: :short) %>: <%= @digest.summary %>.
+<% if @digest.counts.any? %>
+<%= @digest.counts.map { |status, count| "#{count} #{sync_status_label(status).downcase}" }.join(" · ") %>
+<% end %>
+<% if @digest.problems.any? %>
+
+Needs a look
+<% @digest.problems.each do |request| %>
+
+- <%= request.section %>: <%= sync_status_label(request.display_status) %>
+  <%= request.source %> · <%= request.trigger_label %> · started <%= l(request.created_at, format: :short) %>
+<% request.error_messages.first(SyncDigest::ERRORS_SHOWN).each do |error| %>
+  <%= error %>
+<% end %>
+<% if (more = request.error_count - SyncDigest::ERRORS_SHOWN).positive? %>
+  and <%= pluralize(more, "more error") %>
+<% end %>
+<% end %>
+<% end %>
+
+Last successful sync
+<% @digest.freshness.each do |kind, (completed, _latest)| %>
+- <%= SyncRequest::KINDS.fetch(kind).section %>: <%= completed ? "#{time_ago_in_words(completed.finished_at)} ago" : "never" %>
+<% end %>

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Exists so the admin's daily mail is one command, run the same by the
+# GitHub Actions schedule and by hand. Every task runs even when one before
+# it failed, so a broken launch report doesn't hold back the alerts; the exit
+# status still says something failed.
+#
+#   bin/scheduled-mail                        # development database
+#   RAILS_ENV=production bin/scheduled-mail   # live database (needs RAILS_MASTER_KEY or the key file)
+set -uo pipefail
+
+cd "$(dirname "$0")/.."
+
+tasks=(
+  "admin_mail:launch_reports"
+  "admin_mail:attention"
+)
+
+echo "== Scheduled mail, ${RAILS_ENV:-development} =="
+
+failed=()
+for task in "${tasks[@]}"; do
+  [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::group::$task" || echo "-- $task"
+  if bin/rails "$task"; then
+    status=ok
+  else
+    status=failed
+    failed+=("$task")
+  fi
+  [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::endgroup::"
+  [[ "$status" == failed ]] && { [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::error::$task failed" || echo "   $task failed" >&2; }
+done
+
+if (( ${#failed[@]} )); then
+  echo "== Done: ${#failed[@]} of ${#tasks[@]} failed: ${failed[*]} ==" >&2
+  exit 1
+fi
+echo "== Done: all ${#tasks[@]} ran =="
