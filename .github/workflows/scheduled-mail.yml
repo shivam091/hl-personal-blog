@@ -1,0 +1,36 @@
+name: Scheduled mail
+
+# After the morning's syncs and the sync digest, so launch reports and
+# alerts read figures that are already in.
+on:
+  schedule:
+    - cron: "45 3 * * *"
+  workflow_dispatch:
+
+# A manual run beside a scheduled one would send the alerts twice.
+concurrency:
+  group: scheduled-mail
+  cancel-in-progress: false
+
+jobs:
+  mail:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+      # The mails link back to the admin, whose address the runner can't know.
+      ADMIN_URL: ${{ secrets.ADMIN_URL }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      # The task list lives in the script, so a run by hand does the same.
+      - name: Send launch reports and alerts
+        run: bin/scheduled-mail
