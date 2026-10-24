@@ -1,0 +1,35 @@
+name: Scheduled PageSpeed
+
+# Apart from the syncs because each PageSpeed test loads a page in a real
+# browser, so a batch takes far longer than the other syncs.
+on:
+  schedule:
+    # Clear of the midnight syncs and URL inspection.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+# Two runs at once would only test the same pages twice.
+concurrency:
+  group: scheduled-page-speed
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      # The service's default batch, so every entry is retested every few days.
+      - name: Test the least recently tested pages
+        run: bin/rails google:page_speed:sync

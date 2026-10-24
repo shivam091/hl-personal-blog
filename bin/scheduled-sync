@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Every task runs even when one before it failed, so one broken source doesn't
+# hold back the rest; the exit status still says something failed.
+set -uo pipefail
+
+# Google revises the last two or three days, so a run over a week
+# catches every day again once it has settled. Search Console takes no
+# window: it says which days are final, and a week would redo settled ones.
+DAYS="${DAYS:-7}"
+
+cd "$(dirname "$0")/.."
+
+# reCAPTCHA takes no window; Google returns everything it still holds.
+# Sitemaps are synced on their own too: the copy made just after a submission
+# catches Google before it has read the sitemap, so it would stay pending.
+tasks=(
+  "google:search_console:sync"
+  "google:search_console:sync_sitemaps"
+  "google:analytics:sync[$DAYS]"
+  "google:recaptcha:sync"
+  "google:safe_browsing:sync"
+)
+
+echo "== Scheduled sync, ${RAILS_ENV:-development}, Analytics stats for the last $DAYS days =="
+
+failed=()
+for task in "${tasks[@]}"; do
+  # Folded per task in a GitHub Actions log, so each reads on its own.
+  [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::group::$task" || echo "-- $task"
+  # A process each, since a failing Google task exits its process.
+  if bin/rails "$task"; then
+    status=ok
+  else
+    status=failed
+    failed+=("$task")
+  fi
+  [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::endgroup::"
+  [[ "$status" == failed ]] && { [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::error::$task failed" || echo "   $task failed" >&2; }
+done
+
+if (( ${#failed[@]} )); then
+  echo "== Done: ${#failed[@]} of ${#tasks[@]} failed: ${failed[*]} ==" >&2
+  exit 1
+fi
+echo "== Done: all ${#tasks[@]} synced =="

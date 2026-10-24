@@ -1,0 +1,36 @@
+name: Scheduled sync
+
+# Render's free web service sleeps when idle and its cron jobs aren't free.
+# Eight hours apart so the figures are never more than a few hours stale.
+on:
+  schedule:
+    - cron: "0 0,8,16 * * *"
+  workflow_dispatch:
+
+# A manual run and a scheduled one would only fetch the same days twice.
+concurrency:
+  group: scheduled-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      # The task list lives in the script, so a run by hand does the same.
+      - name: Run the syncs (Google stats for the last 7 days)
+        run: bin/scheduled-sync
+        env:
+          DAYS: 7
