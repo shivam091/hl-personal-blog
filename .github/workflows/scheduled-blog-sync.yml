@@ -1,0 +1,48 @@
+name: Scheduled blog sync
+
+# Apart from the Google syncs so a failing blog sync doesn't mark them failed.
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-blog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Sync crawled pages from the sitemap
+        run: bin/rails crawled_pages:sync_sitemap
+
+      # Runs even when the sitemap sync failed, since the feed doesn't depend on it.
+      - name: Sync feed entries from the Atom feed
+        if: ${{ !cancelled() }}
+        run: bin/rails feed_entries:sync_feed
+
+      # Google retired its sitemap ping, so the sitemap is resubmitted
+      # instead; an unchanged one does no harm.
+      - name: Submit the sitemap to Search Console
+        if: ${{ !cancelled() }}
+        run: bin/rails google:search_console:submit_sitemap
+
+      # Right after both syncs, so an entry published today is inspected
+      # today rather than in tomorrow's batch.
+      - name: Inspect new entries
+        if: ${{ !cancelled() }}
+        run: bin/rails google:search_console:inspect_new_entries

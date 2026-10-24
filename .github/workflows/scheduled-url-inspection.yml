@@ -1,0 +1,35 @@
+name: Scheduled URL inspection
+
+# Apart from the syncs because pages are inspected once a day, not three
+# times, and a long batch shouldn't hold the syncs back.
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+# Two runs on one day would only spend the quota inspecting the same pages twice.
+concurrency:
+  group: scheduled-url-inspection
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      # Google's daily quota per property, so every page is inspected while the
+      # blog has fewer pages than that, and the run never asks for more.
+      - name: Inspect every crawled page
+        run: bin/rails "google:search_console:inspect_urls[2000]"
