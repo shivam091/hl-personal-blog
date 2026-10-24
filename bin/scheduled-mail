@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Every task runs even when one before it failed, so a broken launch report
+# doesn't hold back the alerts; the exit status still says something failed.
+set -uo pipefail
+
+cd "$(dirname "$0")/.."
+
+tasks=(
+  "admin_mail:launch_reports"
+  "admin_mail:attention"
+)
+
+echo "== Scheduled mail, ${RAILS_ENV:-development} =="
+
+failed=()
+for task in "${tasks[@]}"; do
+  [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::group::$task" || echo "-- $task"
+  if bin/rails "$task"; then
+    status=ok
+  else
+    status=failed
+    failed+=("$task")
+  fi
+  [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::endgroup::"
+  [[ "$status" == failed ]] && { [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::error::$task failed" || echo "   $task failed" >&2; }
+done
+
+if (( ${#failed[@]} )); then
+  echo "== Done: ${#failed[@]} of ${#tasks[@]} failed: ${failed[*]} ==" >&2
+  exit 1
+fi
+echo "== Done: all ${#tasks[@]} ran =="
