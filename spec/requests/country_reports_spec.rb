@@ -77,4 +77,20 @@ RSpec.describe "Country report", type: :request do
     expect(headings).not_to include("GA views")
     expect(Nokogiri::HTML5(response.body).at_css("#country-table tbody tr").css("td")[7].text).to eq("9")
   end
+
+  it "shows each country's change against the period before, or against the compared country" do
+    PageView.collection.update_one({"_id" => "/post/a"}, {"$set" => {"countriesByDay.2026-09-10" => {"IN" => 100}}})
+
+    get country_report_path
+    india = Nokogiri::HTML5(response.body).at_css("#country-table tbody tr")
+    expect(india.css("td")[1].text.squish).to eq("200 (+100%)")
+
+    get country_report_path(compare: "country", vs: "US", country: "DE")
+    germany = Nokogiri::HTML5(response.body).at_css("#country-table tbody tr")
+    expect(germany.css("td")[1].text.squish).to eq("120 (+200%)")
+    expect(germany.css("td")[1].at_css("span[title]")["title"]).to include("in", "US")
+
+    get country_report_path(compare: "off")
+    expect(Nokogiri::HTML5(response.body).at_css("#country-table tbody tr").css("td")[1].text.squish).to eq("200")
+  end
 end

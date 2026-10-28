@@ -22,7 +22,7 @@
   = render "shared/empty_state", message: "Nothing recorded in #{@period}."
 - else
   %div{id: "country-table", class: "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"}
-    = render "country_reports/table", rows: @rows, sorting: @sorting, extras: @extras
+    = render "country_reports/table", rows: @rows, sorting: @sorting, extras: @extras, previous: @previous
   %p{class: "mt-2 text-xs text-slate-500"}
     Rates show for countries with #{BlogStats::MIN_VIEWS_FOR_RATE}+ views. Visitors aren't kept long enough to
     count per period, so rates are per view.

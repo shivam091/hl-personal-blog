@@ -3,6 +3,11 @@
 - headings = {"country" => "Country", "views" => "Views", "likes" => "Likes", "like_rate" => "Like rate",
   "subscribers" => "Subs", "subscriber_rate" => "Subs / view", "messages" => "Messages"}
 - extras = local_assigns.fetch(:extras, [])
+-# Each count beside its change, so a country growing from little is told
+-# from one that's always been big.
+- previous = local_assigns[:previous]
+- counted = ->(row, metric) { safe_join([number_with_delimiter(row.public_send(metric)),
+  (row_change(row.public_send(metric), previous[metric][row.country], DashboardHelper::HIGHER_IS_BETTER) if previous)].compact, " ") }
 - headings["search_clicks"] = "Search clicks" if extras.include?(:search_clicks)
 - headings["analytics_views"] = "GA views" if extras.include?(:analytics_views)
 %div{class: "relative overflow-x-auto"}
@@ -25,12 +30,12 @@
             - else
               = link_to country_label(row.country), root_path(**@period.query, country: row.country), class: "hover:underline",
                 title: "Dashboard for #{row.country}"
-          %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.views)
-          %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.likes)
+          %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap"}= counted.(row, :views)
+          %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap"}= counted.(row, :likes)
           %td{class: "px-3 py-2 text-right tabular-nums"}= rate_or_dash(row.like_rate)
-          %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.subscribers)
+          %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap"}= counted.(row, :subscribers)
           %td{class: "px-3 py-2 text-right tabular-nums"}= rate_or_dash(row.subscriber_rate)
-          %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.messages)
+          %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap"}= counted.(row, :messages)
           - extras.each do |extra|
             %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.public_send(extra).to_i)
           %td{class: "px-3 py-2"}

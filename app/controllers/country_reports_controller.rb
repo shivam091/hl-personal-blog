@@ -26,6 +26,7 @@ class CountryReportsController < ApplicationController
     @rows = sorted(@stats.funnel(extras).select do |row|
       @stats.country.nil? || row.country == @stats.country
     end)
+    @previous = BlogStats::METRICS.index_with { |metric| @stats.compared_by_country(metric) } if @period.compare?
 
     respond_to do |format|
       format.html
