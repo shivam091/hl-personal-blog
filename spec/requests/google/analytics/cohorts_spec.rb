@@ -27,6 +27,27 @@ RSpec.describe "Analytics cohorts", type: :request do
     expect(row.css("td").map { |td| td.text.strip }).to eq(["40", "15%", "5%"])
   end
 
+  it "passes the weeks, country and device picked to GA, offering only countries GA has sent readers from" do
+    Google::Analytics::CountryStat.create!(date: Date.new(2026, 10, 1), page_path: "/", country: "IN")
+    Google::Analytics::CountryStat.create!(date: Date.new(2026, 10, 1), page_path: "/", country: "ZZ")
+    allow(service).to receive(:call) { service::Result.new(cohorts: [], weeks: 8, errors: []) }
+
+    get google_analytics_cohorts_path(weeks: 8, country: "in", device: "mobile")
+
+    expect(service).to have_received(:call).with(weeks: "8", country: "in", device: "mobile")
+    expect(page.css("#cohort-country option").map { |option| option["value"] }).to eq(["", "IN"])
+    expect(page.at_css("#cohort-device option[selected]")["value"]).to eq("mobile")
+  end
+
+  it "exports the grid as CSV" do
+    cohorts = [service::Cohort.new(start: Date.new(2026, 9, 27), users: 40, active: {0 => 40, 1 => 6})]
+    allow(service).to receive(:call) { service::Result.new(cohorts: cohorts, weeks: 4, errors: []) }
+
+    get google_analytics_cohorts_path(format: :csv, weeks: 4)
+
+    expect(CSV.parse(response.body).second).to eq(["2026-09-27", "40", "6", "0.15", nil, nil, nil, nil])
+  end
+
   it "says why when Analytics can't be read" do
     allow(service).to receive(:call) {
       service::Result.new(cohorts: [], weeks: 12, errors: ["Analytics cohorts: quota exhausted"])

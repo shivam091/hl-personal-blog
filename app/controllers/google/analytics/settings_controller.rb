@@ -13,15 +13,16 @@ module Google
       # it is what the page is opened to see.
       def register_dimension
         parameter = params[:parameter_name].to_s
-        unless SettingsService::EXPECTED_CUSTOM_DIMENSIONS.key?(parameter)
-          return redirect_to google_analytics_settings_path, alert: "Unknown custom dimension.", status: :see_other
+        unless CustomDimensionService.known?(parameter)
+          return redirect_to google_analytics_settings_path, alert: "Unknown custom dimension or metric.", status: :see_other
         end
 
+        kind = SettingsService::EXPECTED_CUSTOM_METRICS.key?(parameter) ? "metric" : "dimension"
         result = CustomDimensionService.call(parameter)
         if result.errors.any?
           redirect_to google_analytics_settings_path, alert: result.errors.to_sentence, status: :see_other
         else
-          redirect_to google_analytics_settings_path, notice: "Registered #{parameter} as a custom dimension. GA reports it from now on, not for past events.",
+          redirect_to google_analytics_settings_path, notice: "Registered #{parameter} as a custom #{kind}. GA reports it from now on, not for past events.",
             status: :see_other
         end
       end

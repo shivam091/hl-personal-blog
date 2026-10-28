@@ -9,8 +9,8 @@ RSpec.describe Google::Analytics::CohortService do
   let(:today) { Date.new(2026, 10, 14) }
   let(:bodies) { [] }
 
-  def cohorts(property: 123456789)
-    described_class.new(property: property, client: google_client, cache: cache).call(today: today)
+  def cohorts(property: 123456789, **filters)
+    described_class.new(property: property, client: google_client, cache: cache).call(today: today, **filters)
   end
 
   before do
@@ -62,6 +62,34 @@ RSpec.describe Google::Analytics::CohortService do
     2.times { cohorts }
 
     expect(bodies.size).to eq(1)
+  end
+
+  it "asks for the weeks, country and device picked, cached apart from the rest" do
+    result = cohorts(weeks: "4", country: "in", device: "mobile")
+    cohorts
+
+    expect(result.weeks).to eq(4)
+    expect(bodies.size).to eq(2)
+    spec = bodies.first["cohortSpec"]
+    expect(spec["cohorts"].size).to eq(4)
+    expect(spec["cohortsRange"]["endOffset"]).to eq(3)
+    filters = bodies.first.dig("dimensionFilter", "andGroup", "expressions").map { |expression| expression["filter"] }
+    expect(filters.map { |filter| [filter["fieldName"], filter.dig("stringFilter", "value")] })
+      .to eq([["hostName", Google::Analytics::SyncService::HOSTNAME], %w[countryId IN], %w[deviceCategory mobile]])
+  end
+
+  it "reads a span or device not offered as the default" do
+    result = cohorts(weeks: "7", device: "toaster")
+
+    expect(result.weeks).to eq(12)
+    expect(bodies.first.dig("dimensionFilter", "andGroup", "expressions").size).to eq(1)
+  end
+
+  it "exports each cohort's readers and share back per week" do
+    csv = CSV.parse(described_class.to_csv(cohorts(weeks: 4)))
+
+    expect(csv.first).to eq(["First visit week", "Readers", "Week 1 back", "Week 1 share", "Week 2 back", "Week 2 share", "Week 3 back", "Week 3 share"])
+    expect(csv.find { |row| row.first == "2026-09-27" }).to eq(["2026-09-27", "40", "6", "0.15", nil, nil, nil, nil])
   end
 
   it "says why when Analytics isn't configured" do

@@ -26,6 +26,9 @@ RSpec.describe Google::Analytics::SettingsService do
     google_stubs.get("#{base}/customDimensions") {
       [200, {}, {customDimensions: [{displayName: "Results", parameterName: "results_count", scope: "EVENT"}]}.to_json]
     }
+    google_stubs.get("#{base}/customMetrics") {
+      [200, {}, {customMetrics: [{displayName: "Read seconds", parameterName: "read_seconds", scope: "EVENT", measurementUnit: "SECONDS"}]}.to_json]
+    }
     google_stubs.get("https://analyticsadmin.googleapis.com/v1alpha/properties/123456789/reportingDataAnnotations") {
       [200, {}, {reportingDataAnnotations: [
         {title: "Published: Grid", annotationDate: {year: 2026, month: 10, day: 1}},
@@ -71,8 +74,10 @@ RSpec.describe Google::Analytics::SettingsService do
     expect(settings.settings).to have_attributes(short_retention?: true, missing_key_events: ["contact_submit"])
   end
 
-  it "flags the blog's event parameters not registered as event-scoped dimensions" do
-    expect(settings.settings.missing_custom_dimensions).to eq(["event_label"])
+  it "flags the blog's event parameters not registered as event-scoped dimensions or metrics" do
+    expect(settings.settings.missing_custom_dimensions).to eq(%w[event_label metric_rating content_category content_tags link_domain outbound])
+    expect(settings.settings.custom_metrics.sole).to have_attributes(parameter_name: "read_seconds", measurement_unit: "SECONDS")
+    expect(settings.settings.missing_custom_metrics).to eq([])
   end
 
   it "reads each web stream's enhanced measurement, flagging the events reports here rely on that it doesn't send" do

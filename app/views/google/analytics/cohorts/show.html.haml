@@ -1,11 +1,30 @@
 - content_for :title, "Analytics cohorts"
 - result = @result
 
-%div{class: "mb-6"}
-  %h1{class: "text-2xl font-semibold tracking-tight"} Analytics cohorts
-  %p{class: "mt-1 text-sm text-slate-500"}
-    Readers grouped by the week of their first visit, and the share who came back in each week after.
-    Read live from Google Analytics and kept for a few hours.
+- service = Google::Analytics::CohortService
+- select_class = "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Analytics cohorts
+    %p{class: "mt-1 text-sm text-slate-500"}
+      Readers grouped by the week of their first visit, and the share who came back in each week after.
+      Read live from Google Analytics and kept for a few hours.
+  = link_to google_analytics_cohorts_path(format: :csv, weeks: result.weeks, country: @country, device: @device),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
+
+-# Each pick reloads the grid in place, as a report's chart options do, so
+-# readers from one country or device are compared week by week.
+%div{class: "mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"}
+  - [["cohort-weeks", "Weeks", :weeks, service::WEEK_CHOICES.map { |weeks| ["#{weeks} weeks", weeks] }, result.weeks, nil],
+     ["cohort-country", "Country", :country, @countries.map { |code| [country_label(code), code] }, @country, "Every country"],
+     ["cohort-device", "Device", :device, service::DEVICES.map { |device| [device.capitalize, device] }, @device, "Every device"]].each do |id, label, param, choices, chosen, blank|
+    %div{class: "flex items-center gap-2"}
+      = label_tag id, label, class: "text-xs font-medium text-slate-500"
+      = picker_select_tag param, options_for_select(choices, chosen), include_blank: blank, id: id, class: select_class,
+        data: {controller: "chart-granularity", chart_granularity_param_value: param, action: "chart-granularity#change"}
 
 - if result.errors.any?
   %div{class: "mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", role: "alert"}

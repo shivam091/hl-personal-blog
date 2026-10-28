@@ -14,7 +14,8 @@ module AnalyticsReportsHelper
       color = SPEED_BANDS.fetch(Google::PageSpeed::Result.rating(:lcp_ms, point.lcp_ms)).last
       ChartsHelper::ScatterPoint.new(x: point.lcp_ms / 1000.0, y: point.engagement_rate * 100, color: color,
         tip: chart_tip(point.page_path, [
-          {value: "#{number_with_precision(point.lcp_ms / 1000.0, precision: 1)} s", name: "LCP on a phone", color: color},
+          {value: "#{number_with_precision(point.lcp_ms / 1000.0, precision: 1)} s", name: (point.source == :readers ? "readers' mean LCP" : "LCP on a phone"),
+           color: color},
           {value: metric_value(point.engagement_rate, :rate), name: "engaged"},
           {value: number_with_delimiter(point.views), name: "views"}
         ]))

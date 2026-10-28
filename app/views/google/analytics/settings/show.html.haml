@@ -22,6 +22,8 @@
     - warnings << "#{settings.missing_key_events.to_sentence} #{settings.missing_key_events.one? ? "isn't" : "aren't"} marked as #{settings.missing_key_events.one? ? "a key event" : "key events"}, so #{settings.missing_key_events.one? ? "it doesn't" : "they don't"} count as conversions. Mark them in GA → Admin → Events once they've arrived."
   - if settings.missing_custom_dimensions.any?
     - warnings << "#{settings.missing_custom_dimensions.to_sentence} #{settings.missing_custom_dimensions.one? ? "isn't" : "aren't"} registered as an event-scoped custom dimension, so GA leaves #{settings.missing_custom_dimensions.one? ? "it" : "them"} out of every report, Event labels included. Register below; GA only reports events sent after that."
+  - if settings.missing_custom_metrics.any?
+    - warnings << "#{settings.missing_custom_metrics.to_sentence} #{settings.missing_custom_metrics.one? ? "isn't" : "aren't"} registered as an event-scoped custom metric, so finished reads have no reading time. Register below; GA only reports events sent after that."
   - if settings.google_signals_off?
     - warnings << "Google signals is off, so GA reports no age or gender. Switch it on in GA → Admin → Data collection and modification → Data collection."
   - settings.data_streams.each do |stream|
@@ -66,7 +68,7 @@
                   %td{class: "px-3 py-1.5 font-medium"}= event.event_name
                   %td{class: "px-3 py-1.5 text-slate-500"}= event.counting_method == "ONCE_PER_SESSION" ? "Once per session" : "Every time"
 
-    = render layout: "shared/card", locals: {id: "custom-dimensions", title: "Custom dimensions", icon: "list"} do
+    = render layout: "shared/card", locals: {id: "custom-dimensions", title: "Custom definitions", icon: "list"} do
       - settings.missing_custom_dimensions.each do |parameter|
         %div{class: "flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-sm"}
           %span
@@ -77,7 +79,17 @@
             class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
             = icon("plus", size: 14)
             Register
-      - if settings.custom_dimensions.empty?
+      - settings.missing_custom_metrics.each do |parameter|
+        %div{class: "flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-sm"}
+          %span
+            %span{class: "font-mono text-xs"}= parameter
+            %span{class: "text-slate-500"} not registered as a metric
+          = button_to google_analytics_settings_custom_dimensions_path(parameter_name: parameter), form_class: "inline-flex",
+            title: "Needs the service account to be an Editor of the property",
+            class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+            = icon("plus", size: 14)
+            Register
+      - if settings.custom_dimensions.empty? && settings.custom_metrics.empty?
         %p{class: "px-4 py-3 text-sm text-slate-500"} No custom dimensions registered.
       - else
         %div{class: "overflow-x-auto"}
@@ -93,6 +105,13 @@
                   %td{class: "px-3 py-1.5 font-medium"}= dimension.display_name
                   %td{class: "px-3 py-1.5 font-mono text-xs"}= dimension.parameter_name
                   %td{class: "px-3 py-1.5 text-slate-500"}= dimension.scope.to_s.humanize
+              - settings.custom_metrics.each do |metric|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "px-3 py-1.5 font-medium"}
+                    = metric.display_name
+                    %span{class: "ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"} Metric
+                  %td{class: "px-3 py-1.5 font-mono text-xs"}= metric.parameter_name
+                  %td{class: "px-3 py-1.5 text-slate-500"}= metric.scope.to_s.humanize
 
   = render layout: "shared/card", locals: {id: "data-streams", title: "Data streams", icon: "radio", class: "mt-6"} do
     - if settings.data_streams.empty?

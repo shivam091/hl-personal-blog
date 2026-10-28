@@ -3,8 +3,8 @@
 module Google
   module PageSpeed
     # The latest PageSpeed Insights run per page and device, so a slow post
-    # is spotted without running Lighthouse by hand. Only the latest is kept:
-    # how real readers' speed changes over time is the CrUX history's job.
+    # is spotted without running Lighthouse by hand. Only the latest is kept
+    # here, so the list stays one row per page; every run is in ResultHistory.
     class Result
       include Mongoid::Document
       include Mongoid::Timestamps
@@ -112,8 +112,8 @@ module Google
           CSV.generate do |csv|
             csv << [
               "URL", "Device", "Tested", "Performance", "Accessibility", "Best practices", "SEO",
-              "Lab LCP (ms)", "Lab CLS", "Lab TBT (ms)", "Field LCP (ms)", "Field INP (ms)", "Field CLS",
-              "Field from", "Error"
+              "Lab LCP (ms)", "Lab CLS", "Lab TBT (ms)", "Lab FCP (ms)", "Lab Speed Index (ms)",
+              "Field LCP (ms)", "Field INP (ms)", "Field CLS", "Field category", "Field from", "Error"
             ]
             results.each do |result|
               csv << [
@@ -124,9 +124,12 @@ module Google
                 result.lab_lcp_ms&.round,
                 result.lab_cls&.round(3),
                 result.lab_tbt_ms&.round,
+                result.lab_fcp_ms&.round,
+                result.lab_speed_index_ms&.round,
                 result.field_lcp_ms&.round,
                 result.field_inp_ms&.round,
                 result.field_cls&.round(3),
+                result.field_category,
                 result.field_source, result.error
               ]
             end

@@ -94,6 +94,58 @@ RSpec.describe "PageSpeed", type: :request do
     )
   end
 
+  it "shows CrUX's overall verdict and the lab figures behind the score, linking each test to the page's runs" do
+    Google::PageSpeed::Result.where(page_path: "/post/slow").update_all(field_category: "SLOW", lab_fcp_ms: 1200, lab_speed_index_ms: 3400,
+      lab_tbt_ms: 250, lab_cls: 0.12)
+
+    get google_page_speed_results_path(device: "mobile")
+
+    row = page.css("table").last.at_css("tbody tr")
+    expect(row.css("td").map { |td| td.text.squish }.values_at(8, 9)).to eq(["Slow", "1.2 s · 3.4 s · 250 ms · 0.12"])
+    expect(row.css("td")[10].at_css("a")["href"]).to eq(google_page_speed_history_path(url: "https://blog.example.com/post/slow", device: "mobile"))
+  end
+
+  it "lists pages whose latest run scored well below the one before" do
+    Google::PageSpeed::ResultHistory.create!(url: "https://blog.example.com/post/slow", page_path: "/post/slow", strategy: "mobile",
+      fetched_at: 9.days.ago, performance: 0.9, lab_lcp_ms: 1500)
+    Google::PageSpeed::ResultHistory.create!(url: "https://blog.example.com/post/slow", page_path: "/post/slow", strategy: "mobile",
+      fetched_at: 1.day.ago, performance: 0.42, lab_lcp_ms: 4100)
+
+    get google_page_speed_results_path
+
+    rows = page.css("#regressions ~ div tbody tr").map { |row| row.css("td").map { |td| td.text.squish } }
+    expect(rows.map { |cells| cells.first(5) }).to eq([["/post/slow", "Mobile", "90", "42", "1.5 s → 4.1 s"]])
+  end
+
+  it "charts a page's runs and marks the one that fell" do
+    [[9, 0.9, nil], [5, nil, "Timed out"], [1, 0.6, nil]].each do |days, performance, error|
+      Google::PageSpeed::ResultHistory.create!(url: "https://blog.example.com/post/slow", page_path: "/post/slow", strategy: "mobile",
+        fetched_at: days.days.ago, performance: performance, lab_lcp_ms: (2000 if performance), error: error)
+    end
+
+    get google_page_speed_history_path(url: "https://blog.example.com/post/slow", device: "mobile")
+
+    expect(response).to have_http_status(:ok)
+    expect(page.css("#scores ~ div [data-tip]")).not_to be_empty
+    rows = page.css("#runs ~ div tbody tr")
+    expect(rows.map { |row| row.css("td")[1].text.squish }).to eq(["60 −30", "Failed: Timed out", "90"])
+    expect(rows.first["class"]).to include("bg-red-50")
+  end
+
+  it "exports a page's runs as CSV" do
+    Google::PageSpeed::ResultHistory.create!(url: "https://blog.example.com/post/slow", strategy: "desktop", fetched_at: 1.day.ago, performance: 0.5)
+
+    get google_page_speed_history_path(url: "https://blog.example.com/post/slow", device: "desktop", format: :csv)
+
+    expect(CSV.parse(response.body).map(&:first)).to eq(["URL", "https://blog.example.com/post/slow"])
+  end
+
+  it "is not found for a page never tested" do
+    get google_page_speed_history_path(url: "https://blog.example.com/nowhere")
+
+    expect(response).to have_http_status(:not_found)
+  end
+
   it "queues a batch of tests" do
     expect { post sync_google_page_speed_results_path }.to have_enqueued_job(Google::PageSpeed::SyncJob)
     expect(SyncRequest.last).to have_attributes(
@@ -105,6 +157,8 @@ RSpec.describe "PageSpeed", type: :request do
   it "exports the tests as CSV" do
     get google_page_speed_results_path(format: :csv)
 
-    expect(CSV.parse(response.body).size).to eq(4)
+    csv = CSV.parse(response.body)
+    expect(csv.size).to eq(4)
+    expect(csv.first).to include("Lab FCP (ms)", "Lab Speed Index (ms)", "Field category")
   end
 end

@@ -17,7 +17,10 @@ module Google
         "landing-pages" => "Landing pages that lose readers",
         "sites" => "Referring sites",
         "channels" => "Channels",
-        "times" => "When readers come"
+        "times" => "When readers come",
+        "content-groups" => "Content types",
+        "categories" => "Categories",
+        "tags" => "Tags"
       }.freeze
       # Stands in for reading to the end, since GA's enhanced measurement
       # fires it only once a reader nears a page's end.
@@ -35,11 +38,43 @@ module Google
         end
       end
 
-      ReadThrough = Struct.new(:page_path, :views, :scrolls, keyword_init: true) do
+      # Finished reads from the day the blog began sending them, GA's 90%
+      # scroll before it, so a period spanning the change isn't cut short.
+      ReadThrough = Struct.new(:page_path, :views, :scrolls, :reads, :read_seconds, keyword_init: true) do
+        def completions
+          scrolls + reads
+        end
+
         def rate
-          scrolls.fdiv(views) if views.positive?
+          completions.fdiv(views) if views.positive?
+        end
+
+        def seconds_per_read
+          read_seconds.fdiv(reads) if reads.positive?
         end
       end
+
+      # Engagement is the pages' own, joined by path, since GA files a
+      # reader's engagement under events that carry no content group.
+      ContentGroup = Struct.new(:name, :pages, :views, :sessions, :engaged_sessions, :engagement_seconds, :reads, :read_seconds,
+        keyword_init: true) do
+        def engagement_rate
+          engaged_sessions.fdiv(sessions) if sessions.positive?
+        end
+
+        def engagement_seconds_per_view
+          engagement_seconds.fdiv(views) if views.positive?
+        end
+
+        def read_rate
+          reads.fdiv(views) if views.positive?
+        end
+
+        def seconds_per_read
+          read_seconds.fdiv(reads) if reads.positive?
+        end
+      end
+      CONTENT_GROUPINGS = {"content-groups" => :content_group, "categories" => :content_category, "tags" => :content_tags}.freeze
 
       SiteReferral = Struct.new(:host, :views, :previous_views, keyword_init: true) do
         def new?
@@ -142,7 +177,47 @@ module Google
       end
 
       def scrolls?
-        read_through_rows.any? { |row| row.scrolls.positive? }
+        read_through_rows.any? { |row| row.completions.positive? }
+      end
+
+      # Nil while the blog has sent none, so the page says reads are still
+      # all scrolls.
+      def reads_since
+        return @reads_since if defined?(@reads_since)
+
+        @reads_since = ArticleReadStat.first_date
+      end
+
+      # A tag's views are counted under each of a page's tags, so tags'
+      # figures overlap and don't add up to the site's.
+      def content_groups(grouping = :content_group, within = period)
+        @content_groups ||= {}
+        @content_groups[[grouping, within.key]] ||= begin
+          labels = ContentGroupStat.labels(within.apply(ContentGroupStat.all))
+          reads = ArticleReadStat.grouped(within.apply(ArticleReadStat.all), by: [:page_path]).index_by { |row| row[:page_path] }
+          groups = Hash.new { |hash, name| hash[name] = ContentGroup.new(name: name, pages: 0, views: 0, sessions: 0, engaged_sessions: 0,
+            engagement_seconds: 0.0, reads: 0, read_seconds: 0) }
+          pages(within).each do |path, row|
+            label = labels[path]
+            names = label ? content_names(label, grouping) : [SyncService::NOT_SET]
+            read = reads[path]
+            names.each do |name|
+              group = groups[name]
+              group.pages += 1
+              group.views += row.views
+              group.sessions += row.sessions
+              group.engaged_sessions += row.engaged_sessions
+              group.engagement_seconds += row.engagement_seconds
+              group.reads += read ? read[:reads].to_i : 0
+              group.read_seconds += read ? read[:read_seconds].to_i : 0
+            end
+          end
+          groups.values.sort_by { |group| [-group.views, group.name.to_s] }
+        end
+      end
+
+      def content_groups?
+        ContentGroupStat.where(date: period.from..period.to).exists?
       end
 
       # Landing pages have no country breakdown, so these are every country's.
@@ -240,9 +315,15 @@ module Google
               ]
             end
           when "read-through"
-            csv << ["Page", "Views", "Scrolls", "Read-through rate"]
+            csv << ["Page", "Views", "Scrolls", "Finished reads", "Read-through rate", "Reading time per read (s)"]
             read_through(limit: nil).each do |row|
-              csv << [row.page_path, row.views, row.scrolls, row.rate.round(4)]
+              csv << [row.page_path, row.views, row.scrolls, row.reads, row.rate.round(4), row.seconds_per_read&.round(1)]
+            end
+          when *CONTENT_GROUPINGS.keys
+            csv << ["Name", "Pages", "Views", "Engagement rate", "Engagement per view (s)", "Finished reads", "Read rate", "Reading time per read (s)"]
+            content_groups(CONTENT_GROUPINGS.fetch(export)).each do |row|
+              csv << [row.name, row.pages, row.views, row.engagement_rate&.round(4), row.engagement_seconds_per_view&.round(1), row.reads,
+                row.read_rate&.round(4), row.seconds_per_read&.round(1)]
             end
           when "landing-pages"
             csv << ["Landing page", "Sessions", "Engagement rate", "Engagement per session (s)"]
@@ -284,20 +365,29 @@ module Google
         end
       end
 
-      SpeedPoint = Struct.new(:page_path, :views, :lcp_ms, :performance, :engagement_rate, keyword_init: true)
+      SpeedPoint = Struct.new(:page_path, :views, :lcp_ms, :performance, :engagement_rate, :source, keyword_init: true)
+      # Fewer readers' reports than this, and one slow visit sets a page's
+      # load time.
+      MIN_VITAL_REPORTS = 10
 
-      # Phones' lab LCP, since most readers come on one and a lab run is
-      # measured the same way for every page, unlike real readers' figures
-      # that only well-read pages have.
-      def speed_points(strategy: "mobile")
-        results = Google::PageSpeed::Result.where(strategy: strategy, :lab_lcp_ms.ne => nil)
-          .only(:page_path, :lab_lcp_ms, :performance).index_by(&:page_path)
-        pages.values.filter_map do |row|
-          result = results[row[:page_path]]
-          next unless result && row.views >= MIN_VIEWS
+      # Readers' own LCP once the blog reports it, since that's the load
+      # time engagement actually followed; PageSpeed's lab run on a phone
+      # until then, measured the same way for every page.
+      def speed_source
+        @speed_source ||= speed_points(source: :readers).any? ? :readers : :lab
+      end
 
-          SpeedPoint.new(page_path: row[:page_path], views: row.views, lcp_ms: result.lab_lcp_ms, performance: result.performance,
-            engagement_rate: row.engagement_rate)
+      def speed_points(source: speed_source, strategy: "mobile")
+        @speed_points ||= {}
+        @speed_points[source] ||= begin
+          lcp = source == :readers ? readers_lcp : lab_lcp(strategy)
+          pages.values.filter_map do |row|
+            point = lcp[row[:page_path]]
+            next unless point && row.views >= MIN_VIEWS
+
+            SpeedPoint.new(page_path: row[:page_path], views: row.views, lcp_ms: point[:lcp_ms], performance: point[:performance],
+              engagement_rate: row.engagement_rate, source: source)
+          end
         end
       end
 
@@ -368,18 +458,47 @@ module Google
       end
 
       def scroll_counts(within = period)
-        EventStat.grouped(within.apply(EventStat.where(event_name: SCROLL_EVENT)), by: [:page_path])
-          .to_h { |row| [row[:page_path], row.event_count] }
+        scrolls = EventStat.where(event_name: SCROLL_EVENT)
+        scrolls = scrolls.where(:date.lt => reads_since) if reads_since
+        EventStat.grouped(within.apply(scrolls), by: [:page_path]).to_h { |row| [row[:page_path], row.event_count] }
+      end
+
+      def read_counts(within = period)
+        return {} unless reads_since
+
+        ArticleReadStat.grouped(within.apply(ArticleReadStat.all), by: [:page_path]).index_by { |row| row[:page_path] }
       end
 
       def read_through_rows(within = period)
         @read_through_rows ||= {}
         @read_through_rows[within.key] ||= begin
           scrolls = scroll_counts(within)
+          reads = read_counts(within)
           Stat.grouped(within.apply(Stat.all), by: [:page_path]).map do |row|
-            ReadThrough.new(page_path: row[:page_path], views: row.views, scrolls: scrolls.fetch(row[:page_path], 0))
+            read = reads[row[:page_path]]
+            ReadThrough.new(page_path: row[:page_path], views: row.views, scrolls: scrolls.fetch(row[:page_path], 0),
+              reads: read ? read[:reads].to_i : 0, read_seconds: read ? read[:read_seconds].to_i : 0)
           end
         end
+      end
+
+      def content_names(label, grouping)
+        return label[:content_tags].to_s.split(",").map(&:strip).compact_blank.presence || [SyncService::NOT_SET] if grouping == :content_tags
+
+        [label[grouping].presence || SyncService::NOT_SET]
+      end
+
+      # Only from pages with enough reports, so a page read twice isn't
+      # placed by one slow visit.
+      def readers_lcp
+        WebVitalStat.grouped(period.apply(WebVitalStat.where(metric: "LCP")), by: [:page_path])
+          .select { |row| row.event_count >= MIN_VITAL_REPORTS && row.mean_value }
+          .to_h { |row| [row[:page_path], {lcp_ms: row.mean_value}] }
+      end
+
+      def lab_lcp(strategy)
+        Google::PageSpeed::Result.where(strategy: strategy, :lab_lcp_ms.ne => nil).only(:page_path, :lab_lcp_ms, :performance)
+          .to_h { |result| [result.page_path, {lcp_ms: result.lab_lcp_ms, performance: result.performance}] }
       end
 
       def time_views(key, slots)

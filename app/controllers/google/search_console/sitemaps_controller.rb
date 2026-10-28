@@ -31,6 +31,8 @@ module Google
             @pagination = Pagination.new(sitemaps, params)
             @sitemaps = @pagination.records
             @tab_counts = @filtering.tab_counts(Sitemap.all)
+            @history = SitemapHistory.daily
+            @changes = @sitemaps.to_a.to_h { |sitemap| [sitemap.path, SitemapHistory.changes(sitemap.path)] }
           end
           format.csv do
             send_csv Sitemap.to_csv(sitemaps), filename: "sitemaps-#{Date.current.iso8601}.csv"

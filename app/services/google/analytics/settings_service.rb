@@ -26,10 +26,21 @@ module Google
 
       KeyEvent = Struct.new(:event_name, :counting_method, :custom, keyword_init: true)
       CustomDimension = Struct.new(:display_name, :parameter_name, :scope, keyword_init: true)
-      # The parameters the blog's click tracking sends, which GA leaves out of
+      CustomMetric = Struct.new(:display_name, :parameter_name, :scope, :measurement_unit, keyword_init: true)
+      # The parameters the blog's tracking sends, which GA leaves out of
       # every report until each is registered.
       EXPECTED_CUSTOM_DIMENSIONS = {
-        "event_label" => CustomDimension.new(display_name: "Event label", parameter_name: "event_label")
+        "event_label" => CustomDimension.new(display_name: "Event label", parameter_name: "event_label"),
+        "metric_rating" => CustomDimension.new(display_name: "Web Vitals rating", parameter_name: "metric_rating"),
+        "content_category" => CustomDimension.new(display_name: "Content category", parameter_name: "content_category"),
+        "content_tags" => CustomDimension.new(display_name: "Content tags", parameter_name: "content_tags"),
+        "link_domain" => CustomDimension.new(display_name: "Link domain", parameter_name: "link_domain"),
+        "outbound" => CustomDimension.new(display_name: "Outbound", parameter_name: "outbound")
+      }.freeze
+      # A number GA could only count as a dimension's distinct values unless
+      # it's registered as a metric, which it then sums.
+      EXPECTED_CUSTOM_METRICS = {
+        "read_seconds" => CustomMetric.new(display_name: "Read seconds", parameter_name: "read_seconds", measurement_unit: "SECONDS")
       }.freeze
       # Events the reports here are built on that GA only sends with these
       # switched on, since the blog's own tracking doesn't send them.
@@ -57,7 +68,7 @@ module Google
       end
       Settings = Struct.new(
         :display_name, :time_zone, :event_retention, :reset_on_new_activity, :key_events,
-        :custom_dimensions, :data_streams, :annotations, :google_signals, keyword_init: true
+        :custom_dimensions, :custom_metrics, :data_streams, :annotations, :google_signals, keyword_init: true
       ) do
         def retention_label
           RETENTION.fetch(event_retention, event_retention.to_s.humanize.presence || "Unknown")
@@ -84,6 +95,11 @@ module Google
           registered = custom_dimensions.select { |dimension| dimension.scope == "EVENT" }.map(&:parameter_name)
           EXPECTED_CUSTOM_DIMENSIONS.keys - registered
         end
+
+        def missing_custom_metrics
+          registered = custom_metrics.select { |metric| metric.scope == "EVENT" }.map(&:parameter_name)
+          EXPECTED_CUSTOM_METRICS.keys - registered
+        end
       end
       Result = Struct.new(:settings, :errors, keyword_init: true)
 
@@ -95,7 +111,7 @@ module Google
         # Versioned, so a Settings cached before a field was added isn't
         # read back.
         def cache_key(property)
-          "google/analytics_settings/v4/#{property}"
+          "google/analytics_settings/v5/#{property}"
         end
       end
 
@@ -139,6 +155,14 @@ module Google
               display_name: dimension["displayName"],
               parameter_name: dimension["parameterName"],
               scope: dimension["scope"]
+            )
+          end.sort_by(&:display_name),
+          custom_metrics: list("#{base}/customMetrics", "customMetrics").map do |metric|
+            CustomMetric.new(
+              display_name: metric["displayName"],
+              parameter_name: metric["parameterName"],
+              scope: metric["scope"],
+              measurement_unit: metric["measurementUnit"]
             )
           end.sort_by(&:display_name),
           data_streams: data_streams(base),

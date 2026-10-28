@@ -49,3 +49,34 @@
                     %p{class: ["text-xs", issue["severity"] == "ERROR" ? "text-red-700" : "text-amber-700"]} #{humanize_state(issue["severity"])}: #{issue["message"]}
     = render "shared/details", id: "found-in", title: "Found in", icon: "map",
       rows: [["Sitemaps", safe_join(inspection.sitemaps, tag.br).presence], ["Referring pages", safe_join(inspection.referring_urls, tag.br).presence]]
+
+-# Newest first, a row per change, so the day a page fell out of the index
+-# reads at the top.
+= render layout: "shared/card", locals: {id: "timeline", title: "Timeline", icon: "calendar", class: "mt-6"} do
+  - if @timeline.empty?
+    %p{class: "px-4 py-3 text-sm text-slate-500"} No changes kept yet. Each inspection from now on that finds something new is added here.
+  - else
+    %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+      Each inspection that found the verdict, coverage, indexing, fetch or robots.txt state changed, newest first.
+    %div{class: "overflow-x-auto"}
+      %table{class: "w-full border-collapse text-sm"}
+        %thead{class: "text-slate-500"}
+          %tr
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Inspected
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Verdict
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Coverage
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Page fetch
+            %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Last crawled
+        %tbody
+          - @timeline.each_with_index do |change, index|
+            - before = @timeline[index + 1]
+            - dropped = before&.indexed? && !change.indexed?
+            %tr{class: ["border-t border-slate-200", ("bg-red-50" if dropped)]}
+              %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(change.inspected_at)
+              %td{class: "px-3 py-1.5 whitespace-nowrap"}
+                = verdict_badge(change.verdict)
+                - if dropped
+                  %span{class: "ml-1 text-xs font-medium text-red-700"} Dropped out of the index
+              %td{class: "px-3 py-1.5 text-slate-600"}= change.coverage_state.presence || "—"
+              %td{class: "px-3 py-1.5 text-slate-600"}= humanize_state(change.page_fetch_state)
+              %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(change.last_crawled_at)

@@ -70,13 +70,33 @@ module Google
       private
 
       # Never-tested first, then the stalest, so daily runs work through the
-      # whole blog in turn.
+      # whole blog in turn. Crawled pages too, since listings, tags and the
+      # static pages are in no feed but are just as often landed on.
       def urls_due
-        urls = [@home, *FeedEntry.pluck(:_id)].uniq
+        urls = candidate_urls
         tested = Result.where(:url.in => urls)
                   .group_by(&:url)
                   .transform_values { |results| results.map(&:fetched_at).compact.min }
         urls.sort_by { |url| [tested[url] ? 1 : 0, tested[url] || Time.at(0), url] }.first(@limit)
+      end
+
+      # Only the blog's own pages, since a crawl report can list other hosts,
+      # and not its sitemaps or files, which Lighthouse can't score. One URL
+      # per page with or without its trailing slash, the first spelling
+      # kept, so a page isn't tested twice a turn.
+      def candidate_urls
+        host = URI.parse(@home).host
+        crawled = CrawledPage.pluck(:url).select do |url|
+          uri = URI.parse(url)
+          uri.host == host && !File.extname(uri.path).match?(/\A\.(xml|txt|pdf|png|jpe?g|gif|svg|webp|ico|json|rss)\z/i)
+        rescue URI::InvalidURIError
+          false
+        end
+        [@home, *FeedEntry.pluck(:_id), *crawled].map { |url| url.split("#").first }.uniq do |url|
+          url.end_with?("/") && URI.parse(url).path != "/" ? url.chomp("/") : url
+        rescue URI::InvalidURIError
+          url
+        end
       end
 
       # A failed run keeps the last good figures but is dated, so a page that
@@ -97,13 +117,14 @@ module Google
         save(record, result)
       rescue KeyClient::Error => e
         record.assign_attributes(page_path: IndexCoverage.path_of(url), fetched_at: Time.current, error: e.message)
-        record.save
+        ResultHistory.record(record) if record.save
         raise
       end
 
       def save(record, result)
         outcome = record.new_record? ? :created : :updated
         if record.save
+          ResultHistory.record(record)
           result[outcome] += 1
         else
           result.errors << "#{record.url}: #{record.errors.full_messages.to_sentence}"

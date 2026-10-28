@@ -62,6 +62,36 @@
             label: "Lab LCP against real readers' LCP for each page, with the good limit boxed",
             key: [["Mobile", colors["mobile"]], ["Desktop", colors["desktop"]]])
 
+  -# Above the averages, since a page that just got slower is the one a
+  -# recent change broke, and the fix is freshest now.
+  - if @regressions.any?
+    %div{class: "mb-6"}
+      = render layout: "shared/card", locals: {id: "regressions", title: "Got slower", icon: "arrow-down"} do
+        %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+          Pages whose latest performance score is #{(Google::PageSpeed::ResultHistory::REGRESSION * 100).round} or more below
+          their run before, biggest drop first.
+        %div{class: "overflow-x-auto"}
+          %table{class: "w-full border-collapse text-sm"}
+            %thead{class: "text-slate-500"}
+              %tr
+                %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Page
+                %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Device
+                %th{scope: "col", class: "px-3 py-1.5 text-right font-medium whitespace-nowrap"} Before
+                %th{scope: "col", class: "px-3 py-1.5 text-right font-medium whitespace-nowrap"} Now
+                %th{scope: "col", class: "px-3 py-1.5 text-right font-medium whitespace-nowrap"} Lab LCP
+                %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Tested
+            %tbody
+              - @regressions.each do |row|
+                %tr{class: "border-t border-slate-200"}
+                  %td{class: "w-full px-3 py-1.5"}
+                    = blog_page_link(row.page_path || row.url, google_page_speed_history_path(url: row.url, device: row.strategy), live: row.url)
+                  %td{class: "px-3 py-1.5 text-slate-500"}= row.strategy.capitalize
+                  %td{class: "px-3 py-1.5 text-right tabular-nums #{lighthouse_score_class(row.previous.performance)}"}= (row.previous.performance * 100).round
+                  %td{class: "px-3 py-1.5 text-right tabular-nums #{lighthouse_score_class(row.latest.performance)}"}= (row.latest.performance * 100).round
+                  %td{class: "px-3 py-1.5 text-right tabular-nums whitespace-nowrap text-slate-600"}
+                    #{lab_value(:lab_lcp_ms, row.previous.lab_lcp_ms)} → #{lab_value(:lab_lcp_ms, row.latest.lab_lcp_ms)}
+                  %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(row.latest.fetched_at)
+
   - category_labels = {"performance" => "Performance", "accessibility" => "Accessibility", "best_practices" => "Best practices", "seo" => "SEO"}
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     -# Averages per category rather than per page, so a weakness the whole
@@ -109,6 +139,9 @@
           = sort_header @sorting, "LCP", "field_lcp_ms", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
           = sort_header @sorting, "INP", "field_inp_ms", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
           = sort_header @sorting, "CLS", "field_cls", keep: sort_keep, class: "px-3 py-2.5 text-right font-semibold"
+          %th{scope: "col", class: "px-3 py-2.5 font-semibold", title: "Real Chrome users' overall verdict on the page, from CrUX"} Overall
+          %th{scope: "col", class: "px-3 py-2.5 text-right font-semibold whitespace-nowrap", title: "First Contentful Paint, Speed Index, Total Blocking Time and Cumulative Layout Shift in the lab test"}
+            Lab FCP · SI · TBT · CLS
           = sort_header @sorting, "Tested", "fetched_at", keep: sort_keep, class: "px-3 py-2.5 font-semibold"
       %tbody
         - @results.each.with_index(@pagination.first_item) do |result, number|
@@ -134,10 +167,16 @@
                     %span{class: "text-xs text-slate-400"} site
                 - else
                   %span{class: "text-slate-400", title: "Too few Chrome users for Google to say"} —
-            %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}= time_or_dash(result.fetched_at)
+            %td{class: "px-3 py-2 whitespace-nowrap"}= field_category_label(result.field_category)
+            %td{class: "px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-600"}
+              = %i[lab_fcp_ms lab_speed_index_ms lab_tbt_ms lab_cls].map { |field| lab_value(field, result[field]) }.join(" · ")
+            %td{class: "px-3 py-2 whitespace-nowrap text-slate-500"}
+              = link_to google_page_speed_history_path(url: result.url, device: result.strategy), title: "Every run of this page on #{result.strategy}",
+                class: "hover:text-slate-900 hover:underline" do
+                = time_or_dash(result.fetched_at)
 
   = pagination_nav @pagination, keep: [@filtering, @sorting]
 
 %p{class: "mt-4 text-xs text-slate-500"}
   LCP, INP and CLS are real Chrome users' 75th percentiles, green when good and red when poor by Google's thresholds. Scores are out of 100,
-  from one lab test on Google's servers.
+  from one lab test on Google's servers. Open a test's date for every run of that page.

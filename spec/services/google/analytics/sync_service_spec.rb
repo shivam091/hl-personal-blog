@@ -15,7 +15,10 @@ RSpec.describe Google::Analytics::SyncService do
     google_stubs.post(url) do |env|
       body = JSON.parse(env.body)
       requests << body
-      rows = reports.fetch(body["dimensions"].drop(1).map { |dimension| dimension["name"] }, [])
+      # Custom metrics too, so a report asked by page alone isn't answered
+      # with the page traffic's rows.
+      custom = body["metrics"].map { |metric| metric["name"] }.grep(/\AcustomEvent:/)
+      rows = reports.fetch(body["dimensions"].drop(1).map { |dimension| dimension["name"] } + custom, [])
       [200, {}, {rows: rows, rowCount: rows.size}.to_json]
     end
   end
@@ -126,6 +129,39 @@ RSpec.describe Google::Analytics::SyncService do
     ])
   end
 
+  it "stores readers' Web Vitals by rating, scaling CLS back from the thousandfold the blog sends" do
+    stub_reports(%w[pagePath eventName customEvent:metric_rating] => [
+      row(%w[20261010 /post LCP good], [4, 7200]), row(%w[20261010 /post CLS poor], [2, 600])
+    ])
+
+    sync
+    vitals = requests.find { |body| body["dimensions"].last == {"name" => "customEvent:metric_rating"} }
+    expect(vitals["metrics"].map { |metric| metric["name"] }).to eq(%w[eventCount eventValue])
+    expect(vitals.dig("dimensionFilter", "andGroup", "expressions", 1, "filter", "stringFilter", "value")).to eq("LCP|INP|CLS|FCP|TTFB")
+    expect(Google::Analytics::WebVitalStat.order(metric: :asc).pluck(:metric, :rating, :event_count, :value_sum)).to eq([
+      ["CLS", "poor", 2, 0.6], ["LCP", "good", 4, 7200.0]
+    ])
+  end
+
+  it "stores each page's content group, category and tags from its page views" do
+    stub_reports(%w[pagePath contentGroup customEvent:content_category customEvent:content_tags] => [
+      row(%w[20261010 /post tutorial css css,grid], [12])
+    ])
+
+    sync
+    expect(Google::Analytics::ContentGroupStat.all.sole).to have_attributes(page_path: "/post", content_group: "tutorial",
+      content_category: "css", content_tags: "css,grid", views: 12)
+  end
+
+  it "stores finished reads with their summed reading time" do
+    stub_reports(%w[pagePath customEvent:read_seconds] => [row(%w[20261010 /post], [3, 540])])
+
+    sync
+    reads = requests.find { |body| body["metrics"].last == {"name" => "customEvent:read_seconds"} }
+    expect(reads.dig("dimensionFilter", "andGroup", "expressions", 1, "filter", "stringFilter", "value")).to eq("article_read")
+    expect(Google::Analytics::ArticleReadStat.all.sole).to have_attributes(page_path: "/post", reads: 3, read_seconds: 540)
+  end
+
   it "stores session campaigns with the link they came from" do
     stub_reports(%w[pagePath sessionCampaignName sessionSource sessionMedium sessionManualAdContent] =>
       [row(%w[20261010 /post new_entry newsletter email button], [1, 1, 1, 1, 1, 10, 3, 0])])
@@ -190,7 +226,8 @@ RSpec.describe Google::Analytics::SyncService do
     stub_const("#{described_class}::ROW_LIMIT", 1)
     google_stubs.post(url) do |env|
       body = JSON.parse(env.body)
-      next [200, {}, {rowCount: 0}.to_json] unless body["dimensions"] == [{"name" => "date"}, {"name" => "pagePath"}]
+      next [200, {}, {rowCount: 0}.to_json] unless body["dimensions"] == [{"name" => "date"}, {"name" => "pagePath"}] &&
+        body["metrics"].first == {"name" => "screenPageViews"}
 
       requests << body["offset"]
       [200, {}, {rows: [row(["20261010", "/p#{body["offset"]}"], [1, 1, 1, 1, 1, 0, 0, 0])], rowCount: 2}.to_json]

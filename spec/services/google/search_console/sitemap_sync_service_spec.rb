@@ -36,6 +36,17 @@ RSpec.describe Google::SearchConsole::SitemapSyncService do
     expect(Google::SearchConsole::Sitemap.count).to eq(2)
   end
 
+  it "keeps every sync's figures, counting the sitemap's pages inspected as indexed" do
+    page = CrawledPage.create!(url: "https://blog.example.com/post", last_modified_at: Time.utc(2026, 10, 1))
+    google_stubs.get(url) { [200, {}, {sitemap: [entry]}.to_json] }
+    sync
+    Google::SearchConsole::UrlInspection.create!(crawled_page: page, verdict: "PASS", sitemaps: [entry[:path]])
+    sync
+
+    expect(Google::SearchConsole::SitemapHistory.order(synced_at: :asc).map { |row| [row.submitted, row.indexed, row.error_count, row.warning_count] })
+      .to eq([[42, nil, 1, 2], [42, 1, 1, 2]])
+  end
+
   it "handles a property with no sitemaps" do
     google_stubs.get(url) { [200, {}, "{}"] }
 

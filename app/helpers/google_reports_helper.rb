@@ -74,6 +74,7 @@ module GoogleReportsHelper
     when :position then value ? number_with_precision(value, precision: 1) : "—"
     when :score, :ratio then value ? number_with_precision(value, precision: 2) : "—"
     when :duration then engagement_duration(value)
+    when :milliseconds then value ? "#{number_with_delimiter(value.round)} ms" : "—"
     end
   end
 

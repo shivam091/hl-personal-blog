@@ -98,14 +98,22 @@ Rails.application.routes.draw do
       post "retention/:breakdown/sync", to: "retention#sync", as: :retention_sync
       get "realtime", to: "realtime#show", as: :realtime
       get "funnels", to: "funnels#show", as: :funnels
+      # Under Funnels, so the menu still marks where they're read.
+      resources :funnel_definitions, except: :show, path: "funnels/definitions"
       get "site-search", to: "site_searches#show", as: :site_search
+      get "web-vitals", to: "web_vitals#index", defaults: {breakdown: "lcp"}, as: :web_vitals
+      get "web-vitals/:breakdown", to: "web_vitals#index", as: :web_vitals_breakdown
+      post "web-vitals/:breakdown/sync", to: "web_vitals#sync", as: :web_vitals_sync
       get "settings", to: "settings#show", as: :settings
+      # Custom metrics too, since GA names both by their parameter.
       post "settings/custom-dimensions", to: "settings#register_dimension", as: :settings_custom_dimensions
       post "settings/annotations", to: "settings#annotate", as: :settings_annotations
       get "quota", to: "quotas#show", as: :quota
     end
 
     namespace :page_speed, path: "pagespeed" do
+      # By query, since the page is named by a full URL and its device.
+      get "history", to: "histories#show", as: :history
       resources :results, only: :index, path: "" do
         post :sync, on: :collection
       end

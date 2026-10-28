@@ -118,6 +118,7 @@ module Google
 
         outcome = inspection.new_record? ? :created : :updated
         if inspection.save
+          UrlInspectionHistory.record(page, inspection)
           result[outcome] += 1
           # Just these fields, so an old row that no longer passes validation
           # is still kept in step. An indexed page's request has landed.

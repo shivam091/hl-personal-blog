@@ -117,6 +117,23 @@ RSpec.describe "Search Console URL inspections", type: :request do
     expect(page.at_css("#found-in").parent.text).to include("https://example.com/sitemap.xml")
   end
 
+  it "times when a page dropped out of the index, on its page and in a list of every such page" do
+    Google::SearchConsole::UrlInspectionHistory.create!(crawled_page: excluded_page, url: excluded_page.url, verdict: "PASS",
+      coverage_state: "Submitted and indexed", inspected_at: Time.utc(2026, 9, 1))
+    Google::SearchConsole::UrlInspectionHistory.create!(crawled_page: excluded_page, url: excluded_page.url, verdict: "NEUTRAL",
+      coverage_state: "Alternate page with proper canonical tag", inspected_at: Time.utc(2026, 10, 11))
+
+    get google_search_console_url_inspections_path
+
+    dropped = Nokogiri::HTML5(response.body).css("#dropped ~ div tbody tr")
+    expect(dropped.map { |row| row.at_css("td").text.squish }).to eq([excluded_page.url])
+
+    get google_search_console_url_inspection_path(excluded)
+
+    rows = Nokogiri::HTML5(response.body).css("#timeline ~ div tbody tr")
+    expect(rows.map { |row| row.css("td")[1].text.squish }).to eq(["Excluded Dropped out of the index", "Indexed"])
+  end
+
   it "exports the filtered inspections" do
     get google_search_console_url_inspections_path(format: :csv, verdict: "pass")
 

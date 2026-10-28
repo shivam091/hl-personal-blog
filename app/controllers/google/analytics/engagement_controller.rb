@@ -119,6 +119,27 @@ module Google
       EXPORT_NAME = "analytics-engagement"
       SYNC_SOURCE = "Google Analytics"
       SYNC_KIND = "analytics"
+      # The blog's own reader events, named as it sends them, so what readers
+      # do on a page reads apart from GA's automatic events.
+      READER_INTERACTIONS = {
+        "article_read" => "Finished reading", "like" => "Liked", "copy_code" => "Copied code", "toc_click" => "Used the contents",
+        "related_click" => "Opened a related entry", "prev_next_click" => "Went to the previous or next entry",
+        "article_link_click" => "Followed a link in an entry", "search_result_click" => "Opened a search result",
+        "sandbox_run" => "Ran a sandbox", "sandbox_reset" => "Reset a sandbox", "sandbox_download" => "Downloaded a sandbox",
+        "sandbox_open_external" => "Opened a sandbox elsewhere", "page_not_found" => "Hit a missing page"
+      }.freeze
+
+      private
+
+      # Only on the events tab, whose rows they're a summary of.
+      def load_page
+        super
+        return unless @breakdown.key == "events"
+
+        criteria = @filtering.apply(@period.apply(EventStat.where(:event_name.in => READER_INTERACTIONS.keys)))
+        @interactions = EventStat.grouped(criteria, by: [:event_name]).to_h { |row| [row[:event_name], row.event_count] }
+        @interaction_views = Stat.grouped(@filtering.apply(@period.apply(Stat.all)), by: []).totals.views
+      end
     end
   end
 end

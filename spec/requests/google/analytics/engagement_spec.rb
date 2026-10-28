@@ -346,4 +346,13 @@ RSpec.describe "Analytics engagement", type: :request do
     get google_analytics_engagement_breakdown_path("events", format: :csv, export: "daily")
     expect(CSV.parse(response.body, headers: true).size).to eq(3)
   end
+
+  it "sums the blog's own reader events per 100 views on the events tab" do
+    Google::Analytics::EventStat.create!(date: yesterday, page_path: "/post/a", event_name: "copy_code", event_count: 4)
+    Google::Analytics::Stat.create!(date: yesterday, page_path: "/post/a", views: 200)
+
+    get google_analytics_engagement_path
+
+    expect(page.css("section[aria-labelledby=reader-interactions] dl > div").map { |item| item.text.squish }).to eq(["Copied code 4 (2.0)"])
+  end
 end

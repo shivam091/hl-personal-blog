@@ -35,6 +35,7 @@ module Google
             @lcp_pairs = Result.lcp_pairs(@filtering.searched(Result.all))
             @category_averages = Result.category_averages(@filtering.searched(Result.all))
             @weakest = Result.weakest(@filtering.searched(Result.all))
+            @regressions = ResultHistory.regressions(@filtering.searched(ResultHistory.all))
           end
           format.csv do
             send_csv Result.to_csv(results), filename: "pagespeed-#{Date.current.iso8601}.csv"

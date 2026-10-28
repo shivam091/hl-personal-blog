@@ -29,6 +29,8 @@ RSpec.describe Google::Analytics::FunnelService do
     }
   end
 
+  let(:report) { table(*steps) }
+
   def funnels(property: 123456789)
     described_class.new(property: property, client: google_client, cache: cache).call(period)
   end
@@ -36,7 +38,7 @@ RSpec.describe Google::Analytics::FunnelService do
   before do
     google_stubs.post(url) do |env|
       bodies << JSON.parse(env.body)
-      [200, {}, table(*steps).to_json]
+      [200, {}, report.to_json]
     end
   end
 
@@ -116,6 +118,53 @@ RSpec.describe Google::Analytics::FunnelService do
 
     it "counts those steps as zero" do
       expect(funnels.funnels.first.steps.map(&:users)).to eq([5, 0, 0])
+    end
+  end
+
+  it "seeds the blog's four funnels when none are stored, and reads them back in order" do
+    funnels
+
+    expect(Google::Analytics::FunnelDefinition.ordered.pluck(:key)).to eq(%w[newsletter contact share resume])
+    expect(funnels.funnels.map(&:key)).to eq(%w[newsletter contact share resume])
+    expect(funnels.funnels.find { |funnel| funnel.key == "share" }.counted_since).to eq(Date.new(2026, 10, 23))
+    expect(funnels.funnels.first.server_sent).to be(true)
+  end
+
+  it "asks GA again once a funnel is edited" do
+    funnels
+    Google::Analytics::FunnelDefinition.find_by(key: "resume").update!(title: "Resume downloads")
+    funnels
+
+    expect(bodies.size).to eq(5)
+  end
+
+  context "when split by device" do
+    let(:report) do
+      rows = [["1. Visited the blog", "RESERVED_TOTAL", 100], ["2. Read an entry", "RESERVED_TOTAL", 40],
+        ["1. Visited the blog", "desktop", 30], ["2. Read an entry", "desktop", 20],
+        ["1. Visited the blog", "mobile", 70], ["2. Read an entry", "mobile", 20]]
+      table.tap do |split|
+        split[:funnelTable][:dimensionHeaders] << {name: "deviceCategory"}
+        split[:funnelTable][:rows] = rows.map do |name, device, users|
+          {dimensionValues: [{value: name}, {value: device}], metricValues: [{value: users.to_s}, {value: "0"}, {value: "0"}, {value: "0"}]}
+        end
+      end
+    end
+
+    it "asks GA for the split and reads each device's steps apart from the totals, most readers first" do
+      newsletter = described_class.new(property: 123456789, client: google_client, cache: cache).call(period, breakdown: "device").funnels.first
+
+      expect(bodies.first["funnelBreakdown"]).to eq("breakdownDimension" => {"name" => "deviceCategory"}, "limit" => 10)
+      expect(newsletter.steps.map(&:users)).to eq([100, 40, 0])
+      expect(newsletter.segments.map { |segment| [segment.value, segment.steps.map(&:users)] })
+        .to eq([["mobile", [70, 20, 0]], ["desktop", [30, 20, 0]]])
+    end
+
+    it "reads an unknown split as none" do
+      result = described_class.new(property: 123456789, client: google_client, cache: cache).call(period, breakdown: "browser")
+
+      expect(result.breakdown).to be_nil
+      expect(bodies.first).not_to have_key("funnelBreakdown")
     end
   end
 

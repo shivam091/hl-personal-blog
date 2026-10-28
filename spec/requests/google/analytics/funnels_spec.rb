@@ -85,7 +85,8 @@ RSpec.describe "Analytics funnels", type: :request do
   it "says from when the share funnel's last step counts, while either period reaches back past it" do
     steps = [service::Step.new(name: "Visited the blog", users: 10), service::Step.new(name: "Shared the entry", users: 1)]
     allow(service).to receive(:call) do
-      service::Result.new(funnels: [service::Funnel.new(key: "share", title: "Reading to sharing", steps: steps)], errors: [])
+      service::Result.new(funnels: [service::Funnel.new(key: "share", title: "Reading to sharing", steps: steps,
+        counted_since: Date.new(2026, 10, 23), server_sent: false)], errors: [])
     end
 
     get google_analytics_funnels_path(from: "2026-10-01", to: "2026-10-23")
@@ -99,6 +100,41 @@ RSpec.describe "Analytics funnels", type: :request do
     expect(response.body).not_to include("The last step only counts from")
     # Shares are sent from the browser, so a blocked one has nothing counted elsewhere.
     expect(response.body).not_to include("browser blocks Analytics")
+  end
+
+  it "sets each segment's readers at every step beside the funnel's, when split" do
+    steps = ->(*users) { users.map.with_index { |count, index| service::Step.new(name: "Step #{index + 1}", users: count) } }
+    allow(service).to receive(:call) do |_period, breakdown:, **|
+      service::Result.new(breakdown: breakdown, errors: [], funnels: [service::Funnel.new(key: "newsletter", title: "Reading to subscribing",
+        steps: steps.(100, 40, 2), segments: [service::Segment.new(value: "IN", steps: steps.(60, 30, 2))])])
+    end
+
+    get google_analytics_funnels_path(breakdown: "country", compare: "off")
+
+    page = Nokogiri::HTML5(response.body)
+    expect(service).to have_received(:call).with(anything, breakdown: "country", definitions: anything)
+    segment = page.css("#funnel-newsletter ~ div table").last
+    expect(segment.css("thead th").map { |th| th.text.strip }).to eq(["Country", "Step 1", "Step 2", "Step 3", "All the way"])
+    expect(segment.css("tbody td").map { |td| td.text.strip }).to eq(["🇮🇳 IN", "60", "30", "2", "3.3%"])
+  end
+
+  it "exports every step, the whole funnel's and each segment's" do
+    steps = ->(*users) { users.map.with_index { |count, index| service::Step.new(name: "Step #{index + 1}", users: count, completion_rate: 0.5, abandonments: 1) } }
+    allow(service).to receive(:call) do |_period, breakdown:, **|
+      service::Result.new(breakdown: breakdown, errors: [], funnels: [service::Funnel.new(key: "resume", title: "Resume",
+        steps: steps.(10, 2), segments: [service::Segment.new(value: "mobile", steps: steps.(6, 1))])])
+    end
+
+    get google_analytics_funnels_path(format: :csv, breakdown: "device", from: "2026-10-01", to: "2026-10-07", compare: "off")
+
+    expect(response.headers["Content-Disposition"]).to include("analytics-funnels-by-device-2026-10-01-to-2026-10-07.csv")
+    expect(CSV.parse(response.body)).to eq([
+      ["Funnel", "Segment", "Step number", "Step", "Readers", "Went on", "Dropped", "Readers before"],
+      ["Resume", "All", "1", "Step 1", "10", "0.5", "1", nil],
+      ["Resume", "All", "2", "Step 2", "2", nil, nil, nil],
+      ["Resume", "mobile", "1", "Step 1", "6", "0.5", "1", nil],
+      ["Resume", "mobile", "2", "Step 2", "1", nil, nil, nil]
+    ])
   end
 
   it "says why when Analytics can't be read" do

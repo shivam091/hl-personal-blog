@@ -130,6 +130,29 @@ RSpec.describe Google::PageSpeed::SyncService do
     expect(Google::PageSpeed::Result.find_by(url: home, strategy: "mobile").fetched_at).to be > 1.minute.ago
   end
 
+  it "keeps every run, failed ones without figures, so the page's history outlives its latest result" do
+    runs = [[200, {}, psi_response(performance: 0.9).to_json], [500, {}, {error: {message: "Quota exceeded"}}.to_json]]
+    google_stubs.get(url) { runs.size > 1 ? runs.shift : runs.first }
+
+    sync(limit: 1)
+    history = Google::PageSpeed::ResultHistory.where(url: home).order(fetched_at: :asc).to_a
+    expect(history.map { |run| [run.strategy, run.performance, run.lab_fcp_ms, run.error] }).to eq([
+      ["mobile", 0.9, 900.0, nil], ["desktop", nil, nil, "Quota exceeded"]
+    ])
+  end
+
+  it "tests the blog's crawled pages too, once each, leaving out other hosts and files" do
+    %w[https://blog.example.com/tag/css https://blog.example.com/post/a/ https://blog.example.com/sitemap.xml
+      https://elsewhere.example.com/post/b].each { |page| CrawledPage.create!(url: page, last_modified_at: 1.day.ago) }
+    google_stubs.get(url) do |env|
+      requests << env.params["url"]
+      [200, {}, psi_response.to_json]
+    end
+
+    sync
+    expect(requests.uniq).to contain_exactly(home, "https://blog.example.com/post/a", "https://blog.example.com/tag/css")
+  end
+
   it "says why without an API key" do
     expect(described_class.call(client: google_key_client(api_key: nil)).errors).to eq(
       ["Google API key not configured (credentials google.api_key)"]

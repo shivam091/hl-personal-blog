@@ -26,7 +26,12 @@ module Google
         synced = SyncLock.hold("google/search_console/sitemaps") do
           listed = @client.get(format(LIST_URL, site: ERB::Util.url_encode(@site))).fetch("sitemap", [])
           sitemaps = Sitemap.where(:path.in => listed.map { |entry| entry["path"] }).index_by(&:path)
-          listed.each { |entry| sync_sitemap(sitemaps[entry["path"]] || Sitemap.new(path: entry["path"]), entry, result) }
+          synced_at = Time.current
+          listed.each do |entry|
+            sitemap = sitemaps[entry["path"]] || Sitemap.new(path: entry["path"])
+            sync_sitemap(sitemap, entry, result)
+            SitemapHistory.record(sitemap, synced_at: synced_at) if sitemap.persisted?
+          end
         end
         result.errors << "Search Console sitemaps: another sync is already running, so this one was skipped" unless synced
         result

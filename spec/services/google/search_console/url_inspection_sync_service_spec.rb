@@ -161,6 +161,16 @@ RSpec.describe Google::SearchConsole::UrlInspectionSyncService do
     expect(Google::SearchConsole::UrlInspection.count).to eq(1)
   end
 
+  it "keeps a page's past verdicts, only those that changed, so a drop out of the index is dated" do
+    crawled = page("/post", indexed: true)
+    stub_inspections(verdicts: %w[PASS PASS NEUTRAL])
+    3.times { sync }
+
+    expect(Google::SearchConsole::UrlInspectionHistory.timeline(crawled).map { |change| [change.verdict, change.url] }).to eq([
+      ["NEUTRAL", crawled.url], ["PASS", crawled.url]
+    ])
+  end
+
   it "inspects pages never inspected first, then those inspected longest ago, up to the limit" do
     recent, stale, fresh = page("/recent"), page("/stale"), page("/fresh")
     Google::SearchConsole::UrlInspection.create!(crawled_page: recent, inspected_at: 1.day.ago)

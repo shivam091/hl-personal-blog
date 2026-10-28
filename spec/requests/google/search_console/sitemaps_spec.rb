@@ -25,6 +25,19 @@ RSpec.describe "Search Console sitemaps", type: :request do
     expect(response.body).to match(%r{With errors\s*<span[^>]*>1</span>})
   end
 
+  it "charts every sitemap's URLs and errors over time, and lists each one's changes" do
+    [[3, 40, 0], [2, 42, 0], [1, 42, 1]].each do |days, submitted, errors|
+      Google::SearchConsole::SitemapHistory.create!(path: clean.path, synced_at: days.days.ago, submitted: submitted, error_count: errors)
+    end
+
+    get google_search_console_sitemaps_path
+
+    page = Nokogiri::HTML5(response.body)
+    expect(page.css("#sitemap-urls ~ div [data-tip]")).not_to be_empty
+    changes = page.css("table[data-sitemap-changes='#{clean.path}'] tbody tr").map { |row| row.css("td")[1..].map { |td| td.text.squish } }
+    expect(changes).to eq([["42", "—", "1", "0"], ["42", "—", "0", "0"], ["40", "—", "0", "0"]])
+  end
+
   it "exports the filtered sitemaps" do
     get google_search_console_sitemaps_path(format: :csv, q: "sitemap")
 

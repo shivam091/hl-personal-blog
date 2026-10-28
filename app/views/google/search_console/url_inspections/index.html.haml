@@ -50,6 +50,32 @@
                 %td{class: "px-3 py-1.5 whitespace-nowrap #{"text-amber-700" if row.page.nil?}"}= row.status
                 %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(row.inspection&.inspected_at)
 
+-# Beside new entries, since a page that left the index is losing traffic
+-# it had, which is costlier than traffic a new one hasn't won yet.
+- if @dropped.any?
+  %div{class: "mb-6"}
+    = render layout: "shared/card", locals: {id: "dropped", title: "Dropped out of the index", icon: "alert-triangle"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Pages an earlier inspection found indexed that the latest doesn't, latest drop first.
+      %div{class: "overflow-x-auto"}
+        %table{class: "w-full border-collapse text-sm"}
+          %thead{class: "text-slate-500"}
+            %tr
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Page
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Now
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Indexed since
+              %th{scope: "col", class: "px-3 py-1.5 text-left font-medium whitespace-nowrap"} Dropped
+          %tbody
+            - @dropped.each do |row|
+              %tr{class: "border-t border-slate-200"}
+                %td{class: "w-full px-3 py-1.5"}
+                  = blog_page_link(row.inspection.to_s, google_search_console_url_inspection_path(row.inspection), live: row.page&.url)
+                %td{class: "px-3 py-1.5 whitespace-nowrap"}
+                  = verdict_badge(row.inspection.verdict)
+                  %span{class: "ml-1 text-xs text-slate-500"}= row.inspection.coverage_state
+                %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(row.indexed_since)
+                %td{class: "px-3 py-1.5 whitespace-nowrap text-slate-500"}= time_or_dash(row.dropped_at)
+
 - if @coverage_counts.any?
   %div{class: "mb-6 grid gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "crawl-delays", title: "Days to first crawl", icon: "clock"} do

@@ -17,4 +17,17 @@ RSpec.describe PageSpeedHelper, type: :helper do
     expect(helper.lighthouse_cell_class(0.2)).to eq("bg-red-100 font-medium text-red-800")
     expect(helper.lighthouse_cell_class(nil)).to eq("bg-slate-50 text-slate-400")
   end
+
+  it "names CrUX's overall verdict in the colours of its ratings" do
+    expect(helper.field_category_label("SLOW")).to eq('<span class="font-medium text-red-700">Slow</span>')
+    expect(helper.field_category_label("FAST")).to eq('<span class="text-emerald-700">Fast</span>')
+    expect(helper.field_category_label(nil)).to include("—")
+  end
+
+  it "writes each lab figure in PageSpeed Insights' units" do
+    expect(helper.lab_value(:lab_fcp_ms, 1234)).to eq("1.2 s")
+    expect(helper.lab_value(:lab_tbt_ms, 1234.4)).to eq("1,234 ms")
+    expect(helper.lab_value(:lab_cls, 0.1)).to eq("0.1")
+    expect(helper.lab_value(:lab_speed_index_ms, nil)).to eq("—")
+  end
 end

@@ -23,6 +23,19 @@ RSpec.describe Google::Analytics::CustomDimensionService do
     expect(cache.read(Google::Analytics::SettingsService.cache_key("123456789"))).to be_nil
   end
 
+  it "registers read_seconds as an event-scoped metric counted in seconds" do
+    sent = []
+    google_stubs.post("https://analyticsadmin.googleapis.com/v1beta/properties/123456789/customMetrics") do |env|
+      sent << JSON.parse(env.body)
+      [200, {}, {name: "properties/123456789/customMetrics/1"}.to_json]
+    end
+
+    result = described_class.call("read_seconds", property: 123456789, client: google_client, cache: cache)
+
+    expect(result.errors).to eq([])
+    expect(sent).to eq([{"parameterName" => "read_seconds", "displayName" => "Read seconds", "scope" => "EVENT", "measurementUnit" => "SECONDS"}])
+  end
+
   it "reports GA's refusal, such as a Viewer-only service account" do
     google_stubs.post(url) { [403, {}, {error: {message: "The caller does not have permission"}}.to_json] }
 

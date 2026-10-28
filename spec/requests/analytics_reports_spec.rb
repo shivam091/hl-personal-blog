@@ -82,6 +82,26 @@ RSpec.describe "Analytics insights report", type: :request do
     expect(dot["rows"].map { |row| row["value"] }).to eq(["4.5 s", "80%", "50"])
   end
 
+  it "plots readers' own load time once they've reported enough, saying so" do
+    ga(Google::Analytics::WebVitalStat, page_path: "/post/up", metric: "LCP", rating: "poor", event_count: 10, value_sum: 45_000)
+
+    get analytics_report_path
+
+    dot = JSON.parse(page.at_css("#speed-engagement ~ div span[data-tip]")["data-tip"])
+    expect(dot["rows"].first).to include("value" => "4.5 s", "name" => "readers' mean LCP")
+    expect(page.at_css("#speed-engagement ~ p").text.squish).to include("Web Vitals reports: readers' mean load time")
+  end
+
+  it "compares content types by their pages' own engagement and finished reads" do
+    ga(Google::Analytics::ContentGroupStat, page_path: "/post/up", content_group: "tutorial", content_category: "css", content_tags: "css", views: 50)
+    ga(Google::Analytics::ArticleReadStat, page_path: "/post/up", reads: 20, read_seconds: 2400)
+
+    get analytics_report_path
+
+    expect(page.css("#content-groups ~ div tbody tr").map { |row| row.text.squish }.first).to eq("tutorial 1 50 80% 0s 40.0%")
+    expect(page.css("#categories ~ div tbody td:first-child").map { |cell| cell.text.strip }).to eq(["css", "(not set)"])
+  end
+
   it "ranks outbound links with their safety, and the pages readers leave from" do
     ga(Google::Analytics::OutboundLinkStat, page_path: "/post/up", link_url: "https://bad.example.com/", event_count: 5)
     Google::SafeBrowsing::LinkCheck.create!(url: "https://bad.example.com/", threat_types: ["SOCIAL_ENGINEERING"])
@@ -104,9 +124,9 @@ RSpec.describe "Analytics insights report", type: :request do
     get analytics_report_path(format: :csv, export: "read-through")
 
     expect(CSV.parse(response.body)).to eq([
-      ["Page", "Views", "Scrolls", "Read-through rate"],
-      ["/post/dull", "30", "3", "0.1"],
-      ["/post/up", "50", "40", "0.8"]])
+      ["Page", "Views", "Scrolls", "Finished reads", "Read-through rate", "Reading time per read (s)"],
+      ["/post/dull", "30", "3", "0", "0.1", nil],
+      ["/post/up", "50", "40", "0", "0.8", nil]])
 
     get analytics_report_path(format: :csv, export: "channels")
 

@@ -22,6 +22,26 @@
 = search_panel @filtering, keep: [@sorting, @pagination]
 = filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]
 
+-# Every sitemap together, unfiltered, since a drop in submitted URLs or a
+-# jump in errors is what's looked for, whichever sitemap it's in.
+- if @history.size > 1
+  - dates = @history.keys
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "sitemap-urls", title: "URLs over time", icon: "trending-up"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        URLs submitted in every sitemap at each day's last sync, against those URL inspection found indexed.
+      %div{class: "px-4 py-3"}
+        = line_chart(dates, [ChartsHelper::Series.new(name: "Submitted", values: @history.values.map { |day| day[:submitted] }),
+          ChartsHelper::Series.new(name: "Indexed", dashed: true, values: @history.values.map { |day| day[:indexed] })],
+          y_title: "URLs", label: "URLs submitted in the sitemaps and found indexed, by day")
+    = render layout: "shared/card", locals: {id: "sitemap-issues", title: "Errors and warnings over time", icon: "alert-triangle"} do
+      %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
+        Errors and warnings Search Console found across every sitemap, at each day's last sync.
+      %div{class: "px-4 py-3"}
+        = line_chart(dates, [ChartsHelper::Series.new(name: "Errors", values: @history.values.map { |day| day[:errors] }),
+          ChartsHelper::Series.new(name: "Warnings", dashed: true, values: @history.values.map { |day| day[:warnings] })],
+          y_title: "Issues", label: "Sitemap errors and warnings, by day")
+
 - if @pagination.total_count.zero?
   = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),
     message: (@filtering.filtered? ? "No sitemaps match." : "No sitemaps yet. Sync to fetch them from Search Console.")
@@ -78,5 +98,26 @@
                   %dd= yes_no(sitemap.pending)
               = render "shared/breakdown", counts: sitemap.contents.to_h { |content| [content["type"], content["submitted"]] },
                 heading: "Content", count_heading: "Submitted", empty: "Google listed no contents for this sitemap."
+              - changes = @changes.fetch(sitemap.path, [])
+              - if changes.any?
+                %h3{class: "mt-4 mb-1 text-sm font-medium text-slate-700"} Changes
+                %table{class: "w-full border-collapse text-sm", data: {sitemap_changes: sitemap.path}}
+                  %thead{class: "text-slate-500"}
+                    %tr
+                      %th{scope: "col", class: "py-1 pr-3 text-left font-medium"} Synced
+                      %th{scope: "col", class: "px-3 py-1 text-right font-medium"} Submitted
+                      %th{scope: "col", class: "px-3 py-1 text-right font-medium", title: "Pages in this sitemap URL inspection found indexed"} Indexed
+                      %th{scope: "col", class: "px-3 py-1 text-right font-medium"} Errors
+                      %th{scope: "col", class: "px-3 py-1 text-right font-medium"} Warnings
+                  %tbody
+                    - changes.each do |change|
+                      %tr{class: "border-t border-slate-200"}
+                        %td{class: "py-1 pr-3 whitespace-nowrap text-slate-500"}= time_or_dash(change.synced_at)
+                        %td{class: "px-3 py-1 text-right tabular-nums"}= number_with_delimiter(change.submitted)
+                        %td{class: "px-3 py-1 text-right tabular-nums"}= change.indexed ? number_with_delimiter(change.indexed) : "—"
+                        %td{class: ["px-3 py-1 text-right tabular-nums", ("font-medium text-red-700" if change.error_count.positive?)]}
+                          = number_with_delimiter(change.error_count)
+                        %td{class: ["px-3 py-1 text-right tabular-nums", ("font-medium text-amber-700" if change.warning_count.positive?)]}
+                          = number_with_delimiter(change.warning_count)
 
 = pagination_nav @pagination, keep: [@filtering, @sorting]

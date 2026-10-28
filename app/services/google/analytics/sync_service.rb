@@ -16,7 +16,7 @@ module Google
         engaged_sessions: "engagedSessions", engagement_seconds: "userEngagementDuration", event_count: "eventCount", key_events: "keyEvents"
       }.freeze
       EVENT_METRICS = {event_count: "eventCount", active_users: "activeUsers", key_events: "keyEvents", total_users: "totalUsers"}.freeze
-      FLOAT_METRICS = %i[engagement_seconds].freeze
+      FLOAT_METRICS = %i[engagement_seconds value_sum].freeze
       REPORTS = [
         {model: Stat, dimensions: {page_path: "pagePath"}},
         {model: PageTitleStat, dimensions: {page_path: "pagePath", page_title: "unifiedScreenClass"}},
@@ -52,6 +52,18 @@ module Google
         {model: EventLabelStat, dimensions: {page_path: "pagePath", event_name: "eventName", event_label: "customEvent:event_label"},
           metrics: EVENT_METRICS,
           filters: [["customEvent:event_label", "EXACT", "(not set)", true], ["customEvent:event_label", "EXACT", "", true]]},
+        # GA refuses these three until metric_rating, content_category,
+        # content_tags and read_seconds are registered (see the Settings
+        # page). Each is narrowed to the events that carry its parameters, or
+        # every other event would fill a "(not set)" row.
+        {model: WebVitalStat, dimensions: {page_path: "pagePath", metric: "eventName", rating: "customEvent:metric_rating"},
+          metrics: {event_count: "eventCount", value_sum: "eventValue"},
+          filters: [["eventName", "FULL_REGEXP", WebVitalStat::METRICS.join("|")]]},
+        {model: ContentGroupStat, dimensions: {page_path: "pagePath", content_group: "contentGroup",
+          content_category: "customEvent:content_category", content_tags: "customEvent:content_tags"},
+          metrics: {views: "screenPageViews"}, filters: [["eventName", "EXACT", "page_view"]]},
+        {model: ArticleReadStat, dimensions: {page_path: "pagePath"}, metrics: {reads: "eventCount", read_seconds: "customEvent:read_seconds"},
+          filters: [["eventName", "EXACT", ArticleReadStat::EVENT]]},
         # Not per page, since the search panel opens over any page and the
         # term is what's worth knowing.
         {

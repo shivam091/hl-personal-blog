@@ -17,6 +17,7 @@ RSpec.describe "Analytics settings", type: :request do
       reset_on_new_activity: true,
       key_events: [service::KeyEvent.new(event_name: "newsletter_subscribe", counting_method: "ONCE_PER_EVENT")],
       custom_dimensions: [],
+      custom_metrics: [],
       google_signals: "GOOGLE_SIGNALS_DISABLED",
       annotations: [service.module_parent::AnnotationService::Annotation.new(title: "Published: Grid", date: Date.new(2026, 10, 1))],
       data_streams: [
@@ -43,17 +44,21 @@ RSpec.describe "Analytics settings", type: :request do
   end
 
   it "offers to register a missing custom dimension, and says how GA answered" do
-    settings = service::Settings.new(event_retention: "FOURTEEN_MONTHS", key_events: [], custom_dimensions: [], data_streams: [])
+    settings = service::Settings.new(event_retention: "FOURTEEN_MONTHS", key_events: [], custom_dimensions: [], custom_metrics: [], data_streams: [])
     allow(service).to receive(:call) { service::Result.new(settings: settings, errors: []) }
     allow(Google::Analytics::CustomDimensionService).to receive(:call) { SyncResult.new(1, 0, 0, []) }
 
     get google_analytics_settings_path
-    expect(page.at_css("[role=alert]").text.squish).to include("event_label isn't registered")
+    expect(page.at_css("[role=alert]").text.squish).to include("event_label, metric_rating, content_category, content_tags, link_domain, and outbound aren't registered")
+    expect(page.at_css("[role=alert]").text.squish).to include("read_seconds isn't registered as an event-scoped custom metric")
 
     post google_analytics_settings_custom_dimensions_path(parameter_name: "event_label")
     expect(response).to redirect_to(google_analytics_settings_path)
     expect(flash[:notice]).to start_with("Registered event_label")
     expect(Google::Analytics::CustomDimensionService).to have_received(:call).with("event_label")
+
+    post google_analytics_settings_custom_dimensions_path(parameter_name: "read_seconds")
+    expect(flash[:notice]).to start_with("Registered read_seconds as a custom metric")
   end
 
   it "queues marking recent entries on GA's charts" do
@@ -66,7 +71,7 @@ RSpec.describe "Analytics settings", type: :request do
   it "refuses a dimension the blog doesn't send" do
     post google_analytics_settings_custom_dimensions_path(parameter_name: "anything")
 
-    expect(flash[:alert]).to eq("Unknown custom dimension.")
+    expect(flash[:alert]).to eq("Unknown custom dimension or metric.")
   end
 
   it "says why when Analytics can't be read" do

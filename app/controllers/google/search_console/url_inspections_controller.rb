@@ -46,6 +46,7 @@ module Google
             # the excluded pages compare with the indexed ones.
             @coverage_counts = UrlInspection.coverage_counts(@filtering.searched(UrlInspection.all))
             @crawl_delays = CrawlDelays.new
+            @dropped = UrlInspectionHistory.dropped
           end
           format.csv do
             send_csv UrlInspection.to_csv(inspections), filename: "url-inspections-#{Date.current.iso8601}.csv"
@@ -55,6 +56,7 @@ module Google
 
       def show
         @url_inspection = UrlInspection.find(params[:id])
+        @timeline = @url_inspection.crawled_page ? UrlInspectionHistory.timeline(@url_inspection.crawled_page).to_a : []
       end
 
       # A batch rather than a range of days, since Google allows only so many
