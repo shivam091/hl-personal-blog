@@ -3,8 +3,7 @@
 module Google
   module SearchConsole
     # Queries put into groups and summed per group, so search traffic can be
-    # read by why people searched rather than one query at a time. Every
-    # country, as Search Console doesn't split queries by one.
+    # read by why people searched rather than one query at a time.
     class QueryGroups
       # Searches naming the blog or its author, which find it however well
       # it ranks; the rest is what ranking actually earns.
@@ -34,10 +33,11 @@ module Google
         end
       end
 
-      attr_reader :period
+      attr_reader :period, :country
 
-      def initialize(period)
+      def initialize(period, country: nil)
         @period = period
+        @country = country
       end
 
       def brand_split
@@ -51,7 +51,7 @@ module Google
       # Nil on a day not synced, so a gap in the import isn't drawn as a day
       # without clicks.
       def daily_brand_clicks
-        rows = Stat.grouped(period.apply(Stat.by_query.site_wide), by: [:date, :query]).to_a
+        rows = Stat.grouped(period.apply(query_criteria), by: [:date, :query]).to_a
         synced = Stat.grouped(period.apply(Stat.site_totals), by: [:date]).to_set(&:date)
         dates = (period.from..period.to).to_a
         [BRANDED, NON_BRANDED].index_with do |name|
@@ -71,7 +71,13 @@ module Google
       end
 
       def rows
-        @rows ||= Stat.grouped(period.apply(Stat.by_query.site_wide), by: [:query]).to_a
+        @rows ||= Stat.grouped(period.apply(query_criteria), by: [:query]).to_a
+      end
+
+      # A country's from the query-by-country breakdown, so the groups follow
+      # the country the rest of the report is for.
+      def query_criteria
+        country ? QueryCountryStat.site_wide.where(country: country) : Stat.by_query.site_wide
       end
 
       # Every group named, in order, even one with no queries, so a missing

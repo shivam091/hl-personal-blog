@@ -53,6 +53,21 @@ RSpec.describe Google::SearchConsole::Summary do
     expect(summary.previous_positions["css grid"]).to eq(11.0)
   end
 
+  it "reads a country's queries from the query-by-country breakdown, so they can be judged against another country's" do
+    crossed = ->(**attributes) { stat(Google::SearchConsole::QueryCountryStat, date: Date.new(2026, 10, 7), **attributes) }
+    crossed.(query: "css grid", country: "IN", clicks: 4, impressions: 90, position: 6.0)
+    crossed.(query: "git rebase", country: "IN", clicks: 2, impressions: 30, position: 3.0)
+    crossed.(query: "css grid", country: "US", clicks: 1, impressions: 70, position: 9.0)
+    crossed.(query: "flexbox", country: "US", clicks: 1, impressions: 20, position: 4.0)
+    compared = Period.new({from: "2026-10-06", to: "2026-10-12", compare: "country", vs: "US"}, today: Date.new(2026, 10, 12), countries: true)
+    summary = described_class.new(compared, country: "IN")
+
+    expect(summary.top_queries.map { |row| row[:query] }).to eq(["css grid", "git rebase"])
+    expect(summary.new_queries.map { |row| row[:query] }).to eq(["git rebase"])
+    expect(summary.lost_queries.map { |row| row[:query] }).to eq(["flexbox"])
+    expect(summary.previous_positions["css grid"]).to eq(9.0)
+  end
+
   it "finds queries just off the first page with enough impressions" do
     expect(summary.opportunities.map { |row| row[:query] }).to eq(["css grid"])
   end

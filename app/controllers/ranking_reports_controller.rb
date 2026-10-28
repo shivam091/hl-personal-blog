@@ -3,9 +3,11 @@
 # Exists so the posts worth rewriting or retitling are picked out of Search
 # Console's figures rather than hunted for.
 class RankingReportsController < ApplicationController
+  include BlogStatsFilters
+
   def show
-    @period = Period.new(params)
-    @opportunities = Google::SearchConsole::Opportunities.new(@period)
+    load_blog_stats
+    @opportunities = Google::SearchConsole::Opportunities.new(@period, summary: Google::SearchConsole::Summary.new(@period, country: @stats.country))
 
     respond_to do |format|
       format.html

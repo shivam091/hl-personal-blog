@@ -8,7 +8,7 @@ class SearchReportsController < ApplicationController
   def show
     load_blog_stats
     load_google_summaries
-    @query_groups = Google::SearchConsole::QueryGroups.new(@period)
+    @query_groups = Google::SearchConsole::QueryGroups.new(@period, country: @stats.country)
 
     respond_to do |format|
       format.html

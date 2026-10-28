@@ -57,6 +57,10 @@ module Google
         summary.previous_synced?
       end
 
+      def pages_compared?
+        previous_synced? && !period.compare_countries?
+      end
+
       # Measured against the site's own CTR for the third spot rather than an
       # industry figure, so the gain is one this blog could actually reach.
       def striking_distance(limit: 15)
@@ -90,9 +94,10 @@ module Google
       end
 
       # Empty until the period before was synced, since every page would
-      # otherwise read as having lost nothing.
+      # otherwise read as having lost nothing. Pages aren't split by country,
+      # so they can't be judged against another one.
       def losing_pages(limit: 15)
-        return [] unless summary.queries_compared?
+        return [] unless pages_compared?
 
         @losing_pages ||= begin
           now = summary.pages

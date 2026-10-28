@@ -89,7 +89,7 @@ RSpec.describe "Search insights report", type: :request do
     ])
   end
 
-  it "compares totals with another country, leaving queries, which aren't split by country, uncompared" do
+  it "compares totals and queries with another country over the same dates" do
     Google::SearchConsole::CountryStat.create!(
       search_type: "web",
       date: Date.new(2026, 10, 10),
@@ -97,17 +97,23 @@ RSpec.describe "Search insights report", type: :request do
       clicks: 5,
       impressions: 100
     )
+    crossed = ->(**attributes) { Google::SearchConsole::QueryCountryStat.create!(search_type: "web", date: Date.new(2026, 10, 10), **attributes) }
+    crossed.(query: "css grid", country: "IN", clicks: 3, impressions: 300, position: 6.0)
+    crossed.(query: "git rebase", country: "IN", clicks: 9, impressions: 90, position: 2.0)
+    crossed.(query: "css grid", country: "US", clicks: 1, impressions: 50, position: 9.0)
+    crossed.(query: "flexbox", country: "US", clicks: 1, impressions: 20, position: 4.0)
 
     get search_report_path(country: "IN", compare: "country", vs: "US")
     expect(page.at_css("dl dd[title='Compared with US']").text.squish).to eq("400.0%")
-    expect(page.at_css("#new-queries").parent.text).to include("doesn't split queries by country")
-    expect(page.css("#top-queries ~ div tbody tr td:last-child").map(&:text).uniq).to eq(["—"])
+    expect(page.css("#new-queries ~ div tbody td:first-child").map(&:text)).to eq(["git rebase"])
+    expect(page.css("#lost-queries ~ div tbody td:first-child").map(&:text)).to eq(["flexbox"])
+    expect(page.css("#top-queries ~ div tbody tr td:first-child").map(&:text)).to eq(["git rebase", "css grid"])
   end
 
   it "says which figures follow the country filter" do
     get search_report_path(country: "IN")
 
-    expect(response.body).to include("Totals and daily charts are for")
+    expect(response.body).to include("Totals, charts and queries are for")
   end
 
   it "exports each list as CSV" do

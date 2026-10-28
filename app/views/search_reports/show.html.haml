@@ -20,8 +20,8 @@
 - else
   - if @stats.country
     %p{class: "mb-4 text-sm text-slate-600"}
-      Totals and daily charts are for #{country_label(@stats.country)}; Search Console doesn't split queries and
-      pages by country, so those lists cover every country.
+      Totals, charts and queries are for #{country_label(@stats.country)}; Search Console doesn't split pages or
+      appearances by country, so those cover every country.
 
   %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
     - google_search_metrics.each do |metric|
@@ -120,7 +120,7 @@
                   %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.ctr, :percent)
                   %td{class: "px-3 py-1.5 text-right tabular-nums"}= metric_value(row.position, :position)
                   %td{class: "px-3 py-1.5 text-right"}<
-                    - if search.queries_compared?
+                    - if search.previous_synced?
                       = position_change(row.position, search.previous_positions[row[:query]])
                     - else
                       = tag.span("—", class: "text-slate-400")
@@ -140,7 +140,7 @@
           y_title: "Clicks", label: "Search clicks per day from branded and non-branded queries", unsettled: search_unsettled_from)
       = render "search_reports/query_groups", groups: @query_groups.brand_split, heading: "Queries", table_class: table_class, th_class: th_class
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
-        Branded queries name the blog or its author. Every country, from the queries Search Console reports; it withholds rare ones,
+        Branded queries name the blog or its author. From the queries Search Console reports; it withholds rare ones,
         so these add up to less than the totals.
 
     -# Impressions rather than clicks for the bars, since a kind of search
@@ -312,19 +312,22 @@
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     - cards = [["new-queries", "New queries", "trending-up", search.new_queries, "new"],
       ["lost-queries", "Lost queries", "arrow-down", search.lost_queries, "lost"]]
+    - compared = @period.compare_countries? ? country_label(@period.compare_country) : @period.previous
     - cards.each do |id, title, card_icon, rows, export|
       = render layout: "shared/card", locals: {id: id, title: title, icon: card_icon} do
         %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
-          - if export == "new"
-            Queries with impressions in this period but none in #{@period.previous}: what posts are starting to
+          - if @period.compare_countries? && export == "new"
+            Queries with impressions here but none in #{compared} over the same dates: what this audience searches
+            that the other doesn't.
+          - elsif @period.compare_countries?
+            Queries with impressions in #{compared} but none here over the same dates. Figures are #{compared}'s.
+          - elsif export == "new"
+            Queries with impressions in this period but none in #{compared}: what posts are starting to
             rank for.
           - else
-            Queries with impressions in #{@period.previous} but none in this period: rankings that dropped out of
+            Queries with impressions in #{compared} but none in this period: rankings that dropped out of
             sight. Figures are from then.
-        - if @period.compare_countries?
-          %p{class: "px-4 py-3 text-sm text-slate-500"}
-            Search Console doesn't split queries by country, so there's no other country to compare with.
-        - elsif !search.previous_synced?
+        - if !search.previous_synced?
           %p{class: "px-4 py-3 text-sm text-slate-500"}
             Search Console figures don't reach back to #{@period.previous}, so there's nothing to compare with.
         - elsif rows.empty?

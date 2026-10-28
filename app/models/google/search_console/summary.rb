@@ -77,14 +77,20 @@ module Google
         (within.from..within.to).map { |date| rows[date]&.value(field) }
       end
 
+      # A country's from the query-by-country breakdown, so a country's
+      # queries can be judged against another's as its totals are.
       def queries(within = period)
         @queries ||= {}
-        @queries[within.key] ||= Stat.grouped(within.apply(Stat.by_query.site_wide), by: [:query]).to_a
+        @queries[within.key] ||= begin
+          code = within.country || country
+          criteria = code ? QueryCountryStat.site_wide.where(country: code) : Stat.by_query.site_wide
+          Stat.grouped(within.apply(criteria), by: [:query]).to_a
+        end
       end
 
       # So a ranking that's slipping shows before its clicks do.
       def previous_positions
-        return {} unless queries_compared?
+        return {} unless previous_synced?
 
         @previous_positions ||= queries(period.previous).to_h { |row| [row[:query], row.position] }
       end
@@ -94,14 +100,14 @@ module Google
       # it moves the totals. Empty until the period before was synced, since
       # every query would otherwise read as new.
       def new_queries(limit: 10)
-        return [] unless queries_compared?
+        return [] unless previous_synced?
 
         before = queries(period.previous).to_set { |row| row[:query] }
         by_impressions(queries.reject { |row| before.include?(row[:query]) }, limit)
       end
 
       def lost_queries(limit: 10)
-        return [] unless queries_compared?
+        return [] unless previous_synced?
 
         now = queries.to_set { |row| row[:query] }
         by_impressions(queries(period.previous).reject { |row| now.include?(row[:query]) }, limit)
@@ -111,12 +117,6 @@ module Google
         return @previous_synced if defined?(@previous_synced)
 
         @previous_synced = period.compare_countries? || Stat.where(:date.lte => period.previous.from).exists?
-      end
-
-      # Queries and pages aren't split by country, so they can't be judged
-      # against another one.
-      def queries_compared?
-        previous_synced? && !period.compare_countries?
       end
 
       def top_queries(limit: 10)

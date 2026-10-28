@@ -26,6 +26,15 @@ RSpec.describe Google::SearchConsole::QueryGroups do
     expect([other.name, other.queries, other.clicks, other.impressions, other.position]).to eq(["Non-branded", 1, 4, 400, 5.0])
   end
 
+  it "reads one country's queries from the query-by-country breakdown" do
+    Google::SearchConsole::QueryCountryStat.create!(search_type: "web", date: Date.new(2026, 10, 10), query: "harshal ladhe", country: "IN",
+      clicks: 2, impressions: 4, position: 1.0)
+
+    branded, other = described_class.new(period, country: "IN").brand_split
+
+    expect([branded.queries, branded.clicks, other.queries]).to eq([1, 2, 0])
+  end
+
   it "groups queries by intent, first matching kind winning, with the most seen as examples" do
     {"how to fix grid error" => 300, "css vw vs dvw" => 50, "what is css grid" => 40, "css grid tutorial" => 30,
      "grid minmax" => 20}.each do |query, impressions|

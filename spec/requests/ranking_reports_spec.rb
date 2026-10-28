@@ -51,4 +51,19 @@ RSpec.describe "Ranking opportunities report", type: :request do
     expect(cells.("striking-distance")).to eq([["subgrid", "—", "500", "8.0", "1.0%", "+95"]])
     expect(cells.("losing-pages")).to eq([["/post/grid", "0", "−50", "—", "—", "Fewer searches"]])
   end
+
+  it "narrows queries to a country, leaving pages, which aren't split by country, every country's" do
+    Google::SearchConsole::Stat.create!(date: Date.new(2026, 10, 1), query: "subgrid", position: 8.0, impressions: 500, clicks: 5)
+    Google::SearchConsole::QueryCountryStat.create!(date: Date.new(2026, 10, 1), query: "grid gap", country: "IN", position: 9.0, impressions: 300, clicks: 3)
+
+    get ranking_report_path(country: "IN")
+
+    expect(page.css("#striking-distance ~ div table tbody td:first-child").map(&:text)).to eq(["grid gap"])
+    expect(page.at_css("#losing-pages").parent.text).to include("Every country")
+    expect(page.at_css("a[href*='.csv'][href*='country=IN']")).to be_present
+
+    get ranking_report_path(country: "IN", compare: "country", vs: "US")
+
+    expect(page.at_css("#losing-pages").parent.text).to include("doesn't split pages by country")
+  end
 end

@@ -12,7 +12,7 @@
     The posts to rewrite or retitle.
   = last_sync_status(Google::SearchConsole::PerformanceController::SYNC_KIND)
 
-= render "google/shared/period", period: @period, keep: []
+= render "shared/period_bar", period: @period, keep: [], filtering: @filtering
 
 - if !opportunities.any?
   = render "shared/empty_state", message: "No Search Console figures yet. Sync them from Search performance."
@@ -58,7 +58,7 @@
                   %td{class: "px-3 py-1.5 text-right tabular-nums font-medium"}
                     = row.potential_clicks ? "+#{number_with_delimiter(row.potential_clicks)}" : "—"
       %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
-        = link_to list_url(@period, format: :csv, export: "striking"), class: export_class do
+        = link_to list_url(@period, @filtering, format: :csv, export: "striking"), class: export_class do
           = icon("download", size: 12)
           CSV
 
@@ -67,7 +67,12 @@
       Pages with #{Google::SearchConsole::Opportunities::MIN_PREVIOUS_CLICKS}+ clicks in #{@period.previous} that lost
       #{number_to_percentage(Google::SearchConsole::Opportunities::MIN_LOSS_SHARE * 100, precision: 0)}+ of them since,
       most lost first, with the likeliest cause.
-    - if !opportunities.previous_synced?
+      - if @stats.country
+        Every country, since Search Console doesn't split pages by country.
+    - if @period.compare_countries?
+      %p{class: "px-4 py-3 text-sm text-slate-500"}
+        Search Console doesn't split pages by country, so there's no other country to compare with.
+    - elsif !opportunities.previous_synced?
       %p{class: "px-4 py-3 text-sm text-slate-500"}
         Search Console figures don't reach back to #{@period.previous}, so there's nothing to compare with.
     - else
@@ -97,6 +102,6 @@
                   %td{class: "px-3 py-1.5 text-right"}= position_change(row.position, row.previous_position)
                   %td{class: "px-3 py-1.5 whitespace-nowrap"}= row.cause
     %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
-      = link_to list_url(@period, format: :csv, export: "losing"), class: export_class do
+      = link_to list_url(@period, @filtering, format: :csv, export: "losing"), class: export_class do
         = icon("download", size: 12)
         CSV
