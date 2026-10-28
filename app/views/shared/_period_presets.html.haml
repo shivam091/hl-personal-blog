@@ -2,7 +2,9 @@
 -# the span showing, like the compare and country buttons beside it, with
 -# every span in its menu: days, then quarters, then months, and picked
 -# dates last.
-- custom = period.custom?
+-# A list offers all time too, its counts reaching back before any span.
+- all_time = local_assigns[:all_time]
+- custom = period.custom? && !all_time
 - button_class = "group inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 tabular-nums shadow-sm hover:bg-slate-50 aria-expanded:bg-slate-50"
 - link_class = "flex items-center justify-between gap-3 rounded-md px-3 py-2 hover:bg-slate-100"
 - control_class = "h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none"
@@ -13,15 +15,22 @@
     data: {action: "dropdown#toggle", dropdown_target: "button"}}
     = icon("calendar", size: 14, class: "text-slate-400")
     %span{class: "sr-only"} Period:
-    = custom ? "Custom" : Period.preset_label(period.preset)
+    = all_time ? "All time" : (custom ? "Custom" : Period.preset_label(period.preset))
     = icon("chevron-down", size: 14, class: "text-slate-400 transition-transform duration-150 group-aria-expanded:rotate-180")
   %div{id: "period-menu", hidden: true, data: {dropdown_target: "menu"},
     class: "absolute top-full z-20 mt-2 w-72 rounded-lg border border-slate-200 bg-white p-1.5 text-sm shadow-lg"}
     %nav{aria: {label: "Period"}}
+      - unless all_time.nil?
+        %ul{class: "mb-1 border-b border-slate-100 pb-1"}
+          %li
+            = link_to list_url(*keep, from: nil, to: nil), aria: {current: (all_time ? "true" : nil)},
+              class: [link_class, all_time ? "font-medium text-slate-900" : "text-slate-700"] do
+              All time
+              = icon("check", size: 14, class: "text-slate-500") if all_time
       - Period::PRESETS.slice_before { |preset| [:this_quarter, :last_3_months].include?(preset) }.each_with_index do |group, index|
         %ul{class: ("mt-1 border-t border-slate-100 pt-1" if index.positive?)}
           - group.each do |preset|
-            - current = period.preset?(preset)
+            - current = period.preset?(preset) && !all_time
             %li
               -# Figures are stored a day at a time, so the shortest span is a whole day.
               = link_to list_url(*keep, **period.preset_query(preset)), aria: {current: (current ? "true" : nil)},

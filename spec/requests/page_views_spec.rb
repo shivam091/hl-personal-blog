@@ -36,6 +36,32 @@ RSpec.describe "Page views", type: :request do
       expect(rows).to eq([PageView::CSV_HEADERS, ["https://blog.example.com/post/busy", "5", "4", "0", "IN: 3; US: 2", nil, nil]])
     end
 
+    it "counts views in a picked span from each page's days, all time staying the default" do
+      PageView.collection.insert_many([
+        {"_id" => "/post/old", "slug" => "/post/old", "url" => "https://blog.example.com/post/old", "visitorCount" => 900,
+          "countriesByDay" => {"2026-01-01" => {"US" => 900}}},
+        {"_id" => "/post/new", "slug" => "/post/new", "url" => "https://blog.example.com/post/new", "visitorCount" => 9,
+          "viewsByDay" => {"2026-10-09" => 2}, "countriesByDay" => {"2026-10-10" => {"IN" => 6}, "2026-10-12" => {"IN" => 1}}}
+      ])
+
+      get page_views_path
+      page = Nokogiri::HTML5(response.body)
+      expect(page.at_css("[aria-controls=period-menu]").text.squish).to eq("Period: All time")
+      expect(page.css("tbody tr:first-child td:nth-child(3) a").first.text).to include("/post/old")
+
+      get page_views_path(from: "2026-10-09", to: "2026-10-11")
+      page = Nokogiri::HTML5(response.body)
+      rows = page.css("tbody[data-controller=disclosure] > tr:first-child").map { |row| row.css("td").map { |cell| cell.text.squish }.values_at(2, 3) }
+      expect(rows).to eq([["https://blog.example.com/post/new", "8"], ["https://blog.example.com/post/old", "0"]])
+      expect(page.css("thead th").map { |th| th.text.squish }).not_to include(PageView.human_attribute_name(:unique_visitor_count))
+      expect(page.at_css("tbody tr[hidden]").text).to include("IN", "ZZ")
+      expect(page.at_css("nav[aria-label=Period] a")["href"]).to eq(page_views_path)
+
+      get page_views_path(format: :csv, from: "2026-10-09", to: "2026-10-11")
+      expect(CSV.parse(response.body).second).to eq(["https://blog.example.com/post/new", "8", "IN: 6; ZZ: 2", nil, nil])
+      expect(ExportRequest.first.filename).to eq("page-views-2026-10-09-to-2026-10-11.csv")
+    end
+
     it "shows an empty state when there are no page views" do
       get page_views_path
 
