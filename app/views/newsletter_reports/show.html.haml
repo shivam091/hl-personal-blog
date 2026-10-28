@@ -3,28 +3,43 @@
 - table_class = "w-full border-collapse text-sm"
 - th_class = "px-3 py-1.5 font-medium whitespace-nowrap"
 - window = NewsletterStats::SIGNUP_WINDOW
+- export_class = "inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline"
 
-%div{class: "mb-6"}
-  %h1{class: "text-2xl font-semibold tracking-tight"} Newsletter report
-  %p{class: "mt-1 text-sm text-slate-500"}
-    Whether entries bring readers onto the list, and whether the mail announcing them arrives.
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Newsletter report
+    %p{class: "mt-1 text-sm text-slate-500"}
+      Whether entries bring readers onto the list, and whether the mail announcing them arrives.
+  = link_to list_url(@period, @filtering, format: :csv),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
 
-= render "google/shared/period", period: @period, keep: []
+= render "shared/period_bar", period: @period, keep: [], filtering: @filtering
+
+- if @stats.country
+  %p{class: "mb-4 text-sm text-slate-600"}
+    The list and sign-ups are from #{country_label(@stats.country)}; an email goes to the whole list, so sends cover
+    every country.
 
 - sends = newsletter.sends
 - sent = sends.sum(&:sent)
-- undelivered = newsletter.undelivered
+- undelivered = sends.sum(&:undelivered)
+-# Sends aren't split by country, so they're only judged against an
+-# earlier period.
+- sent_before = newsletter.sends(@period.previous).sum(&:sent) unless @period.compare_countries?
 %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
   = render "dashboard/tile", label: "List size", tile_icon: "users", value: number_with_delimiter(newsletter.list_size), change: nil,
     hint: "Everyone subscribed now. Leaving deletes a subscriber, so the list's past size can't be rebuilt."
   = render "dashboard/tile", label: "New subscribers", tile_icon: "plus", value: number_with_delimiter(newsletter.new_subscribers),
-    change: (metric_change(newsletter.new_subscribers, newsletter.new_subscribers(@period.previous), DashboardHelper::HIGHER_IS_BETTER) unless @period.compare_countries?),
+    change: metric_change(newsletter.new_subscribers, newsletter.new_subscribers(@period.previous), DashboardHelper::HIGHER_IS_BETTER),
     compared_with: @period.previous, hint: "Sign-ups in the period."
-  = render "dashboard/tile", label: "Emails sent", tile_icon: "send", value: number_with_delimiter(sent), change: "Last #{NewsletterStats::SEND_MONTHS} months",
-    hint: "New-entry emails that went out, by the month each entry was sent."
+  = render "dashboard/tile", label: "Emails sent", tile_icon: "send", value: number_with_delimiter(sent),
+    change: metric_change(sent, sent_before, DashboardHelper::HIGHER_IS_BETTER), compared_with: @period.previous,
+    hint: "New-entry emails that went out in the period. Every country."
   = render "dashboard/tile", label: "Undelivered", tile_icon: "alert-triangle", value: number_with_delimiter(undelivered),
     change: ("#{number_to_percentage(undelivered * 100.0 / (sent + undelivered), precision: 1)} of tries" if (sent + undelivered).positive?),
-    hint: "Emails still failed, waiting to be sent again from Feed entries. A resend that gets through takes them off."
+    hint: "Emails sent in the period that still failed, waiting to be sent again from Feed entries. A resend that gets through takes them off."
 
 %div{class: "mb-6"}
   -# Both weeks per entry side by side, so an entry that brought readers in
@@ -59,16 +74,25 @@
                     %span{class: "ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600", title: "The week after isn't over yet"} So far
                 %td{class: ["px-3 py-1.5 text-right tabular-nums", ("text-emerald-700" if row.change.positive?), ("text-red-700" if row.change.negative?)]}
                   = row.change.positive? ? "+#{row.change}" : row.change
+      %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+        = link_to list_url(@period, @filtering, format: :csv, export: "entries"), class: export_class do
+          = icon("download", size: 12)
+          CSV
 
 %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
-  = render layout: "shared/card", locals: {id: "sends-by-month", title: "Emails by month", icon: "send"} do
+  - per = newsletter.sends_by
+  = render layout: "shared/card", locals: {id: "sends", title: "Emails by #{per}", icon: "send"} do
     %div{class: "px-4 py-3"}
-      - if sends.all? { |month| (month.sent + month.undelivered).zero? }
-        %p{class: "text-sm text-slate-500"} No new-entry emails sent in the last #{NewsletterStats::SEND_MONTHS} months.
+      - if sends.all? { |bucket| (bucket.sent + bucket.undelivered).zero? }
+        %p{class: "text-sm text-slate-500"} No new-entry emails sent in #{@period}.
       - else
-        = stacked_chart(sends.map(&:month), [ChartsHelper::Series.new(name: "Delivered", values: sends.map(&:sent), color: ChartsHelper::SHARE_COLORS[2]),
+        = stacked_chart(sends.map(&:start), [ChartsHelper::Series.new(name: "Delivered", values: sends.map(&:sent), color: ChartsHelper::SHARE_COLORS[2]),
           ChartsHelper::Series.new(name: "Undelivered", values: sends.map(&:undelivered), color: ChartsHelper::SHARE_COLORS[1])],
-          y_title: "Emails", label: "New-entry emails per month, delivered and still undelivered", per: :month)
+          y_title: "Emails", label: "New-entry emails per #{per}, delivered and still undelivered", per: per)
+    %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
+      = link_to list_url(@period, @filtering, format: :csv, export: "sends"), class: export_class do
+        = icon("download", size: 12)
+        CSV
 
   = render layout: "shared/card", locals: {id: "failure-reasons", title: "Why emails failed", icon: "alert-circle"} do
     %div{class: "px-4 py-3"}
