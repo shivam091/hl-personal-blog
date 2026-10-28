@@ -77,7 +77,7 @@ class FeedEntriesController < ApplicationController
     redirect_to feed_entries_path
   end
 
-  # On demand as well as every six hours, so new posts can be pulled in right away.
+  # On demand as well as daily, so new posts can be pulled in right away.
   def sync
     SyncRequest.enqueue("feed")
     redirect_to feed_entries_path, notice: "Syncing from the Atom feed in the background. Refresh in a moment to see new and updated entries."
