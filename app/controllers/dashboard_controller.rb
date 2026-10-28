@@ -19,6 +19,7 @@ class DashboardController < ApplicationController
     load_google_summaries
     @funnel_extras = funnel_extras
     @country_metric = CountryMetric.new(params[:by].presence_in(COUNTRY_METRICS) || COUNTRY_METRICS.first)
+    @granularity = ChartGranularity.new(params)
     @lifetime_hits = PageView.hit_totals
     # Devices and referrers weren't dated at first, so until they are, the
     # lifetime figures are all there is to show for them.

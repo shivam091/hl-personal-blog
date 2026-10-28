@@ -35,7 +35,7 @@ RSpec.describe "Dashboard", type: :request do
 
     get root_path
     expect(page.css("dl dd[title^='Compared with']")).to be_present
-    expect(page.at_css("#views-and-likes").parent.text).to include("17 Aug, 2026 – 13 Sep, 2026")
+    expect(page.at_css("section[aria-labelledby=views-and-likes]").text).to include("17 Aug, 2026 – 13 Sep, 2026")
     expect(page.at_css("#period-compare a[aria-current]").text.squish).to eq("Previous period 17 Aug, 2026 – 13 Sep, 2026")
     expect(page.at_css("[aria-controls=period-compare]").text.squish).to eq("Compare: vs previous period")
     # No country is picked until the reader picks one.
@@ -44,7 +44,7 @@ RSpec.describe "Dashboard", type: :request do
 
     get root_path(compare: "off")
     expect(page.css("#kpis ~ * dd[title^='Compared with'], dl dd[title^='Compared with']")).to be_empty
-    expect(page.at_css("#views-and-likes").parent.text).not_to include("–")
+    expect(page.at_css("section[aria-labelledby=views-and-likes]").text).not_to include("–")
     expect(page.at_css("#period-compare a[aria-current]").text.squish).to eq("No comparison")
   end
 
@@ -73,7 +73,7 @@ RSpec.describe "Dashboard", type: :request do
 
     get root_path
 
-    chart = page.at_css("#views-and-likes ~ div")
+    chart = page.at_css("section[aria-labelledby=views-and-likes]")
     readouts = chart.css("rect[data-tip]").map { |hit| JSON.parse(hit["data-tip"]) }
     published = readouts.select { |tip| tip["rows"].any? { |row| row["value"] == "Published" } }
     expect(published.map { |tip| [tip["title"], tip["rows"].last["name"]] }).to eq([["Sat, 10 Oct 2026", "Busy post"]])
@@ -126,7 +126,7 @@ RSpec.describe "Dashboard", type: :request do
     get root_path
 
     expect(tiles).to eq("Views" => "152", "Likes" => "6", "Subscribers" => "1", "Messages" => "1", "Unique visitors" => "0")
-    expect(page.css("#views-and-likes ~ div svg[role=img]").size).to eq(2)
+    expect(page.css("section[aria-labelledby=views-and-likes] svg[role=img]").size).to eq(2)
     expect(page.css("#top-pages ~ div table tbody tr td:first-child").map { |td| td.text.strip }).to eq(%w[/post/busy /post/quiet])
     expect(page.at_css("#country-funnel ~ div tbody tr td").text.squish).to eq("🇮🇳 IN")
     expect(page.at_css("#referrers ~ div").text).to include("Search", "Direct")
@@ -297,5 +297,17 @@ RSpec.describe "Dashboard", type: :request do
       "No crawled pages yet.",
       "No feed entries yet."
     )
+  end
+
+  it "puts the views and likes charts in weeks once picked, keeping the choice across periods" do
+    seed
+
+    get root_path(chart_by: "week")
+
+    card = page.at_css("section[aria-labelledby=views-and-likes]")
+    expect(card.at_css("select#chart-by option[selected]")["value"]).to eq("week")
+    weeks = card.css("rect[data-tip]").map { |hit| JSON.parse(hit["data-tip"]) }.select { |tip| tip["title"] == "Week of 5 Oct, 2026" }
+    expect(weeks.first["rows"].first["value"]).to eq("152")
+    expect(page.at_css("nav[aria-label=Period] a")["href"]).to include("chart_by=week")
   end
 end

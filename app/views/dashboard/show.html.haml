@@ -9,7 +9,7 @@
         ·
         = country_label(@stats.country)
 
-= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@country_metric]
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@country_metric, @granularity]
 
 = render "dashboard/kpis", stats: @stats
 
@@ -17,7 +17,7 @@
 
 %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-3"}
   %div{class: "lg:col-span-2"}
-    = render "dashboard/views_and_likes", stats: @stats, published: @published
+    = render "dashboard/views_and_likes", stats: @stats, published: @published, granularity: @granularity
   = render "dashboard/countries", stats: @stats, country_metric: @country_metric
 
 %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}

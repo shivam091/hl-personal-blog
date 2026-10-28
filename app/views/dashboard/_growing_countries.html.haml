@@ -21,7 +21,7 @@
           - rows.each do |code, count, before, growth|
             %tr{class: "border-t border-slate-200"}
               %td{class: "px-4 py-1.5 font-medium"}
-                = link_to country_label(code), list_url(@period, @country_metric, country: code), class: "hover:underline"
+                = link_to country_label(code), list_url(@period, @country_metric, @granularity, country: code), class: "hover:underline"
               %td{class: "px-2 py-1.5 text-right tabular-nums"}= number_with_delimiter(count)
               %td{class: "px-2 py-1.5 text-right tabular-nums text-slate-500"}= number_with_delimiter(before)
               %td{class: "px-4 py-1.5 text-right"}= growth_label(growth)

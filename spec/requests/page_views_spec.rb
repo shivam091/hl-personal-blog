@@ -164,6 +164,24 @@ RSpec.describe "Page views", type: :request do
       end
     end
 
+    it "sets the period's views, likes and search figures against the period before, in buckets once picked" do
+      travel_to(Time.zone.parse("2026-10-12 12:00")) do
+        PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a",
+          "countriesByDay" => {"2026-10-10" => {"IN" => 30}, "2026-09-10" => {"IN" => 10}})
+
+        get page_view_path("/post/a", chart_by: "week")
+
+        card = Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=period-views]")
+        expect(card.at_css("p").text.squish).to eq("Views per week 30 in the period 200.0%")
+        expect(card.at_css("p span[title]")["title"]).to eq("Compared with 17 Aug, 2026 – 13 Sep, 2026")
+        expect(card.at_css("select#chart-by option[selected]")["value"]).to eq("week")
+
+        get page_view_path("/post/a", compare: "off")
+
+        expect(Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=period-views] p").text.squish).to eq("Views per day 30 in the period")
+      end
+    end
+
     it "charts the page's clicks, impressions and position, with no data on days not synced" do
       PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
       [Date.new(2026, 10, 10), Date.new(2026, 10, 11)].each do |date|
