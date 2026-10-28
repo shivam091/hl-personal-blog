@@ -9,8 +9,8 @@
   %div{class: "flex flex-wrap items-center gap-2"}
     = render "shared/period_presets", period: period, keep: [filtering, *keep]
     -# Left off where nothing on the page is compared, rather than offered and ignored.
-    - if compare
-      = render "shared/period_compare", period: period, keep: keep, filtering: filtering
+    - if compare || filtering
+      = render "shared/period_compare", period: period, keep: keep, filtering: filtering, compare: compare
 
   %p{class: "text-xs tabular-nums text-slate-500 sm:text-right"}
     %span{class: "block"}

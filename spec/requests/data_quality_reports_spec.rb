@@ -48,4 +48,12 @@ RSpec.describe "Data quality report", type: :request do
 
     expect(CSV.parse(response.body)).to eq([ViewComparison::CSV_HEADERS, ["/post/a", "40", "30", "-0.25"]])
   end
+
+  it "keeps the country filter but leaves comparison off, since nothing on it is compared" do
+    get data_quality_report_path
+
+    page = Nokogiri::HTML5(response.body)
+    expect(page.at_css("[aria-controls=period-compare]")).to be_nil
+    expect(page.at_css("[aria-controls=period-country]")).to be_present
+  end
 end

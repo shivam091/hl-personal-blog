@@ -190,4 +190,12 @@ RSpec.describe "Content report", type: :request do
       expect(CSV.parse(response.body).second).to eq(["https://blog.example.com/post/a", "A post", "30", "90.0", "0.4"])
     end
   end
+
+  it "keeps the country filter but leaves comparison off, since nothing on it is compared" do
+    get content_report_path
+
+    page = Nokogiri::HTML5(response.body)
+    expect(page.at_css("[aria-controls=period-compare]")).to be_nil
+    expect(page.at_css("[aria-controls=period-country]")).to be_present
+  end
 end

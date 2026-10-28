@@ -16,7 +16,7 @@
     = icon("download", size: 14)
     Export CSV
 
-= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: []
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [], compare: false
 
 - if !content.any?
   = render "shared/empty_state", message: "No feed entries yet. Sync them from Feed entries."

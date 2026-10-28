@@ -1,6 +1,6 @@
 -# Period, comparison and country in one bar, so every figure below is
 -# known to answer the same selection.
-= render "shared/period_bar", period: period, keep: keep, filtering: filtering
+= render "shared/period_bar", period: period, keep: keep, filtering: filtering, compare: local_assigns.fetch(:compare, true)
 
 - notes = []
 - notes << counted_since_note(stats.period, views: stats.views_counted_since,

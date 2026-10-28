@@ -15,7 +15,7 @@
     = icon("download", size: 14)
     Export page comparison
 
-= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [], likes_note: false
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [], likes_note: false, compare: false
 
 %div{class: "mb-6"}
   = render layout: "shared/card", locals: {id: "own-vs-ga", title: "Blog views against Google Analytics", icon: "activity"} do

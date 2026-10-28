@@ -4,6 +4,7 @@
 -# is picked inside the compare menu rather than in a list of its own, so
 -# it can't be mistaken for the country being shown.
 - filtering = local_assigns[:filtering]
+- compare = local_assigns.fetch(:compare, true)
 - country_field = filtering&.fields&.first
 - country = filtering&.values&.dig(:country)
 - compares = Period::COMPARES.except(*("country" unless country_field))
@@ -15,53 +16,54 @@
 - states = [filtering, *keep]
 - compare_label = {"country" => "vs #{country_label(period.compare_country)}", "off" => "No comparison"}.fetch(period.compare) { "vs #{Period::COMPARES[period.compare].downcase_first}" }
 
-%div{class: "relative inline-flex", data: dropdown}
-  %button{type: "button", class: button_class, aria: {expanded: "false", controls: "period-compare", haspopup: "true"},
-    data: {action: "dropdown#toggle", dropdown_target: "button"}}
-    = icon("bar-chart", size: 14, class: "text-slate-400")
-    %span{class: "sr-only"} Compare:
-    = compare_label
-    = icon("chevron-down", size: 14, class: "text-slate-400 transition-transform duration-150 group-aria-expanded:rotate-180")
-  %div{id: "period-compare", hidden: true, data: {dropdown_target: "menu"}, class: "#{menu_class} w-72"}
-    %ul
-      - compares.except("country", "off").each_key do |key|
-        - current = period.compare == key
-        - compared = period.previous_with(key)
-        %li
-          = link_to list_url(*states, **base, compare: (key unless key == Period::DEFAULT_COMPARE)), aria: {current: (current ? "true" : nil)},
-            class: [link_class, current ? "font-medium text-slate-900" : "text-slate-700"] do
-            %span
-              %span{class: "block"}= Period::COMPARES[key]
-              %span{class: "block text-xs font-normal tabular-nums text-slate-500"}= compared.to_s
-            = icon("check", size: 14, class: "text-slate-500") if current
+- if compare
+  %div{class: "relative inline-flex", data: dropdown}
+    %button{type: "button", class: button_class, aria: {expanded: "false", controls: "period-compare", haspopup: "true"},
+      data: {action: "dropdown#toggle", dropdown_target: "button"}}
+      = icon("bar-chart", size: 14, class: "text-slate-400")
+      %span{class: "sr-only"} Compare:
+      = compare_label
+      = icon("chevron-down", size: 14, class: "text-slate-400 transition-transform duration-150 group-aria-expanded:rotate-180")
+    %div{id: "period-compare", hidden: true, data: {dropdown_target: "menu"}, class: "#{menu_class} w-72"}
+      %ul
+        - compares.except("country", "off").each_key do |key|
+          - current = period.compare == key
+          - compared = period.previous_with(key)
+          %li
+            = link_to list_url(*states, **base, compare: (key unless key == Period::DEFAULT_COMPARE)), aria: {current: (current ? "true" : nil)},
+              class: [link_class, current ? "font-medium text-slate-900" : "text-slate-700"] do
+              %span
+                %span{class: "block"}= Period::COMPARES[key]
+                %span{class: "block text-xs font-normal tabular-nums text-slate-500"}= compared.to_s
+              = icon("check", size: 14, class: "text-slate-500") if current
 
-    - if compares.key?("country")
-      - comparing = period.compare_countries?
-      -# Unknown isn't an audience, so it's left out as a baseline.
-      - choices = country_field.options.reject { |_, code| code == BlogStats::UNKNOWN_COUNTRY }
-      %div{data: {controller: "disclosure"}}
-        %button{type: "button", aria: {expanded: comparing.to_s, controls: "compare-countries"},
-          class: ["group flex w-full items-center justify-between rounded-md px-3 py-2 hover:bg-slate-100", comparing ? "font-medium text-slate-900" : "text-slate-700"],
-          data: {action: "disclosure#toggle", disclosure_target: "button"}}
-          %span{class: "text-left"}
-            %span{class: "block"} Another country
-            %span{class: "block text-xs font-normal text-slate-500"} Same dates, another audience
-          = icon("chevron-down", size: 14, class: "text-slate-400 transition-transform group-aria-expanded:rotate-180")
-        %ul{id: "compare-countries", hidden: !comparing, data: {disclosure_target: "panel"}, class: "max-h-60 overflow-y-auto pl-3"}
-          - choices.each do |label, code|
-            - current = comparing && period.compare_country == code
-            %li
-              = link_to list_url(*states, **base, compare: "country", vs: code), aria: {current: (current ? "true" : nil)},
-                class: [link_class, "py-1.5", current ? "font-medium text-slate-900" : "text-slate-700"] do
-                = label
-                = icon("check", size: 14, class: "text-slate-500") if current
+      - if compares.key?("country")
+        - comparing = period.compare_countries?
+        -# Unknown isn't an audience, so it's left out as a baseline.
+        - choices = country_field.options.reject { |_, code| code == BlogStats::UNKNOWN_COUNTRY }
+        %div{data: {controller: "disclosure"}}
+          %button{type: "button", aria: {expanded: comparing.to_s, controls: "compare-countries"},
+            class: ["group flex w-full items-center justify-between rounded-md px-3 py-2 hover:bg-slate-100", comparing ? "font-medium text-slate-900" : "text-slate-700"],
+            data: {action: "disclosure#toggle", disclosure_target: "button"}}
+            %span{class: "text-left"}
+              %span{class: "block"} Another country
+              %span{class: "block text-xs font-normal text-slate-500"} Same dates, another audience
+            = icon("chevron-down", size: 14, class: "text-slate-400 transition-transform group-aria-expanded:rotate-180")
+          %ul{id: "compare-countries", hidden: !comparing, data: {disclosure_target: "panel"}, class: "max-h-60 overflow-y-auto pl-3"}
+            - choices.each do |label, code|
+              - current = comparing && period.compare_country == code
+              %li
+                = link_to list_url(*states, **base, compare: "country", vs: code), aria: {current: (current ? "true" : nil)},
+                  class: [link_class, "py-1.5", current ? "font-medium text-slate-900" : "text-slate-700"] do
+                  = label
+                  = icon("check", size: 14, class: "text-slate-500") if current
 
-    %div{class: "mt-1 border-t border-slate-100 pt-1"}
-      - current = !period.compare?
-      = link_to list_url(*states, **base, compare: "off"), aria: {current: (current ? "true" : nil)},
-        class: [link_class, current ? "font-medium text-slate-900" : "text-slate-700"] do
-        No comparison
-        = icon("check", size: 14, class: "text-slate-500") if current
+      %div{class: "mt-1 border-t border-slate-100 pt-1"}
+        - current = !period.compare?
+        = link_to list_url(*states, **base, compare: "off"), aria: {current: (current ? "true" : nil)},
+          class: [link_class, current ? "font-medium text-slate-900" : "text-slate-700"] do
+          No comparison
+          = icon("check", size: 14, class: "text-slate-500") if current
 
 - if country_field
   %div{class: "relative inline-flex", data: dropdown}
