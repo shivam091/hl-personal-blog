@@ -35,4 +35,16 @@ RSpec.describe "Request report", type: :request do
     expect(page.at_css("#exceptions ~ div a")["href"]).to eq(request_log_path(failed.id))
     expect(page.css("#request-hours ~ div td div[data-tip]").size).to eq(7 * 24)
   end
+
+  it "exports a row per page as CSV" do
+    log("2026-10-10 09:15", elapsed_time: 0.25)
+
+    get request_report_path(format: :csv)
+
+    expect(CSV.parse(response.body)).to eq([
+      ["Path", "Requests", "Median (ms)", "95th percentile (ms)", "Slowest (ms)", "Server errors"],
+      ["/", "1", "250", "250", "250", "0"]
+    ])
+    expect(ExportRequest.count).to eq(1)
+  end
 end

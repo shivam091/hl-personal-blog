@@ -34,4 +34,13 @@ RSpec.describe "Month and year review", type: :request do
     expect(page.at_css("#review-top-pages ~ p").text).to eq("No views in this span.")
     expect(page.text).to include("Page views are counted from 10 Aug, 2026, so earlier days in this period have none.")
   end
+
+  it "exports the span's figures against the one before as CSV" do
+    get review_report_path(format: :csv)
+
+    rows = CSV.parse(response.body)
+    expect(rows.first).to eq(["Figure", "This span", "Span before", "Change"])
+    expect(rows.second).to eq(["Views", "30", "10", "2.0"])
+    expect(ExportRequest.first.filename).to eq("review-2026-09.csv")
+  end
 end

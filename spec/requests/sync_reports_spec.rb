@@ -31,4 +31,18 @@ RSpec.describe "Sync health", type: :request do
     expect(row.at_css("a")["href"]).to eq(sync_requests_path(section: "crux"))
     expect(page.at_css("#sync-errors ~ div tbody").text).to include("Quota exceeded")
   end
+
+  it "exports a row per kind as CSV" do
+    started = Time.zone.parse("2026-10-10 06:00")
+    SyncRequest.create!(kind: "crux", status: "failed", created_at: started, started_at: started, finished_at: started + 5)
+
+    get sync_report_path(format: :csv)
+
+    rows = CSV.parse(response.body)
+    expect(rows.first).to eq(["Sync", "Kind", "Runs", "Succeeded", "Partial", "Failed", "Stalled", "In progress", "Median (s)", "Longest (s)",
+      "Rows created or updated", "Failed in a row", "Last success"])
+    expect(rows.second.first(6)).to eq(["Web Vitals history", "crux", "1", "0", "0", "1"])
+    expect(rows.size).to eq(SyncRequest::KINDS.size + 1)
+    expect(ExportRequest.count).to eq(1)
+  end
 end

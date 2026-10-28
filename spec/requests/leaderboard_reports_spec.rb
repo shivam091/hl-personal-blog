@@ -32,4 +32,20 @@ RSpec.describe "Post leaderboard", type: :request do
     expect(page.at_css("nav[aria-label=Order] a[aria-current=true]").text).to eq("Most potential")
     expect(page.at_css("nav[aria-label=Period] a[href*='from=']")["href"]).to include("sort=potential")
   end
+
+  it "exports the entries in the chosen order as CSV" do
+    get leaderboard_report_path(format: :csv, sort: "potential")
+
+    rows = CSV.parse(response.body)
+    expect(rows.first.first(8)).to eq(["URL", "Title", "Type", "Published", "Score", "Potential", "Views", "Views rank"])
+    expect(rows.drop(1).map { |row| row.values_at(0, 6) }).to match_array([["https://blog.example.com/post/a", "50"], ["https://blog.example.com/post/b", "5"]])
+    expect(ExportRequest.first.detail).to include("Most potential")
+  end
+
+  it "keeps the country filter but leaves comparison off, since nothing on it is compared" do
+    get leaderboard_report_path
+
+    expect(page.at_css("[aria-controls=period-compare]")).to be_nil
+    expect(page.at_css("[aria-controls=period-country]")).to be_present
+  end
 end

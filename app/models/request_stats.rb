@@ -78,11 +78,12 @@ class RequestStats
   # The 95th percentile first, as the slow tail is what a reader waits on;
   # a page's median alone hides it.
   def slowest_paths(limit: 10)
-    logs.group_by { |log| path_pattern(log.path) }.map do |path, hits|
+    rows = logs.group_by { |log| path_pattern(log.path) }.map do |path, hits|
       times = hits.map(&:ms)
       PathRow.new(path: path, requests: hits.size, median_ms: percentile(times, 0.5), p95_ms: percentile(times, 0.95), max_ms: times.max,
         errors: hits.count { |log| log.status >= 500 })
-    end.sort_by { |row| [-row.p95_ms, row.path] }.first(limit)
+    end.sort_by { |row| [-row.p95_ms, row.path] }
+    rows.first(limit || rows.size)
   end
 
   # Grouped by class, as the message often carries an id that differs every
@@ -123,6 +124,17 @@ class RequestStats
   def daily_cpu
     by_day = logs.group_by { |log| log.time.to_date }
     dates.map { |date| (by_day[date].sum(&:cpu) / by_day[date].size).round(1) if by_day[date] }
+  end
+
+  # A row per page rather than per request, as the log itself can already
+  # be read request by request.
+  def to_csv
+    CSV.generate do |csv|
+      csv << ["Path", "Requests", "Median (ms)", "95th percentile (ms)", "Slowest (ms)", "Server errors"]
+      slowest_paths(limit: nil).each do |row|
+        csv << [row.path, row.requests, row.median_ms&.round, row.p95_ms&.round, row.max_ms&.round, row.errors]
+      end
+    end
   end
 
   private

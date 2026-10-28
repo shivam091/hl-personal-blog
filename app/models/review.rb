@@ -78,6 +78,16 @@ class Review
     ]
   end
 
+  def to_csv
+    CSV.generate do |csv|
+      csv << ["Figure", "This span", "Span before", "Change"]
+      figures.each do |figure|
+        change = (figure.current - figure.previous).fdiv(figure.previous).round(4) if figure.current && figure.previous.to_f.positive?
+        csv << [figure.label, figure.current, figure.previous, change]
+      end
+    end
+  end
+
   def top_pages
     ranked(stats.by_page(:views)).first(TOP)
   end

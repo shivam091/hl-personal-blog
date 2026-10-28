@@ -29,6 +29,19 @@ class Leaderboard
     ranked.sort_by { |row| [-row.public_send(key).to_f, row.item.path] }
   end
 
+  # Each measure's own figure beside its rank, so a spreadsheet can be
+  # sorted by either.
+  def to_csv(sort: "score")
+    CSV.generate do |csv|
+      csv << ["URL", "Title", "Type", "Published", "Score", "Potential", *MEASURES.flat_map { |measure| [measure.label, "#{measure.label} rank"] }]
+      rows(sort: sort).each do |row|
+        entry = row.item.entry
+        csv << [entry.url, entry.name, entry.type, entry.published_at&.utc&.iso8601, row.score&.round(4), row.potential&.round(4),
+          *MEASURES.flat_map { |measure| [row.values[measure.key]&.round(4), row.ranks[measure.key]&.round(4)] }]
+      end
+    end
+  end
+
   private
 
   # Percentile ranks within each measure, among entries that have it, so

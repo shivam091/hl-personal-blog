@@ -8,10 +8,15 @@
   "failed" => ["Failed", ChartsHelper::SHARE_COLORS[1]], "stalled" => ["Stalled", ChartsHelper::SHARE_OTHER_COLOR],
   "in_progress" => ["In progress", ChartsHelper::SHARE_COLORS[0]]}
 
-%div{class: "mb-6"}
-  %h1{class: "text-2xl font-semibold tracking-tight"} Sync health
-  %p{class: "mt-1 text-sm text-slate-500"}
-    Every sync from Google, the feed and the sitemap: which keep failing, how long they take, and what they bring in.
+%div{class: "mb-6 flex flex-wrap items-start justify-between gap-3"}
+  %div
+    %h1{class: "text-2xl font-semibold tracking-tight"} Sync health
+    %p{class: "mt-1 text-sm text-slate-500"}
+      Every sync from Google, the feed and the sitemap: which keep failing, how long they take, and what they bring in.
+  = link_to list_url(@period, format: :csv),
+    class: "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50" do
+    = icon("download", size: 14)
+    Export CSV
 
 = render "google/shared/period", period: @period, keep: [], compare: false
 

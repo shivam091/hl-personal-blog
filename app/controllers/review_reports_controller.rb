@@ -9,5 +9,12 @@ class ReviewReportsController < ApplicationController
     @period = @span.period
     stats = BlogStats.new(@period)
     @review = Review.new(stats, search: Google::SearchConsole::Summary.new(@period), analytics: Google::Analytics::Summary.new(@period))
+
+    respond_to do |format|
+      format.html
+      format.csv do
+        send_csv @review.to_csv, filename: "review-#{@span.key}.csv", detail: "Review of #{@span.label}"
+      end
+    end
   end
 end

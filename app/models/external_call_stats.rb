@@ -83,6 +83,16 @@ class ExternalCallStats
     end.sort_by { |row| [-row.count, row.service, row.error] }.first(limit)
   end
 
+  def to_csv
+    CSV.generate do |csv|
+      csv << ["Service", "Calls", "Failed", "Failure rate", "Median (ms)", "95th percentile (ms)", "Last failure"]
+      services.each do |row|
+        csv << [row.service, row.calls, row.failed, row.failure_rate.round(4), row.median_ms&.round, row.p95_ms&.round,
+          row.last_failure&.utc&.iso8601]
+      end
+    end
+  end
+
   private
 
   def error_label(call)

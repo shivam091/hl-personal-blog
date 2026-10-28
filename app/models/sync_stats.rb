@@ -92,6 +92,17 @@ class SyncStats
       end.sort_by { |row| [-row.count, row.message] }.first(limit)
   end
 
+  def to_csv
+    CSV.generate do |csv|
+      csv << ["Sync", "Kind", "Runs", *OUTCOMES.map(&:humanize), "Median (s)", "Longest (s)", "Rows created or updated", "Failed in a row",
+        "Last success"]
+      kinds.each do |row|
+        csv << [row.section, row.kind, row.runs, *row.outcomes.values_at(*OUTCOMES), row.median_seconds&.round, row.max_seconds&.round,
+          row.rows, row.failing_streak, row.last_success&.utc&.iso8601]
+      end
+    end
+  end
+
   private
 
   def error_pattern(message)

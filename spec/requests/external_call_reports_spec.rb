@@ -29,4 +29,17 @@ RSpec.describe "API health", type: :request do
     expect(row.at_css("a")["href"]).to eq(external_calls_path(service: "Search Console"))
     expect(page.at_css("#call-errors ~ div tbody").text).to include("the server responded with status 403")
   end
+
+  it "exports a row per service as CSV" do
+    ExternalCall.create!(service: "Search Console", http_method: "POST", url: "https://example.com/", status: 403, duration_ms: 120,
+      error: "the server responded with status 403", created_at: Time.zone.parse("2026-10-10 09:00"))
+
+    get external_call_report_path(format: :csv)
+
+    expect(CSV.parse(response.body)).to eq([
+      ["Service", "Calls", "Failed", "Failure rate", "Median (ms)", "95th percentile (ms)", "Last failure"],
+      ["Search Console", "1", "1", "1.0", "120", "120", "2026-10-10T03:30:00Z"]
+    ])
+    expect(ExportRequest.count).to eq(1)
+  end
 end
