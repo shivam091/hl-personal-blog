@@ -89,6 +89,10 @@ shared:
               full_label: URL inspection
               icon: file-search
               route: google_search_console_url_inspections
+            - label: Generative AI
+              full_label: Generative AI performance
+              icon: sparkles
+              route: google_search_console_generative_ai
         # Named after GA's own report sections, so a page here is found where
         # it would be in GA.
         - label: Analytics
