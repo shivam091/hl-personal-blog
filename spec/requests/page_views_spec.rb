@@ -170,6 +170,20 @@ RSpec.describe "Page views", type: :request do
       expect(response.body).to include("No device data in this period.", "Not dated for this page yet; see the all-time totals below.")
     end
 
+    it "shows the page's AI impressions from the latest upload, naming the range Google totalled them over" do
+      PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
+      get page_view_path("/post/a")
+      expect(Nokogiri::HTML5(response.body).at_css("#page-ai-impressions")).to be_nil
+
+      Google::SearchConsole::GenerativeAiRow.create!(search_type: "Web", from: Date.new(2026, 9, 1), to: Date.new(2026, 9, 30),
+        breakdown: "pages", label: "https://blog.example.com/post/a", impressions: 7)
+      Google::SearchConsole::GenerativeAiStat.create!(search_type: "Web", date: Date.new(2026, 9, 1), impressions: 7)
+      get page_view_path("/post/a")
+
+      expect(Nokogiri::HTML5(response.body).at_css("#page-ai-impressions").text.squish)
+        .to eq("AI impressions, #{I18n.l(Date.new(2026, 9, 1))} – #{I18n.l(Date.new(2026, 9, 30))} 7")
+    end
+
     it "charts the page's clicks, impressions and position, with no data on days not synced" do
       PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
       [Date.new(2026, 10, 10), Date.new(2026, 10, 11)].each do |date|
