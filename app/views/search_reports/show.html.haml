@@ -41,6 +41,8 @@
         = time_chart(dates.zip(search.daily(:impressions)), y_title: "Impressions", label: "Search impressions per day", style: :line,
           unsettled: search_unsettled_from)
 
+  = render "search_reports/ai_share", ai: @ai, search: search, dates: dates, country: @stats.country
+
   -# Stacked, so a rich result's clicks read as a part of the day's, and
   -# one that stops showing leaves a gap in its colour.
   - appearances = search.appearances_daily

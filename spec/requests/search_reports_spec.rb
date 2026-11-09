@@ -37,6 +37,21 @@ RSpec.describe "Search insights report", type: :request do
     expect(page.at_css("#search-countries ~ div").text).to include("IN")
   end
 
+  it "charts the share of search impressions from AI answers for the whole site only" do
+    get search_report_path
+    expect(page.at_css("#ai-share")).to be_nil
+
+    Google::SearchConsole::GenerativeAiStat.create!(search_type: "Web", date: Date.new(2026, 10, 10), impressions: 50)
+    get search_report_path
+
+    card = page.at_css("section[aria-labelledby=ai-share]")
+    expect(card.css("[data-tip]")).not_to be_empty
+    expect(card.text.squish).to include("50 AI impressions (Web), 5.0% of the period's 1,000 search impressions.")
+
+    get search_report_path(country: "IN")
+    expect(page.at_css("#ai-share")).to be_nil
+  end
+
   it "splits queries into branded and non-branded" do
     gsc(query: "harshal ladhe", clicks: 2, impressions: 4, position: 1.0)
 
