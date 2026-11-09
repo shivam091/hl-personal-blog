@@ -31,12 +31,21 @@ RSpec.describe Review do
         published_at: Time.zone.parse("2026-09-01"), last_modified_at: Time.zone.parse("2026-09-01"))
     end
 
+    it "sets uploaded AI impressions against the month before once that month was uploaded too" do
+      stats = Google::SearchConsole::GenerativeAiStat
+      stats.create!(search_type: "Web", date: Date.new(2026, 9, 3), impressions: 12)
+      stats.create!(search_type: "Web", date: Date.new(2026, 8, 1), impressions: 4)
+
+      expect(review.figures.find { |figure| figure.label == "AI impressions" }.then { |figure| [figure.current, figure.previous] }).to eq([12, 4])
+    end
+
     it "sets each figure against the month before, leaving unsynced sources empty" do
       figures = review.figures.to_h { |figure| [figure.label, [figure.current, figure.previous]] }
 
       expect(figures["Views"]).to eq([44, 5])
       expect(figures["Entries published"]).to eq([1, 0])
       expect(figures["Search clicks"]).to eq([nil, nil])
+      expect(figures["AI impressions"]).to eq([nil, nil])
       expect(period.previous.from).to eq(Date.new(2026, 8, 1))
     end
 

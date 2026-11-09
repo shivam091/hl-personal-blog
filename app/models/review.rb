@@ -40,12 +40,13 @@ class Review
     end
   end
 
-  attr_reader :stats, :search, :analytics
+  attr_reader :stats, :search, :analytics, :ai
 
-  def initialize(stats, search:, analytics:)
+  def initialize(stats, search:, analytics:, ai: Google::SearchConsole::GenerativeAiSummary.new(stats.period))
     @stats = stats
     @search = search
     @analytics = analytics
+    @ai = ai
   end
 
   def period
@@ -72,6 +73,9 @@ class Review
         current: (search.totals.clicks if search.any?), previous: search_before&.clicks),
       Figure.new(label: "Search impressions", icon: "search", hint: "Times a blog page was shown in Google Search results.",
         current: (search.totals.impressions if search.any?), previous: search_before&.impressions),
+      Figure.new(label: "AI impressions", icon: "sparkles",
+        hint: "Times the blog appeared in an AI Overview or AI Mode answer, from uploads of Search Console's Generative AI report (#{ai.search_type || "none yet"}).",
+        current: ai.total, previous: ai.previous_total),
       Figure.new(label: "Analytics sessions", icon: "activity", hint: "Visits Google Analytics recorded; readers who block it aren't counted.",
         current: (analytics.sessions.sessions if analytics.any?),
         previous: (analytics.sessions(previous).sessions if analytics.any? && analytics.previous?))

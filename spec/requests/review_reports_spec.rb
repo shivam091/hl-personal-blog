@@ -23,7 +23,7 @@ RSpec.describe "Month and year review", type: :request do
     views = page.css("dl > div").find { |tile| tile.at_css("dt").text.include?("Views") }
     expect(views.css("dd").map { |dd| dd.text.squish }).to eq(["30", "200.0%"])
     expect(views.at_css("[role=tooltip]").text.squish).to eq("Human page views in the span; bots are counted apart and left out.")
-    expect(page.css("dl > div [role=tooltip]").size).to eq(8)
+    expect(page.css("dl > div [role=tooltip]").size).to eq(9)
     expect(page.css("#review-top-pages ~ ol li").map { |row| row.text.squish }).to eq(["/post/a 30"])
     mover = page.at_css("#review-rising ~ div li[data-tip]")
     expect(mover.at_css("a").text).to eq("/post/a")

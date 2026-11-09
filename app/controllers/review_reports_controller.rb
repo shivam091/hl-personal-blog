@@ -8,7 +8,8 @@ class ReviewReportsController < ApplicationController
     @span = Review.span(params[:span])
     @period = @span.period
     stats = BlogStats.new(@period)
-    @review = Review.new(stats, search: Google::SearchConsole::Summary.new(@period), analytics: Google::Analytics::Summary.new(@period))
+    @review = Review.new(stats, search: Google::SearchConsole::Summary.new(@period), analytics: Google::Analytics::Summary.new(@period),
+      ai: Google::SearchConsole::GenerativeAiSummary.new(@period))
 
     respond_to do |format|
       format.html
