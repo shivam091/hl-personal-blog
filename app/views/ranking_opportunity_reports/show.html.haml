@@ -105,3 +105,5 @@
       = link_to list_url(@period, @filtering, format: :csv, export: "losing"), class: export_class do
         = icon("download", size: 12)
         CSV
+
+  = render "ranking_opportunity_reports/ai_gaps", gaps: @ai_gaps, table_class: table_class, th_class: th_class
