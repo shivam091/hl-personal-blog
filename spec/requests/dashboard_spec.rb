@@ -149,7 +149,7 @@ RSpec.describe "Dashboard", type: :request do
     expect(page.at_css("#country-funnel ~ div tbody tr td").text.squish).to eq("🇮🇳 IN")
     expect(page.at_css("#referrers ~ div").text).to include("Search", "Direct")
     expect(response.body).to include("Loved the post", "reader@example.com", "Devices · all time")
-    india = page.css("#countries ~ div svg path").map { |path| JSON.parse(path["data-tip"]) }.find do |tip|
+    india = page.css("#countries ~ div svg g[data-tip]").map { |group| JSON.parse(group["data-tip"]) }.find do |tip|
       tip["title"] == "India"
     end
     expect(india["rows"]).to eq([{"value" => "120", "name" => "views"}])

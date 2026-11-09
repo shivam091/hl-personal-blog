@@ -35,7 +35,7 @@ RSpec.describe "Newsletter subscribers", type: :request do
     weeks = page.css("#subscriber-growth ~ div rect[data-tip]").map { |hit| JSON.parse(hit["data-tip"]) }
     expect(weeks.first["title"]).to eq("Week of 31 Aug, 2026")
     expect(weeks.map { |week| week["rows"].first["value"] }).to eq(%w[3 7 10 14 15 15 15])
-    india = page.css("#subscriber-countries ~ div path").find { |path| JSON.parse(path["data-tip"])["title"] == "India" }
+    india = page.css("#subscriber-countries ~ div g[data-tip]").find { |group| JSON.parse(group["data-tip"])["title"] == "India" }
     expect(JSON.parse(india["data-tip"])["rows"]).to eq([{"value" => "15", "name" => "subscribers"}])
   end
 

@@ -37,7 +37,7 @@ RSpec.describe "Messages report", type: :request do
     expect(current.css("td").map { |cell| cell.text.squish }).to eq(["0.5 now", "0", "0", "0", "1"])
     expect(page.at_css("[aria-labelledby=waiting]").text).to include("Eve")
     expect(page.at_css("[aria-labelledby=waiting]").text).not_to include("Ada")
-    india = page.css("[aria-labelledby=messages-by-country] path[data-tip]").find { |path| JSON.parse(path["data-tip"])["title"] == "India" }
+    india = page.css("[aria-labelledby=messages-by-country] g[data-tip]").find { |group| JSON.parse(group["data-tip"])["title"] == "India" }
     expect(JSON.parse(india["data-tip"])["rows"].first["value"]).to eq("3")
   end
 

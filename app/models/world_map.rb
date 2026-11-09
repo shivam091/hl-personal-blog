@@ -3,9 +3,11 @@
 # Drawn on the server, so the map needs no third-party map script or tile
 # service. Natural Earth's shapes because they're public domain, projected
 # in Equal Earth because it keeps each country's area true, so a big
-# country doesn't look busier than it is.
+# country doesn't look busier than it is. 1:50m rather than 1:110m, so
+# small countries such as Singapore and Malta are drawn too, and those
+# still too small to point at carry a dot.
 class WorldMap
-  Country = Struct.new(:code, :name, :path)
+  Country = Struct.new(:code, :name, :path, :dot)
 
   class << self
     def width
@@ -17,7 +19,7 @@ class WorldMap
     end
 
     def countries
-      @countries ||= data.fetch("countries").map { |code, shape| Country.new(code, shape.fetch("name"), shape.fetch("d")) }
+      @countries ||= data.fetch("countries").map { |code, shape| Country.new(code, shape.fetch("name"), shape.fetch("d"), shape["dot"]) }
     end
 
     def codes

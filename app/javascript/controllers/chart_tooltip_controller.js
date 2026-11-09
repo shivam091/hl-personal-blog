@@ -103,10 +103,27 @@ export default class extends Controller {
     this.hide()
     this.active = hit
     hit.setAttribute("data-active", "")
+    if (hit.hasAttribute("data-raise")) this.raise(hit)
     if (tip.x != null && hit.ownerSVGElement) clientX = this.trace(hit.ownerSVGElement, tip)
     this.fill(tip)
     this.place(clientX, clientY)
     this.dispatch("show", { detail: { series } })
+  }
+
+  /*
+    SVG paints in document order, so a shape's outline is half hidden under
+    the neighbours drawn after it. A copy is drawn last instead, left out of
+    the targets and the pointer so it can't be pointed at itself.
+  */
+  raise(hit) {
+    const copy = hit.cloneNode(true)
+    copy.removeAttribute("data-chart-tooltip-target")
+    copy.removeAttribute("data-tip")
+    copy.removeAttribute("data-raise")
+    copy.setAttribute("pointer-events", "none")
+    copy.setAttribute("aria-hidden", "true")
+    hit.parentNode.append(copy)
+    this.markers.push(copy)
   }
 
   /*

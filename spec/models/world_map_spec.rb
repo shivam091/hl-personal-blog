@@ -15,6 +15,14 @@ RSpec.describe WorldMap do
     expect(described_class.codes).to include("FR", "NO")
   end
 
+  it "draws small countries and overseas regions, with a dot where they're too small to point at" do
+    countries = described_class.countries.index_by(&:code)
+
+    expect(countries.values_at("SG", "HK", "MT", "BH", "GF", "RE")).to all(be_present)
+    expect(countries["SG"].dot).to be_present
+    expect(countries["IN"].dot).to be_nil
+  end
+
   it "leaves out Antarctica, where nobody reads from" do
     expect(described_class.codes).not_to include("AQ")
   end

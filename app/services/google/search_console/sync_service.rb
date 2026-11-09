@@ -38,7 +38,6 @@ module Google
       # counts a result once per page shown in it but once for the site, and
       # its own totals and tabs (other than Pages) are the site's.
       REPORTS = BREAKDOWNS.flat_map { |report| report[:site_only] ? [report.merge(site: true)] : [report, report.merge(site: true)] }.freeze
-      COUNTRIES = YAML.load_file(Rails.root.join("config/countries.yml")).freeze
       UNKNOWN_COUNTRY = "ZZ"
       # Google reports no incomplete day when the range has none, but also
       # when it has no rows for those days. These last few days are refetched
@@ -188,7 +187,7 @@ module Google
       # divide traffic by the same countries and devices.
       def normalize(field, value)
         case field
-        when :country then COUNTRIES.fetch(value.to_s.upcase, UNKNOWN_COUNTRY)
+        when :country then CountryCodes.from_iso3(value) || UNKNOWN_COUNTRY
         when :device then value.to_s.downcase
         else value
         end

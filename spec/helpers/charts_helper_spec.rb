@@ -13,15 +13,23 @@ RSpec.describe ChartsHelper, type: :helper do
 
   describe "#world_map" do
     it "shades countries on a log scale, greys out empty ones and lists those too small to draw" do
-      map = html(helper.world_map({"IN" => 1000, "US" => 10, "SG" => 4, "ZZ" => 7}, label: "Views by country", unit: "view"))
-      india = map.css("path").find { |path| JSON.parse(path["data-tip"])["title"] == "India" }
-      brazil = map.css("path").find { |path| JSON.parse(path["data-tip"])["title"] == "Brazil" }
+      map = html(helper.world_map({"IN" => 1000, "US" => 10, "VA" => 4, "ZZ" => 7}, label: "Views by country", unit: "view"))
+      india = map.css("g[data-tip]").find { |group| JSON.parse(group["data-tip"])["title"] == "India" }
+      brazil = map.css("g[data-tip]").find { |group| JSON.parse(group["data-tip"])["title"] == "Brazil" }
 
-      expect(india["class"]).to include("fill-[#0d366b]")
+      expect(india.at_css("path")["class"]).to include("fill-[#0d366b]", "group-hover:fill-sky-200")
       expect(JSON.parse(india["data-tip"])["rows"]).to eq([{"value" => "1,000", "name" => "views"}])
-      expect(brazil["class"]).to include("fill-[#f0efec]")
-      expect(map.at_css("figcaption").text).to include("SG 4")
+      expect(brazil.at_css("path")["class"]).to include("fill-[#f0efec]")
+      expect(map.at_css("figcaption").text).to include("VA 4")
       expect(map.at_css("figcaption").text).not_to include("ZZ")
+    end
+
+    it "marks a country too small to point at with a dot shaded like its shape" do
+      map = html(helper.world_map({"SG" => 5}, label: "Views by country", unit: "view"))
+      singapore = map.css("g[data-tip]").find { |group| JSON.parse(group["data-tip"])["title"] == "Singapore" }
+
+      expect(singapore.at_css("circle")["class"]).to include("fill-[#0d366b]")
+      expect(map.at_css("figcaption")).to be_nil
     end
   end
 

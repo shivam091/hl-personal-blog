@@ -28,6 +28,9 @@ module ChartsHelper
   MAP_FILLS = %w[fill-[#cde2fb] fill-[#9ec5f4] fill-[#6da7ec] fill-[#3987e5] fill-[#256abf] fill-[#184f95] fill-[#0d366b]].freeze
   MAP_SWATCHES = %w[bg-[#cde2fb] bg-[#9ec5f4] bg-[#6da7ec] bg-[#3987e5] bg-[#256abf] bg-[#184f95] bg-[#0d366b]].freeze
   MAP_EMPTY_FILL = "fill-[#f0efec]"
+  # Light blue under the pointer, outlined so it stands apart from the
+  # palest shade.
+  MAP_HOVER = "group-hover:fill-sky-200 group-hover:stroke-sky-500 group-data-active:fill-sky-200 group-data-active:stroke-sky-500"
 
   # In the order validated for touching segments; Other is a neutral at the
   # base so it never sits against the last hue.
@@ -482,8 +485,15 @@ module ChartsHelper
             role: "img", aria: {label: label}, class: "h-auto w-full") do
             safe_join(WorldMap.countries.map do |country|
               count = counts.fetch(country.code, 0)
-              tag.path(d: country.path, class: [map_fill(count, max), "stroke-white hover:opacity-75 data-active:opacity-75"], "stroke-width": 0.5,
-                data: chart_tip(country.name, [{value: number_with_delimiter(count), name: unit.pluralize(count)}]))
+              # Grouped so hovering a small country's dot lights its shape too,
+              # and raised while active so neighbours don't cover its outline.
+              tag.g(class: "group", data: {raise: true, **chart_tip(country.name, [{value: number_with_delimiter(count), name: unit.pluralize(count)}])}) do
+                safe_join([
+                  tag.path(d: country.path, class: [map_fill(count, max), "stroke-white", MAP_HOVER], "stroke-width": 0.5),
+                  (tag.circle(cx: country.dot[0], cy: country.dot[1], r: 2.5, class: [map_fill(count, max), MAP_HOVER, "stroke-slate-400"],
+                    "stroke-width": 0.5) if country.dot)
+                ].compact)
+              end
             end)
           end
         end,

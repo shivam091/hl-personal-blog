@@ -8,7 +8,6 @@ module Google
       include Mongoid::Document
 
       BREAKDOWNS = %w[pages countries devices].freeze
-      COUNTRY_CODES = YAML.load_file(Rails.root.join("config/country_names.yml")).freeze
 
       belongs_to :import, class_name: "Google::SearchConsole::GenerativeAiImport", inverse_of: :rows
 
@@ -26,7 +25,7 @@ module Google
       validates :label, presence: true
 
       def self.country_code(name)
-        COUNTRY_CODES[name.to_s.strip]
+        CountryCodes.from_name(name)
       end
     end
   end
