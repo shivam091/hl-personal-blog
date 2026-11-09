@@ -31,7 +31,7 @@ class CountryReportsController < ApplicationController
     respond_to do |format|
       format.html
       format.csv do
-        send_csv BlogStats::FunnelRow.to_csv(@rows),
+        send_csv BlogStats::FunnelRow.to_csv(@rows, ai: @ai),
                  filename: "countries-#{@period.from.iso8601}-to-#{@period.to.iso8601}.csv",
                  detail: "Countries, #{@period}"
       end

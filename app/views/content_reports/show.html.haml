@@ -29,7 +29,8 @@
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "by-type", title: "By type", icon: "book-open"} do
       %div{class: "overflow-x-auto"}
-        = render "content_reports/by_type", rows: content.by_type, table_class: table_class, th_class: th_class
+        = render "content_reports/by_type", rows: content.by_type, table_class: table_class, th_class: th_class, ai: @ai,
+          ai_by_type: content.items.group_by(&:type).transform_values { |items| items.sum { |item| @ai.pages.fetch(item.path, 0) } }
 
     -# Each step's bar is a share of everything published, so the steepest
     -# drop is where entries are lost.

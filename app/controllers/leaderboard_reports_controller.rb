@@ -17,13 +17,14 @@ class LeaderboardReportsController < ApplicationController
     load_blog_stats
     @content = ContentStats.new(@stats, search: Google::SearchConsole::Summary.new(@period))
     @sort = Sort.new(params[:sort].presence_in(Leaderboard::SORTS.keys) || Leaderboard::SORTS.keys.first)
-    leaderboard = Leaderboard.new(@content)
-    @rows = leaderboard.rows(sort: @sort.key)
+    @ai = Google::SearchConsole::GenerativeAiSummary.new(@period)
+    @leaderboard = Leaderboard.new(@content, ai: @ai)
+    @rows = @leaderboard.rows(sort: @sort.key)
 
     respond_to do |format|
       format.html
       format.csv do
-        send_csv leaderboard.to_csv(sort: @sort.key),
+        send_csv @leaderboard.to_csv(sort: @sort.key),
                  filename: "leaderboard-#{@period.from.iso8601}-to-#{@period.to.iso8601}.csv",
                  detail: "#{Leaderboard::SORTS[@sort.key]}, #{@period}"
       end

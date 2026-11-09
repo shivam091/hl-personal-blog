@@ -8,6 +8,7 @@ class ContentReportsController < ApplicationController
     load_blog_stats
     @search = Google::SearchConsole::Summary.new(@period)
     @content = ContentStats.new(@stats, search: @search)
+    @ai = Google::SearchConsole::GenerativeAiSummary.new(@period)
 
     respond_to do |format|
       format.html

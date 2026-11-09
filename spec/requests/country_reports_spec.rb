@@ -25,6 +25,23 @@ RSpec.describe "Country report", type: :request do
     end
   end
 
+  it "shows each country's AI impressions from the latest upload, once there is one" do
+    Google::SearchConsole::GenerativeAiStat.create!(search_type: "Web", date: Date.new(2026, 9, 1), impressions: 9)
+    Google::SearchConsole::GenerativeAiRow.create!(search_type: "Web", from: Date.new(2026, 9, 1), to: Date.new(2026, 9, 30),
+      breakdown: "countries", label: "India", country: "IN", impressions: 9)
+
+    get country_report_path
+
+    page = Nokogiri::HTML5(response.body)
+    column = page.css("#country-table thead th").map { |th| th.text.squish }.index("AI impressions")
+    expect(page.css("#country-table tbody tr").map { |row| [row.css("td").first.text.squish, row.css("td")[column].text.squish] })
+      .to eq([["🇮🇳 IN", "9"], ["🇩🇪 DE", "0"], ["🇺🇸 US", "0"]])
+
+    get country_report_path(format: :csv)
+    csv = CSV.parse(response.body, headers: true)
+    expect(csv.map { |row| [row["Country"], row["AI impressions 2026-09-01 to 2026-09-30"]] }).to eq([%w[IN 9], %w[DE 0], %w[US 0]])
+  end
+
   it "lists every country busiest first" do
     get country_report_path
 

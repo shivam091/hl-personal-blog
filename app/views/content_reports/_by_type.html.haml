@@ -11,6 +11,11 @@
           Per entry
         %th{scope: "col", class: "#{th_class} text-right"} Likes
         %th{scope: "col", class: "#{th_class} text-right"} Clicks
+        -# Google's totals over the latest upload's range, not the period's,
+        -# so the range is given where they're headed.
+        - if ai.covered
+          %th{scope: "col", class: "#{th_class} text-right", title: "Google's total for #{l(ai.covered.begin)} – #{l(ai.covered.end)}, from the latest Generative AI upload"}<
+            AI impressions
     %tbody
       - rows.each do |row|
         %tr{class: "border-t border-slate-200"}
@@ -25,3 +30,5 @@
               \—
           %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row[:likes])
           %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(row[:clicks])
+          - if ai.covered
+            %td{class: "px-3 py-1.5 text-right tabular-nums"}= number_with_delimiter(ai_by_type.fetch(row[:type], 0))

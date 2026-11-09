@@ -20,8 +20,15 @@ class Leaderboard
 
   Row = Struct.new(:item, :values, :ranks, :score, :potential, keyword_init: true)
 
-  def initialize(content)
+  # AI impressions are shown beside the measures but never ranked, since
+  # they're Google's totals over the latest upload's range, not the period's.
+  def initialize(content, ai: nil)
     @content = content
+    @ai = ai
+  end
+
+  def ai_impressions(row)
+    @ai.pages.fetch(row.item.path, 0) if @ai&.covered
   end
 
   def rows(sort: "score")
@@ -33,11 +40,13 @@ class Leaderboard
   # sorted by either.
   def to_csv(sort: "score")
     CSV.generate do |csv|
-      csv << ["URL", "Title", "Type", "Published", "Score", "Potential", *MEASURES.flat_map { |measure| [measure.label, "#{measure.label} rank"] }]
+      ai_heading = "AI impressions #{@ai.covered.begin.iso8601} to #{@ai.covered.end.iso8601}" if @ai&.covered
+      csv << ["URL", "Title", "Type", "Published", "Score", "Potential", *MEASURES.flat_map { |measure| [measure.label, "#{measure.label} rank"] },
+        *ai_heading]
       rows(sort: sort).each do |row|
         entry = row.item.entry
         csv << [entry.url, entry.name, entry.type, entry.published_at&.utc&.iso8601, row.score&.round(4), row.potential&.round(4),
-          *MEASURES.flat_map { |measure| [row.values[measure.key]&.round(4), row.ranks[measure.key]&.round(4)] }]
+          *MEASURES.flat_map { |measure| [row.values[measure.key]&.round(4), row.ranks[measure.key]&.round(4)] }, *(ai_impressions(row) if ai_heading)]
       end
     end
   end

@@ -46,6 +46,13 @@
             %span{class: "font-medium tabular-nums"}
               = metric_value(search_totals.value(metric.field), metric.format)
               = change.(search_totals.value(metric.field), search_before&.value(metric.field), metric)
+        -# Google's total over the latest upload's range rather than the
+        -# period's, since it gives pages no days, so the range is named.
+        - if ai.covered
+          %li{class: rows_class, id: "page-ai-impressions"}
+            %span{class: "text-slate-500", title: "From the latest upload of Search Console's Generative AI report (#{ai.search_type})"}
+              AI impressions, #{l(ai.covered.begin)} – #{l(ai.covered.end)}
+            %span{class: "font-medium tabular-nums"}= number_with_delimiter(ai.pages.fetch(slug, 0))
     = render layout: "shared/card", locals: {id: "page-analytics", title: "Google Analytics", icon: "bar-chart"} do
       %ul{class: "divide-y divide-slate-100"}
         %li{class: rows_class}

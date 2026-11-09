@@ -43,6 +43,8 @@
           %th{scope: "col", class: "#{th_class} w-40 text-left"}= potential ? "Potential" : "Score"
           - Leaderboard::MEASURES.each do |measure|
             %th{scope: "col", class: "#{th_class} text-right"}= measure.label
+          - if @ai.covered
+            %th{scope: "col", class: "#{th_class} text-right", title: "Google's total for #{l(@ai.covered.begin)} – #{l(@ai.covered.end)}, from the latest Generative AI upload; shown, not ranked"} AI impressions
       %tbody
         - @rows.each_with_index do |row, index|
           - figure = potential ? row.potential : row.score
@@ -68,7 +70,12 @@
                   = (value * 100).round
                 - else
                   = metric_value(value, measure.format)
+            - if @ai.covered
+              %td{class: "px-3 py-2 text-right whitespace-nowrap tabular-nums text-slate-700"}= number_with_delimiter(@leaderboard.ai_impressions(row))
   %p{class: "mt-3 text-xs text-slate-500"}
     Green is an entry's top quarter on a measure and amber its bottom. Likes per view needs #{BlogStats::MIN_VIEWS_FOR_RATE}+ views and
     CTR #{Google::SearchConsole::Summary::MIN_IMPRESSIONS}+ impressions; time engaged and read-through need
     #{Google::Analytics::Insights::MIN_VIEWS}+ Analytics views. Speed is Lighthouse's phone score. Search and Analytics cover every country.
+    - if @ai.covered
+      AI impressions are Google's totals for #{l(@ai.covered.begin)} – #{l(@ai.covered.end)} from the latest Generative AI upload, whatever
+      period is picked, so they're shown but don't count toward the score.

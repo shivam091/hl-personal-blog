@@ -32,6 +32,17 @@ RSpec.describe "Content report", type: :request do
     expect(page.css("#seo-funnel ~ div li span.font-medium").map(&:text)).to include("Published", "Read")
   end
 
+  it "totals each type's AI impressions from the latest upload, once there is one" do
+    Google::SearchConsole::GenerativeAiStat.create!(search_type: "Web", date: Date.new(2026, 9, 1), impressions: 9)
+    Google::SearchConsole::GenerativeAiRow.create!(search_type: "Web", from: Date.new(2026, 9, 1), to: Date.new(2026, 9, 30),
+      breakdown: "pages", label: "https://blog.example.com/post/a", impressions: 9)
+
+    get content_report_path
+
+    expect(page.css("#by-type ~ div thead th").last.text.squish).to eq("AI impressions")
+    expect(page.at_css("#by-type ~ div tbody tr").css("td").map(&:text)).to eq(%w[Posts 1 1 30 30.0 0 0 9])
+  end
+
   it "plots each entry's views against its age" do
     get content_report_path
 

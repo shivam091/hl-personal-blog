@@ -20,6 +20,24 @@ RSpec.describe "Post leaderboard", type: :request do
     ])
   end
 
+  it "shows each entry's AI impressions from the latest upload beside its measures, without ranking them" do
+    get leaderboard_report_path
+    expect(page.css("thead th").map { |th| th.text.squish }).not_to include("AI impressions")
+
+    Google::SearchConsole::GenerativeAiStat.create!(search_type: "Web", date: Date.new(2026, 9, 1), impressions: 9)
+    Google::SearchConsole::GenerativeAiRow.create!(search_type: "Web", from: Date.new(2026, 9, 1), to: Date.new(2026, 9, 30),
+      breakdown: "pages", label: "https://blog.example.com/post/b", impressions: 9)
+    get leaderboard_report_path
+
+    expect(page.css("thead th").last.text.squish).to eq("AI impressions")
+    expect(page.css("tbody tr").map { |row| [row.css("td")[1].text.squish.first(6), row.css("td").last.text.squish] })
+      .to eq([["A Post", "0"], ["B Post", "9"]])
+
+    get leaderboard_report_path(format: :csv)
+    csv = CSV.parse(response.body, headers: true)
+    expect(csv.map { |row| [row["Title"], row["AI impressions 2026-09-01 to 2026-09-30"]] }).to eq([["A", "0"], ["B", "9"]])
+  end
+
   it "ranks entries best overall, keeping the order in the period links" do
     get leaderboard_report_path
 
