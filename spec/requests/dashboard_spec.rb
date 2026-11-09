@@ -214,6 +214,24 @@ RSpec.describe "Dashboard", type: :request do
     expect(page.css("#country-funnel ~ div thead th").map { |th| th.text.strip }).to include("Search clicks", "GA views")
   end
 
+  it "shows uploaded AI impressions beside search's own, except while a country is picked" do
+    seed
+    Google::SearchConsole::Stat.create!(search_type: "web", date: Date.new(2026, 10, 10), clicks: 12, impressions: 300, position: 4.0)
+    Google::SearchConsole::GenerativeAiStat.create!(search_type: "Web", date: Date.new(2026, 10, 10), impressions: 42)
+
+    get root_path
+    search = page.css("#search ~ dl > div").to_h do |tile|
+      [tile.at_css("dt").xpath("text()").text.squish, tile.at_css("dd span").text.strip]
+    end
+    expect(search).to include("AI impressions · Web" => "42")
+
+    expect(page.at_css("#generative-ai-freshness").text.squish).to include("Generative AI upload", "Up to #{I18n.l(Date.new(2026, 10, 10))}")
+
+    get root_path(country: "IN")
+    expect(page.at_css("section[aria-labelledby=search]").text.squish).to include("AI impressions aren't split by country")
+    expect(page.css("#search ~ dl dt").map { |dt| dt.text.squish }).not_to include(a_string_starting_with("AI impressions"))
+  end
+
   it "links the Analytics card to its referrers, keeping the period" do
     get root_path(from: "2026-10-01", to: "2026-10-10")
 

@@ -15,6 +15,7 @@ class Anomalies
   MIN_VIEWS = 10
   MIN_CLICKS = 20
   SEARCH_DROP = 0.4
+  MIN_AI_IMPRESSIONS = 20
   FAILING_RUNS = 2
   MIN_CALLS = 10
   CALL_FAILURE_RATE = 0.2
@@ -26,7 +27,7 @@ class Anomalies
   end
 
   def flags
-    @flags ||= [views_flag, search_flag, *sync_flags, *service_flags, server_errors_flag, link_safety_flag].compact
+    @flags ||= [views_flag, search_flag, ai_flag, *sync_flags, *service_flags, server_errors_flag, link_safety_flag].compact
   end
 
   def any?
@@ -60,6 +61,29 @@ class Anomalies
     elsif latest <= usual * DROP
       Flag.new(level: :warning, icon: "arrow-down", title: "Views dropped yesterday",
         detail: "#{latest} views against a usual #{usual.round} on a #{weekday}.", path: [:page_views_path, {from: yesterday.iso8601, to: yesterday.iso8601}])
+    end
+  end
+
+  # The latest uploaded week against the week before, both whole, since
+  # uploads are made by hand and can stop short of yesterday, and a gap in
+  # them would otherwise read as a drop.
+  def ai_flag
+    days = Google::SearchConsole::GenerativeAiSummary.new(Period.new({from: (yesterday - 60).iso8601, to: yesterday.iso8601}, today: @today)).by_date
+    return if days.empty?
+
+    latest = days.keys.max
+    weeks = [(latest - 6..latest), (latest - 13..latest - 7)]
+    return unless weeks.all? { |week| week.all? { |date| days.key?(date) } }
+
+    now, before = weeks.map { |week| week.sum { |date| days[date] } }
+    return if now < MIN_AI_IMPRESSIONS && before < MIN_AI_IMPRESSIONS
+
+    detail = "#{now} AI impressions in the week to #{I18n.l(latest)}, against #{before} the week before."
+    path = [:google_search_console_generative_ai_path, {from: (latest - 6).iso8601, to: latest.iso8601}]
+    if before.positive? && now >= before * SPIKE
+      Flag.new(level: :info, icon: "sparkles", title: "AI impressions jumped", detail: detail, path: path)
+    elsif now <= before * (1 - SEARCH_DROP)
+      Flag.new(level: :warning, icon: "sparkles", title: "AI impressions fell", detail: detail, path: path)
     end
   end
 

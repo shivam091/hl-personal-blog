@@ -58,6 +58,32 @@ RSpec.describe Anomalies do
     expect(anomalies.flags.first.detail).to eq("7 clicks in the week to 9 Oct, 2026, down from 70 the week before.")
   end
 
+  def ai_days(first_week, second_week, last: Date.new(2026, 10, 8))
+    ((last - 13)..last).each_with_index do |date, index|
+      Google::SearchConsole::GenerativeAiStat.create!(search_type: "Web", date: date, impressions: index < 7 ? first_week : second_week)
+    end
+  end
+
+  it "flags AI impressions falling or jumping between the latest two uploaded weeks, however long ago they end" do
+    ai_days(10, 4)
+    expect(titles).to eq(["AI impressions fell"])
+    expect(anomalies.flags.first.detail).to eq("28 AI impressions in the week to #{I18n.l(Date.new(2026, 10, 8))}, against 70 the week before.")
+
+    Google::SearchConsole::GenerativeAiStat.delete_all
+    ai_days(5, 10)
+    expect(described_class.new(today: today).flags.map(&:title)).to eq(["AI impressions jumped"])
+  end
+
+  it "leaves AI impressions alone with too few, or a week not wholly uploaded" do
+    ai_days(2, 1)
+    expect(titles).to be_empty
+
+    Google::SearchConsole::GenerativeAiStat.delete_all
+    ai_days(10, 4)
+    Google::SearchConsole::GenerativeAiStat.where(date: Date.new(2026, 9, 28)).delete_all
+    expect(described_class.new(today: today).flags.map(&:title)).to be_empty
+  end
+
   it "flags a sync whose last runs all failed" do
     2.times { |run| SyncRequest.create!(kind: "crux", status: "failed", finished_at: run.hours.ago) }
     SyncRequest.create!(kind: "feed", status: "failed", finished_at: 1.hour.ago)

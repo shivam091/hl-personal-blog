@@ -12,6 +12,7 @@
           value: metric_value(totals.value(metric.field), metric.format),
           spark: (search.daily(metric.field).map(&:to_i) if %i[clicks impressions].include?(metric.field)),
           change: metric_change(totals.value(metric.field), previous&.value(metric.field), metric), compared_with: search.period.previous
+    = render "dashboard/ai_impressions", ai: ai, country: country
     %div{class: "px-4 py-3"}
       %p{class: "mb-1 text-xs font-medium text-slate-500"} Clicks per day
       = time_chart((search.period.from..search.period.to).to_a.zip(search.daily(:clicks)), y_title: "Clicks", label: "Search clicks per day",

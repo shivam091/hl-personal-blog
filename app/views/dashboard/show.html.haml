@@ -21,7 +21,7 @@
   = render "dashboard/countries", stats: @stats, country_metric: @country_metric
 
 %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
-  = render "dashboard/search", search: @search, published: @published
+  = render "dashboard/search", search: @search, published: @published, ai: @ai, country: @stats.country
   = render "dashboard/analytics", analytics: @analytics
 
 %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
@@ -62,4 +62,4 @@
   = render "dashboard/lifetime", page_views: @lifetime_views, hits: @lifetime_hits, stats: @stats
   = render "dashboard/inbox", messages: @latest_messages, subscribers: @latest_subscribers
 
-= render "dashboard/freshness", syncs: @syncs
+= render "dashboard/freshness", syncs: @syncs, ai: @ai
