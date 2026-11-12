@@ -66,7 +66,7 @@
                       %div{class: "h-6 min-w-11 rounded bg-slate-50"}
                     - else
                       %div{class: "h-6 min-w-11 rounded px-1 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(share * 100, max * 100)}",
-                        data: chart_tip("Week of #{l(cohort.start)}, week #{week}", [{value: number_with_delimiter(cohort.active[week]), name: "of #{number_with_delimiter(cohort.users)} came back"}])}
+                        data: chart_tip("Week of #{l(cohort.start)}, week #{week}", [{value: number_with_delimiter(cohort.active[week]), name: "Came back"}, {value: number_with_delimiter(cohort.users), name: "Users in the cohort"}])}
                         = number_to_percentage(share * 100, precision: 0)
     %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
       Weeks run from Sunday, as in GA. Blank weeks haven't finished yet for that cohort.

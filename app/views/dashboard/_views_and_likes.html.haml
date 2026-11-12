@@ -14,8 +14,10 @@
     %div
       %p{class: "mb-1 text-xs font-medium text-slate-500"} Views per #{per}
       = line_chart(dates, [ChartsHelper::Series.new(name: "This period", values: granularity.sums(days, stats.daily(:views))),
-        (ChartsHelper::Series.new(name: before.to_s, values: granularity.sums((before.from..before.to).to_a, stats.daily(:views, before)).first(dates.size), dashed: true) if before)].compact,
-        y_title: "Views", label: "Views per #{per}#{", against #{before}" if before}", per: granularity.per, events: events, event_name: "Published")
+        (ChartsHelper::Series.new(name: before.to_s, values: granularity.sums((before.from..before.to).to_a, stats.daily(:views, before)).first(dates.size), dashed: true,
+          keys: granularity.dates((before.from..before.to).to_a).first(dates.size)) if before)].compact,
+        y_title: "Views", label: "Views per #{per}#{", against #{before}" if before}", per: granularity.per, events: events, event_name: "Published",
+        compare: before.present?)
     %div
       %p{class: "mb-1 flex justify-between text-xs font-medium text-slate-500"}
         %span Likes per #{per}
@@ -24,4 +26,4 @@
           %span{class: "text-slate-900 tabular-nums"}
             = rate_or_dash(views >= BlogStats::MIN_VIEWS_FOR_RATE ? stats.total(:likes).to_f / views : nil)
       = time_chart(dates.zip(granularity.sums(days, stats.daily(:likes))), y_title: "Likes", label: "Likes per #{per}", per: granularity.per,
-        events: events, event_name: "Published")
+        events: events, event_name: "Published", compare: before.present?)

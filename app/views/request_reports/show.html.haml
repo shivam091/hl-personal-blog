@@ -135,7 +135,7 @@
                   - cells[row].each_with_index do |count, hour|
                     %td{class: "p-0.5"}
                       %div{class: "min-w-6 rounded px-0.5 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(count, max)}",
-                        data: chart_tip("#{Date::DAYNAMES.rotate[row]}, #{format("%02d:00", hour)}", [{value: number_with_delimiter(count), name: "request".pluralize(count)}])}= count
+                        data: chart_tip("#{Date::DAYNAMES.rotate[row]}, #{format("%02d:00", hour)}", [{value: number_with_delimiter(count), name: "Requests"}])}= count
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"} In #{Time.zone.name}, the app's time zone.
 
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}

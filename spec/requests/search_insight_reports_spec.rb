@@ -127,6 +127,38 @@ RSpec.describe "Search insights report", type: :request do
     ])
   end
 
+  it "measures the charts and breakdowns against the comparison, and nothing at all with No comparison" do
+    before = ->(model = Google::SearchConsole::Stat, **attributes) { model.create!(search_type: "web", date: Date.new(2026, 8, 17), **attributes) }
+    before.(clicks: 20, impressions: 500, position: 9.0)
+    before.(query: "css grid", clicks: 1, impressions: 100, position: 6.0)
+    before.(search_type: "image", clicks: 1, impressions: 40, position: 5.0)
+    before.(Google::SearchConsole::CountryStat, country: "IN", clicks: 5, impressions: 100)
+    before.(Google::SearchConsole::DeviceStat, device: "DESKTOP", clicks: 5, impressions: 100)
+    gsc(search_type: "image", clicks: 2, impressions: 90, position: 4.0)
+    Google::SearchConsole::DeviceStat.create!(search_type: "web", date: Date.new(2026, 10, 10), device: "DESKTOP", clicks: 10, impressions: 200)
+    card = ->(id) { page.at_css("##{id}").parent.text.squish }
+
+    get search_insight_report_path
+    expect(card.("clicks")).to include("Clicks, ")
+    expect(card.("impressions")).to include("Impressions, ")
+    expect(card.("search-countries")).to include("25 (+400%)")
+    expect(card.("search-devices")).to include("10 (+100%)")
+    expect(card.("search-types")).to include("2 (+100%)")
+    expect(card.("positions")).to include("1 (0%)")
+    expect(card.("branded")).to include("(+3200%)")
+    expect(card.("intent")).to include("(+")
+    expect(page.at_css("#top-queries").parent.css("th").map(&:text)).to include("Change")
+
+    get search_insight_report_path(compare: "off")
+    %w[clicks impressions search-countries search-devices search-types positions branded intent].each do |id|
+      expect(card.(id)).not_to match(/, \d|\([+−–0]/)
+    end
+    expect(page.at_css("#top-queries").parent.css("th").map(&:text)).not_to include("Change")
+    expect(card.("new-queries")).to include("Pick a comparison in the Compare menu to see these.")
+    expect(card.("queries-to-site")).to include("Pick a comparison in the Compare menu to see what's trending.")
+    expect(page.at_css("#your-content-panel-top li").text).not_to include("Previously")
+  end
+
   it "compares totals and queries with another country over the same dates" do
     Google::SearchConsole::CountryStat.create!(
       search_type: "web",

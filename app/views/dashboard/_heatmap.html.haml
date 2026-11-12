@@ -25,4 +25,4 @@
                   - value = cells[slug][code]
                   %td{class: "p-0.5"}
                     %div{class: "rounded px-1 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(value, max)}",
-                      data: chart_tip(slug, [{value: number_with_delimiter(value), name: "#{"view".pluralize(value)} from #{country_label(code)}"}])}= number_with_delimiter(value)
+                      data: chart_tip(slug, [{value: number_with_delimiter(value), name: "Views from #{country_label(code)}"}])}= number_with_delimiter(value)

@@ -9,6 +9,8 @@ export default class extends Controller {
   static targets = [ "hit", "tooltip", "crosshair" ]
   // Lines are 2px, too thin to hit exactly.
   static lineReach = 6
+  // A change's direction, coloured as the tiles colour theirs.
+  static tones = { good: "text-emerald-700", bad: "text-red-700" }
   // Copied from ChartsHelper::MARKERS, so a readout's key matches its legend.
   static markers = {
     circle: "M5 .5a4.5 4.5 0 1 1 0 9a4.5 4.5 0 1 1 0-9z", square: "M1 1h8v8H1z", diamond: "M5 0l5 5-5 5-5-5z",
@@ -169,14 +171,17 @@ export default class extends Controller {
   }
 
   /*
-    Values lead and names follow, since the reader already has the series
-    and wants the number.
+    Every readout is laid out alike, as Search Console's is: each row's key,
+    then its name, then its value lined up at the right, so figures read
+    down one column whichever chart they come from.
   */
   fill(tip) {
     const title = document.createElement("p")
     title.className = "mb-1 font-medium text-slate-500"
     title.textContent = tip.title
 
+    // Unkeyed rows, as Change, are inset to line up with keyed ones.
+    const keyed = tip.rows.some((row) => row.color)
     const list = document.createElement("ul")
     list.className = "space-y-0.5"
     tip.rows.forEach((row, index) => {
@@ -186,20 +191,21 @@ export default class extends Controller {
       // faded by mistake.
       if (tip.x != null) item.dataset.series = index
       if (row.color) item.append(this.swatch(row))
-
-      const value = document.createElement("strong")
-      value.className = "shrink-0 font-semibold whitespace-nowrap tabular-nums text-slate-900"
-      value.textContent = row.value
-      item.append(value)
+      else if (keyed) item.classList.add("pl-5")
 
       if (row.name) {
         const name = document.createElement("span")
         // Wrapped rather than run past the box, since a name can be a
         // post's whole title.
-        name.className = "min-w-0 break-words text-slate-600"
+        name.className = "min-w-0 flex-1 break-words text-slate-600"
         name.textContent = row.name
         item.append(name)
       }
+
+      const value = document.createElement("strong")
+      value.className = `ml-auto shrink-0 pl-4 text-right font-semibold whitespace-nowrap tabular-nums ${this.constructor.tones[row.tone] || "text-slate-900"}`
+      value.textContent = row.value
+      item.append(value)
       list.append(item)
     })
     this.tooltipTarget.replaceChildren(title, list, ...this.note(tip))

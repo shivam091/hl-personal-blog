@@ -1,6 +1,8 @@
 -# Shares are of the full total even when only the top rows are shown, so a
--# shortened list doesn't overstate the leaders.
+-# shortened list doesn't overstate the leaders. Given the counts compared
+-# with, and the metric they count, each count shows its change.
 - rows = ranked_counts(counts)
+- previous = local_assigns[:previous]
 - if rows.empty?
   %p{class: "text-sm text-slate-500"}= empty
 - else
@@ -18,7 +20,12 @@
           - share = total.zero? ? 0 : count.to_f * 100 / total
           %tr{class: "border-t border-slate-200"}
             %td{class: "py-1.5 pr-3 font-medium"}= key
-            %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(count)
+            - if previous
+              %td{class: "py-1.5 px-3 text-right tabular-nums whitespace-nowrap"}
+                = number_with_delimiter(count)
+                = row_change(count, previous[key], metric)
+            - else
+              %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(count)
             %td{class: "py-1.5 pl-3"}
               %div{class: "flex items-center gap-3"}
                 %div{class: "h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200", aria: {hidden: "true"}}

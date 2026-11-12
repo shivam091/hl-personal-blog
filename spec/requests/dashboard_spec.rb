@@ -94,7 +94,9 @@ RSpec.describe "Dashboard", type: :request do
     chart = page.at_css("section[aria-labelledby=views-and-likes]")
     readouts = chart.css("rect[data-tip]").map { |hit| JSON.parse(hit["data-tip"]) }
     published = readouts.select { |tip| tip["rows"].any? { |row| row["value"] == "Published" } }
-    expect(published.map { |tip| [tip["title"], tip["rows"].last["name"]] }).to eq([["Sat, 10 Oct 2026", "Busy post"]])
+    # Compared with the period before, so the day is named in its row.
+    expect(published.map { |tip| [tip["title"], tip["rows"].first["name"], tip["rows"].last["name"]] })
+      .to eq([["Day 27", "Views: Sat, 10 Oct 2026", "Busy post"]])
     # One on the views chart and one on the likes chart.
     expect(chart.css("span[data-event]").size).to eq(2)
     likes = chart.css("g[data-tip]").map { |bar| JSON.parse(bar["data-tip"]) }.find { |tip| tip["title"] == "Sat, 10 Oct 2026" }
@@ -152,7 +154,7 @@ RSpec.describe "Dashboard", type: :request do
     india = page.css("#countries ~ div svg path").map { |path| JSON.parse(path["data-tip"]) }.find do |tip|
       tip["title"] == "🇮🇳 India"
     end
-    expect(india["rows"]).to eq([{"value" => "120", "name" => "views"}])
+    expect(india["rows"]).to eq([{"value" => "120", "name" => "Views"}])
     expect(page.css("#country-shares ~ div table tbody tr th").map(&:text)).to eq(["Week of 5 Oct, 2026"])
   end
 
@@ -343,8 +345,25 @@ RSpec.describe "Dashboard", type: :request do
 
     card = page.at_css("section[aria-labelledby=views-and-likes]")
     expect(card.at_css("select#chart-by option[selected]")["value"]).to eq("week")
-    weeks = card.css("rect[data-tip]").map { |hit| JSON.parse(hit["data-tip"]) }.select { |tip| tip["title"] == "Week of 5 Oct, 2026" }
+    weeks = card.css("rect[data-tip]").map { |hit| JSON.parse(hit["data-tip"]) }.select { |tip| tip["rows"].first["name"] == "Views: 5 – 11 Oct 2026" }
+    expect(weeks.first["title"]).to match(/\AWeek \d+\z/)
     expect(weeks.first["rows"].first["value"]).to eq("152")
     expect(page.at_css("nav[aria-label=Period] a")["href"]).to include("chart_by=week")
+  end
+
+  it "reads likes out by place in the period, as views are, while comparing" do
+    seed
+    likes = -> { page.at_css("section[aria-labelledby=views-and-likes]").css("g[data-tip]").map { |bar| JSON.parse(bar["data-tip"]) } }
+
+    get root_path
+    expect(likes.().first["title"]).to eq("Day 1")
+    expect(likes.().first["rows"].first.slice("name", "color")).to eq("name" => "Likes", "color" => ChartsHelper::BAR_COLOR)
+
+    get root_path(chart_by: "week")
+    expect(likes.().first["title"]).to eq("Week 1")
+
+    get root_path(compare: "off")
+    expect(likes.().first["title"]).not_to start_with("Day")
+    expect(likes.().first["rows"].first["name"]).to eq("Likes")
   end
 end

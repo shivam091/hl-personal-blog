@@ -18,7 +18,7 @@ RSpec.describe ChartsHelper, type: :helper do
       brazil = map.css("path").find { |path| JSON.parse(path["data-tip"])["title"] == "🇧🇷 Brazil" }
 
       expect(india["class"]).to include("fill-[#0d366b]")
-      expect(JSON.parse(india["data-tip"])["rows"]).to eq([{"value" => "1,000", "name" => "views"}])
+      expect(JSON.parse(india["data-tip"])["rows"]).to eq([{"value" => "1,000", "name" => "Views"}])
       expect(brazil["class"]).to include("fill-[#f0efec]")
       expect(map.at_css("figcaption").text).to include("SG 4")
       expect(map.at_css("figcaption").text).not_to include("ZZ")
@@ -121,6 +121,73 @@ RSpec.describe ChartsHelper, type: :helper do
     end
   end
 
+  describe "#line_chart comparing" do
+    it "counts the day in its title, names the day each reading fell on, the compared line as the line it's read against" do
+      days = [Date.new(2026, 11, 1), Date.new(2026, 11, 2)]
+      chart = html(helper.line_chart(days, [
+        ChartsHelper::Series.new(name: "Impressions", values: [5, 7]),
+        ChartsHelper::Series.new(name: "Impressions, Sep – Oct", values: [3, nil], dotted: true, keys: [Date.new(2026, 10, 4), nil])
+      ], y_title: "Impressions", label: "Impressions", compare: true))
+
+      expect(tips(chart).map { |tip| tip["title"] }).to eq(["Day 1", "Day 2"])
+      expect(tips(chart).map { |tip| tip["rows"].map { |row| [row["name"], row["value"]] } }).to eq([
+        [["Impressions: Sun, 1 Nov 2026", "5"], ["Impressions: Sun, 4 Oct 2026", "3"], ["Change", "↑ 66.7%"]],
+        [["Impressions: Mon, 2 Nov 2026", "7"], ["Impressions", "No data"], ["Change", "—"]]
+      ])
+      expect(tips(chart).map { |tip| tip["rows"].last["tone"] }).to eq(["good", nil])
+      expect(chart.css("li").map(&:text)).to include("Impressions, Sep – Oct")
+    end
+
+    it "names readings after what's measured, and leaves them undated when both lines fall on the same days" do
+      days = [Date.new(2026, 11, 1), Date.new(2026, 11, 2)]
+      chart = ->(keys) do
+        html(helper.line_chart(days, [ChartsHelper::Series.new(name: "This period", values: [5, 7]),
+          ChartsHelper::Series.new(name: "India", values: [3, 7], dashed: true, keys: keys)], y_title: "Views", label: "Views", compare: true))
+      end
+
+      expect(tips(chart.(days.map { |day| day - 28 })).first["rows"].first(2).map { |row| row["name"] })
+        .to eq(["Views: Sun, 1 Nov 2026", "Views: Sun, 4 Oct 2026"])
+      same = tips(chart.(days)).first
+      expect([same["title"], same["rows"].map { |row| row["name"] }]).to eq(["Sun, 1 Nov 2026", ["This period", "India", "Change"]])
+    end
+  end
+
+  describe "#stacked_chart comparing" do
+    let(:days) { [Date.new(2026, 11, 1), Date.new(2026, 11, 2)] }
+    let(:before) { [Date.new(2026, 10, 4), Date.new(2026, 10, 5)] }
+
+    def readings(chart)
+      tips(chart).map { |tip| tip["rows"].map { |row| [row["value"], row["name"]] } }
+    end
+
+    it "counts the day in its title, names the day each reading fell on, the compared bar as the series it's read against" do
+      chart = html(helper.stacked_chart(days, [ChartsHelper::Series.new(name: "Clicks", values: [2, 1], color: "#000000")],
+        label: "Clicks", y_title: "Clicks", previous: [8, nil], previous_name: "Clicks, Sep – Oct", previous_keys: before))
+
+      expect(tips(chart).map { |tip| tip["title"] }).to eq(["Day 1", "Day 2"])
+      expect(readings(chart)).to eq([
+        [["2", "Clicks: Sun, 1 Nov 2026"], ["8", "Clicks: Sun, 4 Oct 2026"], ["↓ 75.0%", "Change"]],
+        [["1", "Clicks: Mon, 2 Nov 2026"], ["No data", "Clicks: Mon, 5 Oct 2026"], ["—", "Change"]]
+      ])
+      expect(tips(chart).map { |tip| tip["rows"].last["tone"] }).to eq(["bad", nil])
+      expect(chart.css("li").map(&:text)).to include("Clicks, Sep – Oct")
+    end
+
+    it "names parts' compared total by its own name, and keeps it undated without the days" do
+      parts = [ChartsHelper::Series.new(name: "High", values: [1, 1], color: "#000000"), ChartsHelper::Series.new(name: "Low", values: [1, 0], color: "#ffffff")]
+      dated = html(helper.stacked_chart(days, parts, label: "Requests", y_title: "Requests", previous: [3, 4], previous_name: "Previous period",
+        previous_keys: before))
+      undated = html(helper.stacked_chart(days, parts, label: "Requests", y_title: "Requests", previous: [3, 4], previous_name: "India"))
+
+      expect(readings(dated).first)
+        .to eq([["1", "High: Sun, 1 Nov 2026"], ["1", "Low: Sun, 1 Nov 2026"], ["3", "Previous period: Sun, 4 Oct 2026"], ["↓ 33.3%", "Change"]])
+      expect(readings(undated).first).to eq([["1", "High"], ["1", "Low"], ["3", "India"]])
+      level = html(helper.stacked_chart(days, parts, label: "Requests", y_title: "Requests", previous: [2, 1], previous_keys: before))
+      expect(tips(level).map { |tip| tip["rows"].last.values_at("value", "tone") }).to eq([["0.0%", nil], ["0.0%", nil]])
+      expect(tips(undated).first["title"]).to eq("Sun, 1 Nov 2026")
+    end
+  end
+
   describe "#line_chart shading" do
     it "shades under the first line only where it has data" do
       days = (Date.new(2026, 9, 1)..Date.new(2026, 9, 3)).to_a
@@ -214,6 +281,23 @@ RSpec.describe ChartsHelper, type: :helper do
         {"value" => "2 clicks", "name" => "Clicks"}, {"value" => "8 clicks", "name" => "Clicks, July", "dotted" => true},
         {"value" => "10", "name" => "Average position"}
       ])
+    end
+
+    it "counts the week in its title and names the days each reading spans, given them" do
+      weeks = [Date.new(2026, 10, 4), Date.new(2026, 10, 11)]
+      compared = [measures.first.dup.tap do |measure|
+        measure.values = [2, 4]
+        measure.previous = [8, 1]
+        measure.previous_name = "Clicks, September"
+        measure.previous_keys = [Date.new(2026, 9, 6), Date.new(2026, 9, 13)]
+      end]
+
+      compared.first.previous_keys = [Date.new(2026, 8, 30), Date.new(2026, 12, 28)]
+      tip = tips(html(helper.measures_chart(weeks, compared, label: "Clicks", per: :week))).last
+      expect(tip["title"]).to eq("Week 2")
+      expect(tip["rows"].map { |row| [row["name"], row["value"]] }).to eq([["Clicks: 11 – 17 Oct 2026", "4 clicks"], ["Clicks: 28 Dec 2026 – 3 Jan 2027", "1 clicks"]])
+      expect(helper.send(:compared_label, Date.new(2026, 8, 30), :week)).to eq("30 Aug – 5 Sep 2026")
+      expect(helper.send(:compared_label, Date.new(2026, 8, 1), :month)).to eq("Aug 2026")
     end
 
     it "puts each figure on its own scale, with an axis titled and labelled in its colour, lower is better upward" do

@@ -177,7 +177,10 @@ module Google
     # The period compared with is read bucket for bucket against this one,
     # so its line runs under the same dates.
     # Figures stored by the hour fit none of the buckets that can be picked.
-    Trend = Struct.new(:dates, :values, :previous, :selection, :per, keyword_init: true) do
+    # Its buckets are kept, so a reading names the one it fell in; another
+    # country's or search type's fall in the same ones, so it has none and
+    # is named for what it is.
+    Trend = Struct.new(:dates, :values, :previous, :previous_dates, :selection, :per, keyword_init: true) do
       def per
         self[:per] || selection.by
       end
@@ -651,7 +654,8 @@ module Google
         dates: current.keys,
         selection: selection,
         values: selection.available.index_with { |field| current.values.map { |row| row&.value(field) } },
-        previous: (selection.available.index_with { |field| previous.values.map { |row| row&.value(field) }.first(current.size) } if previous)
+        previous: (selection.available.index_with { |field| previous.values.map { |row| row&.value(field) }.first(current.size) } if previous),
+        previous_dates: (previous.keys.first(current.size) if previous && previous.keys.first(current.size) != current.keys)
       )
     end
 

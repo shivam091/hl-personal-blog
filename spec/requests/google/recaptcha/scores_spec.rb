@@ -67,9 +67,9 @@ RSpec.describe "reCAPTCHA scores", type: :request do
     page = Nokogiri::HTML5(response.body)
     days = page.css("section[aria-labelledby=recaptcha-requests] [data-tip]").map { |bar| JSON.parse(bar["data-tip"]) }
     # A day with neither has no readout, as without a comparison.
-    expect(days.map { |day| [day["title"], day["rows"].last.values_at("name", "value")] }).to eq([
-      ["Sat, 10 Oct 2026", ["Previous period", "1"]],
-      ["Mon, 12 Oct 2026", ["Previous period", "4"]]
+    expect(days.map { |day| [day["title"], *day["rows"].last(2).map { |row| row.values_at("name", "value") }] }).to eq([
+      ["Day 1", ["Previous period: Wed, 7 Oct 2026", "1"], ["Change", "↓ 100.0%"]],
+      ["Day 3", ["Previous period: Fri, 9 Oct 2026", "4"], ["Change", "0.0%"]]
     ])
     expect(page.css("section[aria-labelledby=recaptcha-requests] polyline[data-previous]")).to be_present
     # 12 Oct is the third day, so it's read against 9 Oct.

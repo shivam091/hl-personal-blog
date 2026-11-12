@@ -37,7 +37,8 @@ module AnalyticsInsightReportsHelper
   def analytics_trend_series(insights, tab, dates, before, before_dates)
     scale = ->(values) { tab.format == :count ? values : values.map { |value| (value * 100).round(2) if value } }
     [ChartsHelper::Series.new(name: "This period", values: scale.(insights.trend(tab.field, dates))),
-     (ChartsHelper::Series.new(name: before.to_s, values: scale.(insights.trend(tab.field, before_dates, before)).first(dates.size), dashed: true) if before)].compact
+     (ChartsHelper::Series.new(name: before.to_s, values: scale.(insights.trend(tab.field, before_dates, before)).first(dates.size), dashed: true,
+       keys: before_dates.first(dates.size)) if before)].compact
   end
 
   def speed_scatter_points(points)
@@ -45,10 +46,10 @@ module AnalyticsInsightReportsHelper
       color = SPEED_BANDS.fetch(Google::PageSpeed::Result.rating(:lcp_ms, point.lcp_ms)).last
       ChartsHelper::ScatterPoint.new(x: point.lcp_ms / 1000.0, y: point.engagement_rate * 100, color: color,
         tip: chart_tip(point.page_path, [
-          {value: "#{number_with_precision(point.lcp_ms / 1000.0, precision: 1)} s", name: (point.source == :readers ? "readers' mean LCP" : "LCP on a phone"),
+          {value: "#{number_with_precision(point.lcp_ms / 1000.0, precision: 1)} s", name: (point.source == :readers ? "Readers' mean LCP" : "LCP on a phone"),
            color: color},
-          {value: metric_value(point.engagement_rate, :rate), name: "engaged"},
-          {value: number_with_delimiter(point.views), name: "views"}
+          {value: metric_value(point.engagement_rate, :rate), name: "Engagement rate"},
+          {value: number_with_delimiter(point.views), name: "Views"}
         ]))
     end
   end

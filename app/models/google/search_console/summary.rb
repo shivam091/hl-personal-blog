@@ -99,7 +99,7 @@ module Google
 
       # So a ranking that's slipping shows before its clicks do.
       def previous_positions
-        return {} unless previous_synced?
+        return {} unless compared?
 
         @previous_positions ||= queries(period.previous).to_h { |row| [row[:query], row.position] }
       end
@@ -109,14 +109,14 @@ module Google
       # it moves the totals. Empty until the period before was synced, since
       # every query would otherwise read as new.
       def new_queries(limit: 10)
-        return [] unless previous_synced?
+        return [] unless compared?
 
         before = queries(period.previous).to_set { |row| row[:query] }
         by_impressions(queries.reject { |row| before.include?(row[:query]) }, limit)
       end
 
       def lost_queries(limit: 10)
-        return [] unless previous_synced?
+        return [] unless compared?
 
         now = queries.to_set { |row| row[:query] }
         by_impressions(queries(period.previous).reject { |row| now.include?(row[:query]) }, limit)
@@ -126,6 +126,13 @@ module Google
         return @previous_synced if defined?(@previous_synced)
 
         @previous_synced = period.compare_countries? || Stat.where(:date.lte => period.previous.from).exists?
+      end
+
+      # Whether a comparison was asked for and there's something to compare
+      # with, so "No comparison" hides every change rather than the tiles'
+      # alone.
+      def compared?
+        period.compare? && previous_synced?
       end
 
       def top_queries(limit: 10)
@@ -214,8 +221,8 @@ module Google
         weeks.index_with { |start| (start...(start + 7)).map { |date| clicks[date] } }
       end
 
-      def position_distribution
-        rows = queries.select(&:position)
+      def position_distribution(within = period)
+        rows = queries(within).select(&:position)
         POSITION_BUCKETS.transform_values do |range|
           in_bucket = rows.select { |row| range.cover?(row.position) }
           {queries: in_bucket.size, clicks: in_bucket.sum(&:clicks), impressions: in_bucket.sum(&:impressions)}
@@ -301,7 +308,7 @@ module Google
       # Pages aren't split by country, so a country compared with another
       # would compare a page with itself.
       def previous_pages?
-        previous_synced? && !period.compare_countries?
+        compared? && !period.compare_countries?
       end
 
       # Every search type but web, which is most of the totals already; rows
@@ -416,7 +423,7 @@ module Google
       end
 
       def query_movers
-        @query_movers ||= movers(queries, (queries(period.previous) if previous_synced?), :query)
+        @query_movers ||= movers(queries, (queries(period.previous) if compared?), :query)
       end
 
       # From either period, so one that lost every click still trends down.

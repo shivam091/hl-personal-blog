@@ -65,8 +65,8 @@
                   %td{class: "p-0.5"}
                     %div{class: "h-6 min-w-14 rounded px-1 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(value, max)}",
                       data: chart_tip("#{label.(result.rows, row)} · #{label.(result.columns, column)}",
-                        [{value: number_with_delimiter(value), name: metric_label.downcase},
-                         ({value: number_to_percentage(value * 100.0 / row_total, precision: 1), name: "of the row"} if row_total.to_i.positive?)].compact)}
+                        [{value: number_with_delimiter(value), name: metric_label},
+                         ({value: number_to_percentage(value * 100.0 / row_total, precision: 1), name: "Share of the row"} if row_total.to_i.positive?)].compact)}
                       = number_with_delimiter(value)
                 %td{class: "px-3 text-right font-medium tabular-nums"}= number_with_delimiter(row_total)
           %tfoot

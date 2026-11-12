@@ -177,7 +177,8 @@ module GoogleReportsHelper
       ChartsHelper::Measure.new(name: metric.label, values: trend.values.fetch(metric.field), color: metric.color,
         dashed: metric.format != :count, inverted: metric.lower_is_better, whole: metric.format == :count,
         tick: ->(value) { axis_value(value, metric.format) }, reading: ->(value) { metric_value(value, metric.format) },
-        previous: trend.previous&.fetch(metric.field), previous_name: ("#{metric.label}, #{@period.previous}" if trend.previous))
+        previous: trend.previous&.fetch(metric.field), previous_name: ("#{metric.label}, #{@period.previous}" if trend.previous),
+        previous_keys: trend.previous_dates)
     end
   end
 

@@ -364,12 +364,12 @@ RSpec.describe "Search Console performance", type: :request do
       page = Nokogiri::HTML5(response.body)
       expect(page.css("figure polyline[data-previous]")).to be_present
       expect(JSON.parse(page.css("figure [data-tip]").last["data-tip"])["rows"][1])
-        .to include("value" => "No data", "name" => "Clicks, 18 Aug, 2026 – 14 Sep, 2026", "dotted" => true)
+        .to include("value" => "No data", "name" => "Clicks: Mon, 14 Sep 2026", "dotted" => true)
 
       get google_search_console_performance_breakdown_path("pages", compare: "year")
       page = Nokogiri::HTML5(response.body)
       expect(JSON.parse(page.css("figure [data-tip]").last["data-tip"])["rows"][1])
-        .to include("value" => "7", "name" => "Clicks, 15 Sep, 2025 – 12 Oct, 2025")
+        .to include("value" => "7", "name" => "Clicks: Sun, 12 Oct 2025")
       expect(page.text).to include("Dotted: 15 Sep, 2025 – 12 Oct, 2025")
       expect(page.at_css("nav[aria-label=Breakdown] a[href*='queries']")["href"]).to include("compare=year")
       expect(page.at_css("#period-compare a[aria-current]").text).to include("Same period last year")

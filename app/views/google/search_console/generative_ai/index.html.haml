@@ -86,8 +86,9 @@
   = render layout: "shared/card", locals: {id: "generative-ai-impressions", title: "Impressions per day", icon: "trending-up", class: "mb-6"} do
     %div{class: "px-4 py-3"}
       = line_chart(days, [ChartsHelper::Series.new(name: "This period", values: days.map { |day| @daily[day] }),
-        (ChartsHelper::Series.new(name: before.to_s, values: (before.from..before.to).map { |day| @previous_daily[day] }.first(days.size), dashed: true) if before)].compact,
-        y_title: "Impressions", label: "AI Overviews and AI Mode impressions per day#{", against #{before}" if before}")
+        (ChartsHelper::Series.new(name: before.to_s, values: (before.from..before.to).map { |day| @previous_daily[day] }.first(days.size), dashed: true,
+          keys: (before.from..before.to).first(days.size)) if before)].compact,
+        y_title: "Impressions", label: "AI Overviews and AI Mode impressions per day#{", against #{before}" if before}", compare: before.present?)
 
   - if @pagination.total_count.zero?
     = render "shared/empty_state", icon: "inbox",

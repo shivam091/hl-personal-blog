@@ -89,7 +89,7 @@ RSpec.describe "Content report", type: :request do
     days = calendar.css("span[data-tip]").map { |cell| JSON.parse(cell["data-tip"]) }
     expect(days.size).to eq(346)
     published = days.find { |day| day["title"] == "Thu, 1 Oct 2026" }
-    expect(published["rows"]).to eq([{"value" => "1", "name" => "entry"}, {"value" => "Post", "name" => "A post"}])
+    expect(published["rows"]).to eq([{"value" => "1", "name" => "Entries"}, {"value" => "Post", "name" => "A post"}])
     expect(calendar.text.squish).to include("1 entry on 1 day since 1 Nov, 2025")
   end
 

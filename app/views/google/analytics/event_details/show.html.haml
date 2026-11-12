@@ -1,7 +1,8 @@
 - content_for :title, "#{@event_name} – Analytics engagement"
 -# The period before is dashed, as in GA, so a figure is read against it.
 - over_time = ->(current, previous) { [ChartsHelper::Series.new(name: @period.to_s, values: current),
-  (ChartsHelper::Series.new(name: @period.previous.to_s, values: previous, dashed: true) if previous)].compact }
+  (ChartsHelper::Series.new(name: @period.previous.to_s, values: previous, dashed: true,
+    keys: (@period.previous.from..@period.previous.to).first(previous.size)) if previous)].compact }
 - dates = (@period.from..@period.to).to_a
 
 = link_to google_analytics_engagement_path(**@period.query), class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
@@ -31,7 +32,7 @@
     %div{class: "px-4 py-3"}
       - if @totals.event_count.positive?
         = line_chart(dates, over_time.(@event_counts, (@previous_event_counts if @previous_totals)), y_title: "Event count",
-          label: "#{@event_name} events per day")
+          label: "#{@event_name} events per day", compare: @previous_totals.present?)
       - else
         %p{class: "py-10 text-center text-sm text-slate-500"} No #{@event_name} events in #{@period}.
   = render layout: "shared/card", locals: {id: "realtime", title: "Events in the last 30 minutes", icon: "clock"} do
@@ -52,7 +53,7 @@
     %div{class: "px-4 py-3"}
       - if @events_per_session
         = line_chart(dates, over_time.(@events_per_session, @previous_events_per_session), y_title: "Events per session",
-          label: "#{@event_name} events per session that had it, per day")
+          label: "#{@event_name} events per session that had it, per day", compare: @previous_events_per_session.present?)
       - else
         %p{class: "py-10 text-center text-sm text-slate-500"} Only Google Analytics can count sessions, and it couldn't be asked.
 

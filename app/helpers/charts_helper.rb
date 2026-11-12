@@ -67,11 +67,15 @@ module ChartsHelper
   # Worded as Search Console's own readout, for the days its figures may
   # still change.
   UNSETTLED_NOTE = "Data is still being collected"
+  # What a compared readout counts its place in the period by.
+  PLACE_TITLES = {minute: "Minute", hour: "Hour", day: "Day", week: "Week", month: "Month"}.freeze
 
   # Told apart by dash as well as shade, so a second series never relies on
   # colour alone. A colour of its own is for more series than two shades
   # can tell apart; dotted is for a total drawn among its parts.
-  Series = Struct.new(:name, :values, :dashed, :color, :dotted, :marker, keyword_init: true) do
+  # Keys are the days its values fell on, for a period compared with, so
+  # its readout says which day each was rather than this period's.
+  Series = Struct.new(:name, :values, :dashed, :color, :dotted, :marker, :keys, keyword_init: true) do
     def dasharray
       if dotted then "0 4"
       elsif dashed then "4 3"
@@ -84,7 +88,10 @@ module ChartsHelper
   # position is inverted so up still reads as better, since 1 is the top.
   # The period compared with is dotted on the same scale, so a line is read
   # against its own past rather than a second axis.
-  Measure = Struct.new(:name, :values, :color, :dashed, :inverted, :whole, :tick, :reading, :previous, :previous_name, keyword_init: true)
+  # Previous keys are the buckets the period compared with fell in, so its
+  # readout names them.
+  Measure = Struct.new(:name, :values, :color, :dashed, :inverted, :whole, :tick, :reading, :previous, :previous_name, :previous_keys,
+    keyword_init: true)
 
   # Its tip is chart_tip's data, so it reads out like any other chart's.
   ScatterPoint = Struct.new(:x, :y, :color, :tip, keyword_init: true)
@@ -126,8 +133,10 @@ module ChartsHelper
   # what happened that day. Unsettled is the first day whose figures may
   # still change, so its readout and every later one say so.
   # A legend names the bars where the card's title alone doesn't say what
-  # they count.
-  def time_chart(points, label:, y_title:, x_title: nil, style: :bars, unit: "", per: :day, events: {}, event_name: nil, unsettled: nil, legend: nil)
+  # they count. Beside a chart comparing periods, its readout counts the
+  # place in the period as that chart's does, so the two read alike.
+  def time_chart(points, label:, y_title:, x_title: nil, style: :bars, unit: "", per: :day, events: {}, event_name: nil, unsettled: nil, legend: nil,
+    compare: false)
     keys = points.map(&:first)
     if style == :line
       return line_chart(keys, [Series.new(name: label, values: points.map(&:last))], label: label, unit: unit, y_title: y_title, x_title: x_title,
@@ -140,7 +149,7 @@ module ChartsHelper
       (event_legend(event_name) if events.any?),
       chart_frame(keys, points.map(&:last).compact.max, label, x_title: x_title, y_title: y_title, per: per,
         overlay: (->(_) { event_markers(keys, events, lines: false) } if events.any?)) do |max|
-        bar_marks(points, max, unit, per, events, event_name, unsettled: unsettled)
+        bar_marks(points, max, unit, per, events, event_name, unsettled: unsettled, reading: y_title, compare: compare)
       end
     ].compact)
   end
@@ -159,14 +168,19 @@ module ChartsHelper
   # name a bar in its readout when its date alone wouldn't say what it is.
   # The period compared with is a dotted line of whole bars on the same
   # scale, as on the trend charts, so each bar is read against its own past.
-  def stacked_chart(keys, series, label:, y_title:, x_title: nil, per: :day, titles: nil, unsettled: nil, previous: nil, previous_name: nil)
+  # Given the days it fell on, each reading names its own day.
+  def stacked_chart(keys, series, label:, y_title:, x_title: nil, per: :day, titles: nil, unsettled: nil, previous: nil, previous_name: nil,
+    previous_keys: nil)
+    # Days with nothing to read on them leave the readout undated.
+    previous_keys = nil unless previous
     totals = keys.each_index.map { |index| series.sum { |part| part.values[index].to_i } }
     top = round_top([*totals, *previous&.compact].max.to_f, whole: true)
     safe_join([
       swatch_legend(series.map { |part| [part.name, part.color] }, dotted: (previous_name if previous)),
       chart_frame(keys, top, label, x_title: x_title, y_title: y_title, per: per) do |max|
         safe_join([
-          stacked_marks(keys, series, max, per, titles, unsettled: unsettled, previous: previous, previous_name: previous_name),
+          stacked_marks(keys, series, max, per, titles, unsettled: unsettled, previous: previous, previous_name: previous_name,
+            previous_keys: previous_keys),
           (previous_bars_line(keys, previous, max) if previous)
         ].compact)
       end
@@ -182,11 +196,14 @@ module ChartsHelper
     compare: false)
     max = series.flat_map(&:values).compact.max
     events = events.slice(*keys)
+    # Days a line shares with the chart, as another country's do, say
+    # nothing its readout's title doesn't.
+    series = series.map { |line| line.keys&.first(keys.size) == keys ? line.dup.tap { |copy| copy.keys = nil } : line }
     safe_join([
       (chart_legend(series, selectable: selectable, events: (event_name if events.any?)) if series.size > 1 || events.any?),
       chart_frame(keys, max, label, x_title: x_title, y_title: y_title, crosshair: true, lines: true, per: per,
         overlay: ->(top) { safe_join([line_end_markers(keys, series, top), event_markers(keys, events)]) }) do |top|
-        line_marks(keys, series, top, unit, per, events, event_name, unsettled: unsettled, compare: compare)
+        line_marks(keys, series, top, unit, per, events, event_name, unsettled: unsettled, compare: compare, reading: y_title)
       end
     ].compact)
   end
@@ -219,7 +236,7 @@ module ChartsHelper
         value = measure.values[index]
         current = {
           value: value.nil? ? "No data" : measure.reading.(value),
-          name: measure.name,
+          name: dated_name(measure.name, (key if measure.previous_keys), per),
           color: measure.color,
           dashed: (true if measure.dashed),
           y: (ys[measure_index].(value) unless value.nil?)
@@ -227,14 +244,15 @@ module ChartsHelper
         next [current] unless measure.previous
 
         before = measure.previous[index]
-        [current, {value: before.nil? ? "No data" : measure.reading.(before), name: measure.previous_name, color: measure.color,
+        name = measure.previous_keys ? dated_name(measure.name, measure.previous_keys[index], per) : measure.previous_name
+        [current, {value: before.nil? ? "No data" : measure.reading.(before), name: name, color: measure.color,
                    dotted: true, y: (ys[measure_index].(before) unless before.nil?)}.compact]
       end
       tag.rect(
         y: 0,
         height: CHART_HEIGHT,
         fill: "transparent",
-        data: chart_tip(chart_bucket_label(key, per), rows, x: x.(index), note: unsettled_note(key, per, unsettled)),
+        data: compared_tip(measures.any?(&:previous_keys), key, index, per, rows, x: x.(index), note: unsettled_note(key, per, unsettled)),
         **point_hit(index, keys.size)
       )
     end
@@ -289,8 +307,9 @@ module ChartsHelper
           tag.ul(class: "grid flex-1 auto-rows-fr text-xs") do
             safe_join(rows.each_with_index.map do |(name, value, swatch, color, marker), index|
               share = share_of_total(value, total)
-              readings = [{value: number_with_delimiter(value), name: ("#{share} of total" if share), color: color, marker: marker}.compact]
+              readings = [{value: number_with_delimiter(value), name: x_title, color: color, marker: marker}.compact]
               readings << {value: number_with_delimiter(previous[name].to_i), name: previous_name, color: color, dotted: true} if previous
+              readings << {value: share, name: "Share of total"} if share
               tip = chart_tip(name, readings)
               tip = tip.merge(series: first_series + index, action: "click->series-highlight#toggle") if first_series
               tag.li(class: [columns, "min-h-8 rounded px-1 transition-opacity hover:bg-slate-100 data-active:bg-slate-100", ("cursor-pointer" if first_series)],
@@ -483,7 +502,7 @@ module ChartsHelper
             safe_join(WorldMap.countries.map do |country|
               count = counts.fetch(country.code, 0)
               tag.path(d: country.path, class: [map_fill(count, max), "stroke-white hover:opacity-75 data-active:opacity-75"], "stroke-width": 0.5,
-                data: chart_tip("#{country_flag(country.code)} #{country.name}", [{value: number_with_delimiter(count), name: unit.pluralize(count)}]))
+                data: chart_tip("#{country_flag(country.code)} #{country.name}", [{value: number_with_delimiter(count), name: unit.pluralize.upcase_first}]))
             end)
           end
         end,
@@ -573,7 +592,7 @@ module ChartsHelper
     start = 0.0
     arcs = slices.map do |name, count, color, _|
       turn = count / total
-      readings = [{value: share.(count), name: "#{number_with_delimiter(count)} #{unit.pluralize(count)}", color: color}]
+      readings = [{value: number_with_delimiter(count), name: unit.pluralize.upcase_first, color: color}, {value: share.(count), name: "Share"}]
       readings += rest.map { |key, held| {value: number_with_delimiter(held), name: key} } if name == "Other"
       data = chart_tip(name, readings)
       mark = if slices.size == 1
@@ -627,9 +646,9 @@ module ChartsHelper
         safe_join(steps.each_with_index.map do |(name, count), index|
           before = steps[index - 1].last if index.positive?
           lost = before - count if before && count < before
-          readings = [{value: number_with_delimiter(count), name: unit.pluralize(count), color: BAR_COLOR}]
-          readings << {value: number_to_percentage(width.(count), precision: 0), name: "of #{steps.first.first.downcase}"} if index.positive?
-          readings << {value: "−#{number_with_delimiter(lost)}", name: "since #{steps[index - 1].first.downcase}"} if lost
+          readings = [{value: number_with_delimiter(count), name: unit.pluralize.upcase_first, color: BAR_COLOR}]
+          readings << {value: number_to_percentage(width.(count), precision: 0), name: "Share of #{steps.first.first.downcase}"} if index.positive?
+          readings << {value: "−#{number_with_delimiter(lost)}", name: "Lost since #{steps[index - 1].first.downcase}"} if lost
           tag.li(class: "grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] items-center sm:grid-cols-[minmax(0,9rem)_1fr_5.5rem] gap-3 rounded px-1 hover:bg-slate-100 data-active:bg-slate-100",
             data: chart_tip(name, readings)) do
             safe_join([
@@ -986,15 +1005,14 @@ module ChartsHelper
 
   # Hit areas are the full column height, so a short bar is as easy to hover
   # as a tall one.
-  def bar_marks(points, max, unit, per, events = {}, event_name = nil, unsettled: nil)
+  def bar_marks(points, max, unit, per, events = {}, event_name = nil, unsettled: nil, reading: nil, compare: false)
     slot = CHART_WIDTH.to_f / [points.size, 1].max
     gap = [slot * 0.2, 2].min
     safe_join(points.each_with_index.map do |(key, value), index|
       height = value.to_f / max * CHART_HEIGHT
-      reading = value.nil? ? "No data" : "#{number_with_delimiter(value)}#{unit}"
-      title = chart_bucket_label(key, per)
-      rows = [{value: reading, color: BAR_COLOR}] + events.fetch(key, []).map { |name| {value: event_name, name: name, color: EVENT_COLOR, marker: EVENT_MARKER} }
-      tag.g(class: "group", data: chart_tip(title, rows, note: unsettled_note(key, per, unsettled))) do
+      rows = [{value: value.nil? ? "No data" : "#{number_with_delimiter(value)}#{unit}", name: reading, color: BAR_COLOR}.compact] +
+        events.fetch(key, []).map { |name| {value: event_name, name: name, color: EVENT_COLOR, marker: EVENT_MARKER} }
+      tag.g(class: "group", data: compared_tip(compare, key, index, per, rows, note: unsettled_note(key, per, unsettled))) do
         safe_join([
           tag.rect(x: (index * slot).round(2), y: 0, width: slot.round(2), height: CHART_HEIGHT, fill: "transparent"),
           tag.rect(x: (index * slot + gap / 2).round(2), y: (CHART_HEIGHT - height).round(2), width: (slot - gap).round(2),
@@ -1006,7 +1024,7 @@ module ChartsHelper
 
   # Parts are inset by a gap, so touching colours stay apart; a day with no
   # data has no bar and no readout, so it isn't read as a day of none.
-  def stacked_marks(keys, series, max, per, titles = nil, unsettled: nil, previous: nil, previous_name: nil)
+  def stacked_marks(keys, series, max, per, titles = nil, unsettled: nil, previous: nil, previous_name: nil, previous_keys: nil)
     slot = CHART_WIDTH.to_f / [keys.size, 1].max
     gap = [slot * 0.2, 2].min
     safe_join(keys.each_with_index.filter_map do |key, index|
@@ -1021,12 +1039,21 @@ module ChartsHelper
         tag.rect(x: (index * slot + gap / 2).round(2), y: y.round(2), width: (slot - gap).round(2), height: height.round(2), fill: part.color,
           class: "stroke-white", "stroke-width": 1, "vector-effect": "non-scaling-stroke")
       end
-      rows = series.map { |part| {value: number_with_delimiter(part.values[index].to_i), name: part.name, color: part.color} }
+      rows = series.map do |part|
+        {value: number_with_delimiter(part.values[index].to_i), name: dated_name(part.name, (key if previous_keys), per), color: part.color}
+      end
       if previous
         before = previous[index]
-        rows << {value: before.nil? ? "No data" : number_with_delimiter(before), name: previous_name, color: BAR_COLOR, dotted: true}
+        # A lone series' day is read against its own; parts against their
+        # total, which is the period's.
+        name = previous_keys ? dated_name(series.one? ? series.first.name : previous_name, previous_keys[index], per) : previous_name
+        rows << {value: before.nil? ? "No data" : number_with_delimiter(before), name: name, color: BAR_COLOR, dotted: true}
+        rows << change_row(series.sum { |part| part.values[index].to_i }, before) if previous_keys
       end
-      tag.g(class: "group", data: chart_tip(titles&.at(index) || chart_bucket_label(key, per), rows, note: unsettled_note(key, per, unsettled))) do
+      tip = if titles&.at(index) then chart_tip(titles[index], rows, note: unsettled_note(key, per, unsettled))
+      else compared_tip(previous_keys, key, index, per, rows, note: unsettled_note(key, per, unsettled))
+      end
+      tag.g(class: "group", data: tip) do
         safe_join([
           tag.rect(x: (index * slot).round(2), y: 0, width: slot.round(2), height: CHART_HEIGHT, fill: "transparent",
             class: "group-hover:fill-slate-900/5 group-data-active:fill-slate-900/5"),
@@ -1077,7 +1104,7 @@ module ChartsHelper
 
   # The first series is filled beneath, so the main figure stands out from
   # the ones it's compared against.
-  def line_marks(keys, series, max, unit, per, events = {}, event_name = nil, unsettled: nil, compare: false)
+  def line_marks(keys, series, max, unit, per, events = {}, event_name = nil, unsettled: nil, compare: false, reading: nil)
     x = ->(index) { point_x(index, keys.size) }
     y = ->(value) { (CHART_HEIGHT - value.to_f / max * CHART_HEIGHT).round(2) }
     lines = series.each_with_index.flat_map do |line, index|
@@ -1095,25 +1122,46 @@ module ChartsHelper
     end
     # One readout per day for every series, so no line has to be hit to be
     # read.
+    # Once a line has days of its own, every line names its day, after what
+    # the chart measures rather than which period it is, since the day says
+    # that.
+    dated = series.any?(&:keys)
     hits = keys.each_with_index.map do |key, index|
       rows = series.each_with_index.map do |line, line_index|
         value = line.values[index]
-        {value: value.nil? ? "No data" : "#{number_with_delimiter(value)}#{unit}", name: (line.name if series.size > 1 || events.any?),
+        name = if dated
+          dated_name(reading || series.first.name, line.keys ? line.keys[index] : key, per)
+        elsif series.size > 1
+          line.name
+        else
+          reading || line.name
+        end
+        {value: value.nil? ? "No data" : "#{number_with_delimiter(value)}#{unit}", name: name,
          color: line.color || LINE_COLORS.fetch(line_index, LINE_COLORS.last), dashed: (true if line.dashed), dotted: (true if line.dotted),
          marker: line.marker, y: (y.(value) unless value.nil?)}.compact
       end
-      rows << {value: line_change(*series.first(2).map { |line| line.values[index] }), name: "Change"} if compare && series.size > 1
+      rows << change_row(*series.first(2).map { |line| line.values[index] }) if compare && series.size > 1
       rows += events.fetch(key, []).map { |name| {value: event_name, name: name, color: EVENT_COLOR, marker: EVENT_MARKER} }
       tag.rect(**point_hit(index, keys.size), y: 0, height: CHART_HEIGHT, fill: "transparent",
-        data: chart_tip(chart_bucket_label(key, per), rows, x: x.(index), note: unsettled_note(key, per, unsettled)))
+        data: compared_tip(dated, key, index, per, rows, x: x.(index), note: unsettled_note(key, per, unsettled)))
     end
     safe_join([*areas, *lines.reverse, *hits])
+  end
+
+  # Green for a rise and red for a fall, as the tiles colour theirs, since
+  # every figure read this way is one more of which is better.
+  def change_row(current, previous)
+    tone = if current.nil? || previous.nil? || previous.zero? || current == previous then nil
+    else current > previous ? "good" : "bad"
+    end
+    {value: line_change(current, previous), name: "Change", tone: tone}.compact
   end
 
   # Arrowed as the tiles' changes are, but as text, since a readout's rows
   # go in as text.
   def line_change(current, previous)
     return "—" if current.nil? || previous.nil? || previous.zero?
+    return "0.0%" if current == previous
 
     change = (current.to_f - previous) / previous
     "#{change.negative? ? "↓" : "↑"} #{number_to_percentage(change.abs * 100, precision: 1)}"
@@ -1157,6 +1205,38 @@ module ChartsHelper
 
   def line_class(index)
     index.zero? ? "text-slate-800" : "text-slate-400"
+  end
+
+  # As Search Console reads two periods out: each reading names its own
+  # day, so the title counts the place in the period rather than naming
+  # one of the two, and names lead with the values lined up after them.
+  def compared_tip(compared, key, index, per, rows, **options)
+    return chart_tip(chart_bucket_label(key, per), rows, **options) unless compared
+
+    chart_tip("#{PLACE_TITLES.fetch(per, "Day")} #{index + 1}", rows, **options)
+  end
+
+  # So a reading compared with another period's says which day it was.
+  def dated_name(name, key, per)
+    key ? "#{name}: #{compared_label(key, per)}" : name
+  end
+
+  # A week as the days it spans, shortened where its ends share a month or
+  # year, as Search Console writes them.
+  def compared_label(key, per)
+    return chart_bucket_label(key, per) unless key.respond_to?(:strftime)
+
+    case per
+    when :week
+      last = key.to_date + 6
+      first = if key.year != last.year then "%-d %b %Y"
+      elsif key.month != last.month then "%-d %b"
+      else "%-d"
+      end
+      "#{l(key.to_date, format: first)} – #{l(last, format: "%-d %b %Y")}"
+    when :month then l(key.to_date, format: "%b %Y")
+    else chart_bucket_label(key, per)
+    end
   end
 
   def chart_key_label(key)

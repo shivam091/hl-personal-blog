@@ -9,6 +9,10 @@ class SearchInsightReportsController < ApplicationController
     load_blog_stats
     load_google_summaries
     @query_groups = Google::SearchConsole::QueryGroups.new(@period, country: @stats.country)
+    # Another country's are read over the same dates, as the totals are.
+    if @search.compared?
+      @previous_query_groups = Google::SearchConsole::QueryGroups.new(@period.previous, country: @period.previous.country || @stats.country)
+    end
 
     respond_to do |format|
       format.html

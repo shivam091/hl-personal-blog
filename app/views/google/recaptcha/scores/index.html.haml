@@ -46,7 +46,8 @@
             [ChartsHelper::Series.new(name: "High risk (below #{low_score})", values: report.daily.map(&:second), color: "#0d366b"),
              ChartsHelper::Series.new(name: "Low risk", values: report.daily.map(&:third), color: "#3987e5")],
             label: "Requests per day for #{scope}, split by risk", y_title: "Requests",
-            previous: report.previous_daily, previous_name: Period::COMPARES[@period.compare])
+            previous: report.previous_daily, previous_name: Period::COMPARES[@period.compare],
+            previous_keys: (@period.previous.from..@period.previous.to).first(report.daily.size))
         - else
           = empty
     = render layout: "shared/card", locals: {id: "recaptcha-scores", title: "Score distribution", icon: "bar-chart"} do

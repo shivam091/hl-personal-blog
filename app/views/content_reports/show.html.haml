@@ -173,8 +173,8 @@
         - x_max = decay_months
         %div{class: "px-4 py-3"}
           = scatter_chart(points.map { |point| ChartsHelper::ScatterPoint.new(x: point.age_months, y: point.item.views, color: colors[point.item.type],
-              tip: chart_tip(point.item.entry.name, [{value: number_with_delimiter(point.item.views), name: "views", color: colors[point.item.type]},
-                {value: l(point.item.entry.published_at.to_date), name: "published"}, {value: point.item.type.capitalize, name: "type"}])) },
+              tip: chart_tip(point.item.entry.name, [{value: number_with_delimiter(point.item.views), name: "Views", color: colors[point.item.type]},
+                {value: l(point.item.entry.published_at.to_date), name: "Published"}, {value: point.item.type.capitalize, name: "Type"}])) },
             x_min: 0, x_max: x_max, x_ticks: [0, x_max / 4.0, x_max / 2.0, x_max * 3 / 4.0, x_max],
             x_tick: ->(months) { number_with_precision(months, precision: 1, strip_insignificant_zeros: true) }, y_tick: ->(views) { compact_number(views) },
             x_title: "Months since publishing", y_title: "Views", label: "Views in the period against each entry's age",
@@ -330,7 +330,7 @@
                     - count = day.entries.size
                     %span{class: [cell_class, count.zero? ? "bg-slate-100" : heat_class(count, max)],
                       data: chart_tip(l(day.date, format: "%a, %-d %b %Y"),
-                        [{value: count.to_s, name: "entry".pluralize(count)}, *day.entries.map { |entry| {value: entry.type.capitalize, name: entry.name} }])}
+                        [{value: count.to_s, name: "Entries"}, *day.entries.map { |entry| {value: entry.type.capitalize, name: entry.name} }])}
         %div{class: "mt-2 flex items-center gap-1.5 text-xs text-slate-500", aria: {hidden: true}}
           None
           %span{class: "size-3 rounded-sm bg-slate-100"}
@@ -435,4 +435,4 @@
                 - months.each do |month, counts|
                   %td{class: "p-0.5"}
                     %div{class: "rounded px-1 py-1 text-center tabular-nums hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900 #{heat_class(counts[type], max)}",
-                      data: chart_tip(l(month, format: "%B %Y"), [{value: counts[type].to_s, name: type.pluralize(counts[type])}])}= counts[type]
+                      data: chart_tip(l(month, format: "%B %Y"), [{value: counts[type].to_s, name: type.pluralize.upcase_first}])}= counts[type]

@@ -54,9 +54,9 @@
         %div{class: "px-4 py-3"}
           = scatter_chart(@lcp_pairs.map { |result| ChartsHelper::ScatterPoint.new(x: result.lab_lcp_ms / 1000.0, y: result.field_lcp_ms / 1000.0,
               color: colors[result.strategy], tip: chart_tip(result.page_path || result.url,
-                [{value: seconds.(result.lab_lcp_ms / 1000.0), name: "lab", color: colors[result.strategy]},
-                {value: seconds.(result.field_lcp_ms / 1000.0), name: "real readers"},
-                {value: result.strategy.capitalize, name: "device"}])) },
+                [{value: seconds.(result.lab_lcp_ms / 1000.0), name: "Lab", color: colors[result.strategy]},
+                {value: seconds.(result.field_lcp_ms / 1000.0), name: "Real readers"},
+                {value: result.strategy.capitalize, name: "Device"}])) },
             curve: [[0, good], [good, good], [good, 0]], x_min: 0, x_max: x_max, x_ticks: [0, x_max / 4.0, x_max / 2.0, x_max * 3 / 4.0, x_max],
             x_tick: tick, y_tick: tick, x_title: "Lab LCP", y_title: "Real readers' LCP",
             label: "Lab LCP against real readers' LCP for each page, with the good limit boxed",
