@@ -39,7 +39,7 @@ gem "faraday", "~> 2.15"
 gem "roo", "~> 4.0"
 
 group :development, :test do
-  gem "rspec-rails", "~> 8.0"
+  gem "rspec-rails", "~> 8.1"
   gem "database_cleaner-mongoid", "~> 2.0"
   gem "debug", "~> 1.11", platforms: %i[ mri windows ], require: "debug/prelude"
   gem "bundler-audit", "~> 0.9", require: false
