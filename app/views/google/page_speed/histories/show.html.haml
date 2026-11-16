@@ -34,12 +34,10 @@
     %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
       = render layout: "shared/card", locals: {id: "scores", title: "Lighthouse scores", icon: "gauge"} do
         %div{class: "px-4 py-3"}
-          = line_chart(dates, page_speed_history_series(by_day, Google::PageSpeed::Result::CATEGORIES, scale: 100),
-            y_title: "Score", label: "Lighthouse scores of each run")
+          = analytics_page_speed_scores_chart(dates, by_day)
       = render layout: "shared/card", locals: {id: "lab-times", title: "Lab load times", icon: "clock"} do
         %div{class: "px-4 py-3"}
-          = line_chart(dates, page_speed_history_series(by_day, %w[lab_lcp_ms lab_fcp_ms lab_speed_index_ms], scale: 0.001),
-            y_title: "Seconds", unit: " s", label: "Lab LCP, FCP and Speed Index of each run")
+          = analytics_page_speed_lab_times_chart(dates, by_day)
 
   = render layout: "shared/card", locals: {id: "runs", title: "Runs", icon: "list"} do
     %div{class: "overflow-x-auto"}

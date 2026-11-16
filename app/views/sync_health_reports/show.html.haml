@@ -84,9 +84,7 @@
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "syncs-by-outcome", title: "Syncs by outcome", icon: "bar-chart"} do
       %div{class: "px-4 py-3"}
-        = stacked_chart(syncs.dates, syncs.daily_by_outcome.map { |key, values| ChartsHelper::Series.new(name: outcome_series[key].first, values: values, color: outcome_series[key].last) },
-          y_title: "Syncs", label: "Sync requests per day, split by how they ended",
-          previous: (aligned(before.daily_totals, syncs.dates.size) if before), previous_name: vs)
+        = report_syncs_outcome_chart(syncs, before, outcome_series, vs)
 
     = render layout: "shared/card", locals: {id: "sync-rows", title: "Rows brought in", icon: "database"} do
       %div{class: "px-4 py-3"}

@@ -19,8 +19,7 @@
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "subscriber-growth", title: "List size by week", icon: "trending-up"} do
       %div{class: "px-4 py-3"}
-        = line_chart(@weekly_totals.keys, [ChartsHelper::Series.new(name: "Subscribers", values: @weekly_totals.values)], per: :week,
-          y_title: "Subscribers", label: "Subscribers on the list at the end of each week, since the first sign-up")
+        = report_subscriber_growth_chart(@weekly_totals)
     = render layout: "shared/card", locals: {id: "subscriber-countries", title: "Subscribers by country", icon: "globe"} do
       %div{class: "px-4 py-3"}
         = world_map(@country_counts, label: "Subscribers by country", unit: "subscriber")

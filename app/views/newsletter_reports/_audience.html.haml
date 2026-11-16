@@ -62,5 +62,4 @@
       - if stays.values.sum.zero?
         %p{class: "text-sm text-slate-500"} Nobody left in this period.
       - else
-        = ranking_chart(stays.reject { |band, count| band == NewsletterAudience::UNKNOWN_STAY && count.zero? }.map { |band, count| [band, count, "bg-slate-600", ChartsHelper::BAR_COLOR] },
-          total: stays.values.sum, x_title: "Readers", y_title: "Stayed", label: "Readers who left in the period by how long they'd been subscribed")
+        = report_newsletter_stays_chart(stays)

@@ -17,8 +17,7 @@
     = render "dashboard/ai_impressions", ai: ai, country: country
     %div{class: "px-4 py-3"}
       %p{class: "mb-1 text-xs font-medium text-slate-500"} Clicks per #{granularity.by}
-      = time_chart(granularity.dates(days).zip(granularity.sums(days, search.daily(:clicks))), y_title: "Clicks", label: "Search clicks per #{granularity.by}",
-        per: granularity.per, events: granularity.events(published), event_name: "Published", unsettled: search_unsettled_from)
+      = overview_search_clicks_chart(granularity, days, search, published)
   %p{class: "flex justify-end border-t border-slate-200 px-4 py-2 text-xs"}
     = link_to search_insight_report_path(**@period.query, **@filtering.query),
       class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do

@@ -21,8 +21,7 @@
   = render layout: "shared/card", locals: {id: "per-minute", title: "Active users per minute", icon: "bar-chart", class: "mb-6"} do
     %div{class: "px-4 py-3"}
       = swatch_legend([["Active users", ChartsHelper::BAR_COLOR]])
-      = time_chart(@snapshot.per_minute.to_a, label: "Active users per minute, last #{Google::Analytics::RealtimeService::MINUTES} minutes",
-        y_title: "Active users", per: :minute)
+      = analytics_realtime_chart(@snapshot.per_minute.to_a)
 
   %div{class: "grid items-start gap-6 lg:grid-cols-2"}
     %div{class: "grid gap-6"}

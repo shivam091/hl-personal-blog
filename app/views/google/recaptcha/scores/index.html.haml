@@ -42,19 +42,13 @@
         - if report.requests.positive?
           -# Risk is told by shade of one hue, since high and low are ends of
           -# one scale rather than two kinds of thing.
-          = stacked_chart(report.daily.map(&:first),
-            [ChartsHelper::Series.new(name: "High risk (below #{low_score})", values: report.daily.map(&:second), color: "#0d366b"),
-             ChartsHelper::Series.new(name: "Low risk", values: report.daily.map(&:third), color: "#3987e5")],
-            label: "Requests per day for #{scope}, split by risk", y_title: "Requests",
-            previous: report.previous_daily, previous_name: Period::COMPARES[@period.compare])
+          = search_recaptcha_requests_chart(report, scope, low_score, @period)
         - else
           = empty
     = render layout: "shared/card", locals: {id: "recaptcha-scores", title: "Score distribution", icon: "bar-chart"} do
       %div{class: "px-4 py-3"}
         - if report.requests.positive?
-          = time_chart(report.histogram.to_a, label: "Requests by score for #{scope}, 0 likely a bot, 1 likely a person",
-            x_title: "Score", y_title: "Requests", legend: "Requests",
-            previous: report.previous_histogram, previous_name: Period::COMPARES[@period.compare])
+          = search_recaptcha_scores_chart(report, scope, @period)
         - else
           = empty
     -# Always every action, since they're what's chosen between above, and
@@ -66,10 +60,7 @@
         = render layout: "shared/card", locals: {id: id, title: title, icon: "list", class: "flex flex-col"} do
           %div{class: "flex flex-1 flex-col px-4 py-3"}
             - if rows.any?
-              - change = Google::DailyReport::Metric.new(lower_is_better: lower_is_better)
-              = ranking_chart(rows.map { |name, count| [name, count, swatch, color] }, label: "#{title} by requests in #{@period}",
-                total: total, x_title: "Requests", y_title: "Action", previous: previous, previous_name: @period.previous.to_s,
-                changes: (rows.to_h { |name, count| [name, row_change(count, previous[name], change)] } if previous) || {})
+              = search_recaptcha_actions_chart(rows, title: title, total: total, previous: previous, swatch: swatch, color: color, lower_is_better: lower_is_better, period: @period)
             - else
               %p{class: "py-10 text-center text-sm text-slate-500"} No #{"suspicious " if id.include?("suspicious")}requests by action in #{@period}.
     - if report.challenged?
@@ -82,12 +73,7 @@
         %div{class: "px-4 py-3"}
           -# One hue for getting through and another for failing, since a
           -# failed challenge is the one kind that stops someone.
-          = stacked_chart(challenges.map(&:first),
-            [ChartsHelper::Series.new(name: "No challenge needed", values: challenges.map(&:second), color: "#9ec5f4"),
-             ChartsHelper::Series.new(name: "Passed", values: challenges.map(&:third), color: "#2a78d6"),
-             ChartsHelper::Series.new(name: "Failed", values: challenges.map(&:fourth), color: "#eb6834")],
-            label: "Checkbox challenges per day for the whole site: cleared without one, passed and failed", y_title: "Requests",
-            previous: report.previous_daily_challenges, previous_name: Period::COMPARES[@period.compare])
+          = search_recaptcha_challenges_chart(report, challenges, @period)
 
 - if @pagination.total_count.zero?
   = render "shared/empty_state", icon: "inbox", message: "No scores for #{@period}. Sync to fetch them from Google."

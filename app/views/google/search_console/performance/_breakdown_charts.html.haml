@@ -14,8 +14,7 @@
       - if total.zero?
         %p{class: "text-sm text-slate-500"} No impressions with a position in this period.
       - else
-        = ranking_chart(charts[:buckets].map { |name, count| [name, count, "bg-slate-600", ChartsHelper::BAR_COLOR] }, total: total,
-          x_title: "Impressions", y_title: "Average position", label: "Impressions of the period's queries by their average position")
+        = search_position_chart(charts[:buckets], total)
     %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
       Each query counts at its own average position, so impressions at the top of page two are what a better title or a sharper page can bring up.
 - when :hours

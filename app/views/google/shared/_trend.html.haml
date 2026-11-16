@@ -28,8 +28,7 @@
         = chart_granularity_picker(selection, "the figures", "trend-by")
     - measures = trend_measures(trend, metrics)
     - if measures.any?
-      = measures_chart(trend.dates, measures, label: "#{measures.map(&:name).to_sentence} per #{trend.per}, each on its own scale", per: trend.per.to_sym,
-        unsettled: unsettled_from)
+      = search_trend_chart(trend, measures, unsettled: unsettled_from)
       - if trend.previous
         %p{class: "mt-2 flex items-center justify-end gap-1.5 text-xs text-slate-500"}
           %span{class: "w-4 border-t-2 border-dotted border-slate-400", aria: {hidden: true}}

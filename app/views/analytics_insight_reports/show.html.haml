@@ -180,10 +180,7 @@
         - if correlation
           %p{class: "px-4 pt-3 text-sm text-slate-700"}= speed_correlation_sentence(correlation)
         %div{class: "px-4 py-3"}
-          = scatter_chart(speed_scatter_points(points), x_min: 0, x_max: x_max, x_ticks: [0, x_max / 2.0, x_max],
-            x_tick: ->(seconds) { "#{number_with_precision(seconds, precision: 1, strip_insignificant_zeros: true)} s" },
-            y_tick: ->(rate) { "#{rate.round}%" }, x_title: (readers ? "Readers' mean LCP" : "Lab LCP on a phone"), y_title: "Engagement rate",
-            label: "Each page's load time on a phone against its engagement rate", key: AnalyticsInsightReportsHelper::SPEED_BANDS.values)
+          = overview_speed_scatter_chart(points, x_max, readers)
       - if readers && (lab_correlation = insights.speed_correlation(insights.speed_points(source: :lab)))
         %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
           By PageSpeed's lab LCP instead: #{speed_correlation_sentence(lab_correlation)}
@@ -253,10 +250,8 @@
           Busiest: #{Google::DailyReport.value_label(:day_of_week, days.max_by(&:last).first)}, around
           #{Google::DailyReport.value_label(:hour, hours.max_by(&:last).first)}.
         %div{class: "grid gap-6 px-4 py-3 lg:grid-cols-2"}
-          = time_chart(days.map { |day, views| [Google::DailyReport.value_label(:day_of_week, day), views] }, x_title: "Day", y_title: "Views",
-            label: "Views by day of week")
-          = time_chart(hours.map { |hour, views| [Google::DailyReport.value_label(:hour, hour), views] }, x_title: "Hour", y_title: "Views",
-            label: "Views by hour of day")
+          = overview_day_of_week_chart(days)
+          = overview_hour_of_day_chart(hours)
       %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
         = link_to list_url(@period, @filtering, format: :csv, export: "times"), class: export_class do
           = icon("download", size: 12)

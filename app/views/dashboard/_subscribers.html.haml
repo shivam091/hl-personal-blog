@@ -6,10 +6,7 @@
   %div{class: "space-y-4 px-4 py-3"}
     %div
       %p{class: "mb-1 text-xs font-medium text-slate-500"} List size
-      = compared_time_chart(dates.zip(stats.subscriber_totals), y_title: "Subscribers", label: "Newsletter list size per day", style: :line,
-        events: published, event_name: "Published", previous_name: before.to_s, previous: (stats.subscriber_totals(before) if before))
+      = overview_subscriber_totals_chart(dates, stats, before, published)
     %div
       %p{class: "mb-1 text-xs font-medium text-slate-500"} New per week
-      = compared_time_chart(stats.weekly(:subscribers).to_a, y_title: "New subscribers", label: "New subscribers by week", per: :week,
-        events: weekly_events(published), event_name: "Published", previous_name: before.to_s,
-        previous: (stats.weekly(:subscribers, before).values if before))
+      = overview_new_subscribers_chart(stats, before, published)

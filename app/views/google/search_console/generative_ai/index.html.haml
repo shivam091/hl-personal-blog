@@ -86,11 +86,7 @@
   = render layout: "shared/card", locals: {id: "generative-ai-impressions", title: "Impressions per #{@granularity.by}", icon: "trending-up", class: "mb-6",
     actions: chart_granularity_picker(@granularity, "Impressions", "impressions-by")} do
     %div{class: "px-4 py-3"}
-      - impressions_now = ChartsHelper::Series.new(name: "This period", values: @granularity.sums(days, days.map { |day| @daily[day] }))
-      = line_chart(@granularity.dates(days), [impressions_now,
-        (ChartsHelper::Series.new(name: before.to_s, values: @granularity.sums_for(before, (before.from..before.to).map { |day| @previous_daily[day] }).first(@granularity.dates(days).size), dashed: true, against: impressions_now) if before)].compact,
-        y_title: "Impressions", per: @granularity.per,
-        label: "AI Overviews and AI Mode impressions per #{@granularity.by}#{", against #{before}" if before}")
+      = search_ai_impressions_chart(@granularity, days, @daily, @previous_daily, before)
 
   -# Over the days both reports hold, since a day only one was uploaded or
   -# synced for would read as a share of nothing.
@@ -98,16 +94,14 @@
   - if shared_days.any?
     = render layout: "shared/card", locals: {id: "generative-ai-share", title: "AI impressions as a share of all impressions", icon: "trending-up", class: "mb-6"} do
       %div{class: "px-4 py-3"}
-        = line_chart(shared_days, [ChartsHelper::Series.new(name: "AI share", values: shared_days.map { |day| @daily[day] * 100.0 / @organic_daily[day] })],
-          y_title: "Share of impressions", unit: "%", precision: 1, label: "AI Overviews and AI Mode impressions as a share of the day's search impressions")
+        = search_ai_share_chart(shared_days, @daily, @organic_daily)
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
         Against Search Console's own #{type} impressions for the same day, which count the blog's AI appearances too.
 
   - if @top_pages&.any?
     = render layout: "shared/card", locals: {id: "generative-ai-top-pages", title: "Pages most seen in AI answers", icon: "bar-chart", class: "mb-6"} do
       %div{class: "px-4 py-3"}
-        = ranking_chart(@top_pages.map { |row| [row.label.sub(%r{\Ahttps?://[^/]+}i, "").presence || "/", row.impressions, "bg-slate-600", ChartsHelper::BAR_COLOR] },
-          total: @row_total.to_i, x_title: "Impressions", y_title: "Page", label: "The ten pages with the most AI impressions in the latest upload")
+        = search_ai_top_pages_chart(@top_pages, @row_total)
 
   -# Google's totals for the latest upload, so it follows neither the period
   -# nor its comparison.

@@ -94,8 +94,7 @@
           No new entry has been seen crawled yet. Entries are counted from their first inspection while new, so this fills in as posts go out.
       - else
         %div{class: "px-4 py-3"}
-          = time_chart(@crawl_delays.counts.to_a, x_title: "Days from publishing to first crawl", y_title: "Entries",
-            label: "New entries by how many days after publishing Google first crawled them")
+          = search_delay_chart(@crawl_delays, x_title: "Days from publishing to first crawl", label: "New entries by how many days after publishing Google first crawled them")
 
     = render layout: "shared/card", locals: {id: "index-delays", title: "Days to first indexed", icon: "clock"} do
       - median = @index_delays.median
@@ -108,16 +107,14 @@
           No new entry has been seen indexed yet. Entries are counted from their first inspection while new, so this fills in as posts go out.
       - else
         %div{class: "px-4 py-3"}
-          = time_chart(@index_delays.counts.to_a, x_title: "Days from publishing to first indexed", y_title: "Entries",
-            label: "New entries by how many days after publishing a check first found them indexed")
+          = search_delay_chart(@index_delays, x_title: "Days from publishing to first indexed", label: "New entries by how many days after publishing a check first found them indexed")
 
     = render layout: "shared/card", locals: {id: "coverage", title: "Pages by coverage", icon: "list"} do
       %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
         How many inspected pages are in each of Search Console's coverage states, coloured by verdict.
       %div{class: "px-4 py-3"}
         = swatch_legend(@coverage_counts.map(&:verdict).uniq.map { |verdict| [verdict_label(verdict),verdict_chart_color(verdict).last] })
-        = ranking_chart(@coverage_counts.map { |row| [row.coverage_state, row.count, *verdict_chart_color(row.verdict)] },
-          total: @coverage_counts.sum(&:count), x_title: "Pages", y_title: "Coverage", label: "Inspected pages by coverage state, coloured by verdict")
+        = search_coverage_chart(@coverage_counts)
 
 = search_panel @filtering, keep: [@sorting, @pagination]
 = filter_tabs @filtering, counts: @tab_counts, keep: [@sorting, @pagination]

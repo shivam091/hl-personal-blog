@@ -36,13 +36,11 @@
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "calls-by-service", title: "Calls by service", icon: "bar-chart"} do
       %div{class: "px-4 py-3"}
-        = stacked_chart(calls.dates, share_series(calls.daily_by_service) { |service| service },
-          y_title: "Calls", label: "External calls per day, split by service",
-          previous: (aligned(before.daily_totals, calls.dates.size) if before), previous_name: vs)
+        = overview_calls_by_service_chart(calls, before, vs)
 
     = render layout: "shared/card", locals: {id: "failed-calls", title: "Failed calls", icon: "alert-triangle"} do
       %div{class: "px-4 py-3"}
-        = compared_bars(calls.dates, calls.daily_failed, previous: before&.daily_failed, previous_name: vs, y_title: "Failed calls", label: "Failed external calls per day")
+        = overview_failed_calls_chart(calls, before, vs)
 
   %div{class: "mb-6"}
     = render layout: "shared/card", locals: {id: "services", title: "Services", icon: "server"} do

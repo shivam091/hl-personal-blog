@@ -24,20 +24,13 @@
   = render layout: "shared/card", locals: {id: "login-attempts", title: "Attempts per day", icon: "bar-chart"} do
     - daily = report.daily
     %div{class: "px-4 py-3"}
-      = stacked_chart(daily.map(&:first),
-        [ChartsHelper::Series.new(name: "Accepted", values: daily.map(&:second), color: "#2a78d6"),
-         ChartsHelper::Series.new(name: "Rejected", values: daily.map(&:third), color: "#eb6834")],
-        label: "Login attempts per day, #{days}, accepted and rejected", y_title: "Attempts")
+      = search_login_attempts_chart(daily, days)
   -# A right password scored low is a real login the threshold refused; a
   -# wrong one scored high is a bot reCAPTCHA missed.
   = render layout: "shared/card", locals: {id: "login-scores", title: "Scores by password", icon: "shield"} do
     - groups = report.scores_by_password
     %div{class: "px-4 py-3"}
-      = stacked_chart(Google::Recaptcha::Summary::BUCKETS,
-        [ChartsHelper::Series.new(name: "Right password", values: groups["CORRECT_PASSWORD"], color: "#2a78d6"),
-         ChartsHelper::Series.new(name: "Wrong password", values: groups["INCORRECT_PASSWORD"], color: "#eb6834"),
-         ChartsHelper::Series.new(name: "Not checked", values: groups[nil], color: ChartsHelper::SHARE_OTHER_COLOR)],
-        label: "Login attempts by score, 0 likely a bot, 1 likely a person, split by password", x_title: "Score", y_title: "Attempts")
+      = search_login_scores_chart(groups)
 
 -# A run of attempts from one address is the shape of a password guesser.
 = render layout: "shared/card", locals: {id: "repeat-addresses", title: "Repeat IP addresses", icon: "list", class: "mb-6"} do

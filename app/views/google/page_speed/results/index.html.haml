@@ -32,9 +32,7 @@
         %p{class: "px-4 py-3 text-sm text-slate-500"} No page has been tested on both devices yet.
       - else
         %div{class: "px-4 py-3"}
-          = dumbbell_chart(@device_gaps.map { |row| [row.page_path || row.url, [row.mobile, row.desktop]] },
-            keys: [["Mobile", ChartsHelper::SHARE_COLORS[1], :circle], ["Desktop", ChartsHelper::SHARE_COLORS[0], :square]],
-            x_title: "Performance score", y_title: "Page", label: "Performance score on mobile and desktop for each page, widest gap first")
+          = analytics_page_speed_device_gaps_chart(@device_gaps)
 
     -# Lab and field disagree when the test machine isn't what readers use,
     -# so a page under the limit in the lab but over it in the field is slow
@@ -47,20 +45,8 @@
       - if @lcp_pairs.empty?
         %p{class: "px-4 py-3 text-sm text-slate-500"} No page has its own real-user LCP yet.
       - else
-        - colors = {"mobile" => ChartsHelper::SHARE_COLORS[1], "desktop" => ChartsHelper::SHARE_COLORS[0]}
-        - seconds = ->(value) { "#{number_with_precision(value, precision: 1)} s" }
-        - tick = ->(value) { "#{number_with_precision(value, precision: 2, strip_insignificant_zeros: true)} s" }
-        - x_max = round_top([*@lcp_pairs.map { |result| result.lab_lcp_ms / 1000.0 }, good * 1.6].max)
         %div{class: "px-4 py-3"}
-          = scatter_chart(@lcp_pairs.map { |result| ChartsHelper::ScatterPoint.new(x: result.lab_lcp_ms / 1000.0, y: result.field_lcp_ms / 1000.0,
-              color: colors[result.strategy], tip: chart_tip(result.page_path || result.url,
-                [{value: seconds.(result.lab_lcp_ms / 1000.0), name: "Lab", color: colors[result.strategy]},
-                {value: seconds.(result.field_lcp_ms / 1000.0), name: "Real readers"},
-                {value: result.strategy.capitalize, name: "Device"}])) },
-            curve: [[0, good], [good, good], [good, 0]], x_min: 0, x_max: x_max, x_ticks: [0, x_max / 4.0, x_max / 2.0, x_max * 3 / 4.0, x_max],
-            x_tick: tick, y_tick: tick, x_title: "Lab LCP", y_title: "Real readers' LCP",
-            label: "Lab LCP against real readers' LCP for each page, with the good limit boxed",
-            key: [["Mobile", colors["mobile"]], ["Desktop", colors["desktop"]]])
+          = analytics_page_speed_lcp_chart(@lcp_pairs, good)
 
   -# Above the averages, since a page that just got slower is the one a
   -# recent change broke, and the fix is freshest now.
@@ -100,9 +86,7 @@
       %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
         Each category's average score across the pages listed, on both devices.
       %div{class: "px-4 py-3"}
-        = dumbbell_chart(@category_averages.map { |category, scores| [category_labels[category], scores.values_at("mobile", "desktop")] },
-          keys: [["Mobile", ChartsHelper::SHARE_COLORS[1], :circle], ["Desktop", ChartsHelper::SHARE_COLORS[0], :square]],
-          x_title: "Average score", y_title: "Category", label: "Average Lighthouse score per category on mobile and desktop")
+        = analytics_page_speed_categories_chart(@category_averages, category_labels)
 
     = render layout: "shared/card", locals: {id: "weakest-pages", title: "Weakest pages on a phone", icon: "alert-triangle"} do
       %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}

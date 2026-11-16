@@ -69,10 +69,7 @@
                 - table.columns.each do |column|
                   - value = table[row, column].to_i
                   %td{class: "p-0.5"}
-                    = heat_cell(number_with_delimiter(value), value, max, class: "h-6 min-w-14",
-                      tip: chart_tip("#{label.(result.rows, row)} · #{label.(result.columns, column)}",
-                        [*cell_readings(metric_label, value, cell_before.(row, column), @period.previous.to_s),
-                         ({value: number_to_percentage(value * 100.0 / row_total, precision: 1), name: "Share of the row"} if row_total.to_i.positive?)]))
+                    = analytics_cross_tab_cell(value, max, "#{label.(result.rows, row)} · #{label.(result.columns, column)}", metric_label, cell_before.(row, column), @period.previous.to_s, row_total)
                 %td{class: "px-3 text-right font-medium tabular-nums"}
                   = number_with_delimiter(row_total)
                   - if row_before.(row)

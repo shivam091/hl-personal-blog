@@ -3,8 +3,7 @@
 - key_label = local_assigns[:key_label] || ->(key) { country_label(key) }
 = render layout: "shared/card", locals: {id: id, title: title, icon: icon} do
   %div{class: "px-4 py-3"}
-    = share_chart(shares, y_title: y_title, key_label: key_label, empty: local_assigns[:empty] || "No views in this period.",
-      label: "Each #{shares[:unit]}'s views split by #{split}, as a share of that #{shares[:unit]}")
+    = search_shares_chart(shares, y_title: y_title, key_label: key_label, split: split, empty: local_assigns[:empty])
     - if shares[:buckets].any?
       %details{class: "group mt-3"}
         %summary{class: "inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"}

@@ -85,9 +85,7 @@
       - else
         - named = rows.map { |path, now, before, _| [review.names[path] || path, [before, now], path] }
         %div{class: "px-4 py-3"}
-          = dumbbell_chart(named.map { |name, values, _| [name, values] }, keys: keys, top: top, ticks: ticks,
-            links: named.to_h { |name, _, path| [name, page_view_path(path, **@period.query)] },
-            x_title: "Views", y_title: "Page", label: "#{title} pages, views before and now")
+          = report_review_movers_chart(named, keys, top, ticks, title, @period)
         %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"} Before is #{@period.previous}.
 
 %div{class: "grid items-start gap-6 lg:grid-cols-2"}

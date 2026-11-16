@@ -50,13 +50,7 @@
           data: {controller: "chart-granularity", chart_granularity_param_value: "indexing_show", action: "chart-granularity#change"}
         Impressions
     %div{class: "px-4 py-3"}
-      - colors = {"not_indexed" => "#a8a7a1", "indexed" => "#1baf7a"}
-      - names = {"not_indexed" => "Not indexed", "indexed" => "Indexed"}
-      - series = (indexing.shown - ["impressions"]).map { |key| ChartsHelper::Series.new(name: names[key], values: indexing.daily[key], color: colors[key]) }
-      - impressions = ChartsHelper::Measure.new(name: "Impressions", values: indexing.impressions, color: "#86198f", whole: true,
-        tick: ->(value) { compact_number(value) }, reading: ->(value) { number_with_delimiter(value) })
-      - line = impressions if indexing.shown?("impressions")
-      = stacked_chart(indexing.dates, series, y_title: "Pages", line: line, label: "Pages indexed and not indexed each day, as the last inspection by then found them, and Google search impressions")
+      = search_page_indexing_chart(indexing)
       %p{class: "mt-2 text-xs text-slate-500"}
         Each page counts from its first inspection, as its latest verdict by the end of that day. Sitemaps are as the latest inspection found them.
         - if indexing.shown?("impressions")

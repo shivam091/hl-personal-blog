@@ -34,9 +34,7 @@
         compared_with: analytics.period.previous
     %div{class: "px-4 py-3"}
       %p{class: "mb-1 text-xs font-medium text-slate-500"} Views per #{granularity.by}
-      = line_chart(granularity.dates(dates), [ChartsHelper::Series.new(name: "Blog's own count", values: granularity.sums(dates, @stats.daily(:views))),
-        ChartsHelper::Series.new(name: "Google Analytics", values: granularity.sums(dates, analytics.daily_views), dashed: true)],
-        y_title: "Views", label: "The blog's own views against Google Analytics views, per #{granularity.by}", per: granularity.per)
+      = overview_own_vs_analytics_chart(granularity, dates, @stats, analytics)
   %p{class: "flex justify-end gap-4 border-t border-slate-200 px-4 py-2 text-xs"}
     = link_to google_analytics_acquisition_breakdown_path("referrers", **@period.query),
       class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do

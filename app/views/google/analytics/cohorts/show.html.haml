@@ -64,7 +64,6 @@
                     - if share.nil?
                       %div{class: "h-6 min-w-11 rounded bg-slate-50"}
                     - else
-                      = heat_cell(number_to_percentage(share * 100, precision: 0), share * 100, max * 100, class: "h-6 min-w-11",
-                        tip: chart_tip("Cohort of #{l(cohort.start, format: "%a, %-d %b, %Y")}, week #{week}", [{value: number_with_delimiter(cohort.active[week]), name: "Came back, of #{number_with_delimiter(cohort.users)}"}]))
+                      = analytics_cohort_cell(cohort, week, share, max)
     %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
       Weeks run from Sunday, as in GA. Blank weeks haven't finished yet for that cohort.

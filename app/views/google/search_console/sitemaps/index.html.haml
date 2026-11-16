@@ -25,22 +25,17 @@
 -# Every sitemap together, unfiltered, since a drop in submitted URLs or a
 -# jump in errors is what's looked for, whichever sitemap it's in.
 - if @history.size > 1
-  - dates = @history.keys
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "sitemap-urls", title: "URLs over time", icon: "trending-up"} do
       %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
         URLs submitted in every sitemap at each day's last sync, against those URL inspection found indexed.
       %div{class: "px-4 py-3"}
-        = line_chart(dates, [ChartsHelper::Series.new(name: "Submitted", values: @history.values.map { |day| day[:submitted] }),
-          ChartsHelper::Series.new(name: "Indexed", dashed: true, values: @history.values.map { |day| day[:indexed] })],
-          y_title: "URLs", label: "URLs submitted in the sitemaps and found indexed, by day")
+        = search_sitemap_urls_chart(@history)
     = render layout: "shared/card", locals: {id: "sitemap-issues", title: "Errors and warnings over time", icon: "alert-triangle"} do
       %p{class: "border-b border-slate-200 px-4 py-2 text-xs text-slate-500"}
         Errors and warnings Search Console found across every sitemap, at each day's last sync.
       %div{class: "px-4 py-3"}
-        = line_chart(dates, [ChartsHelper::Series.new(name: "Errors", values: @history.values.map { |day| day[:errors] }),
-          ChartsHelper::Series.new(name: "Warnings", dashed: true, values: @history.values.map { |day| day[:warnings] })],
-          y_title: "Issues", label: "Sitemap errors and warnings, by day")
+        = search_sitemap_issues_chart(@history)
 
 - if @sitemaps.empty?
   = render "shared/empty_state", icon: (@filtering.filtered? ? "search" : "inbox"),

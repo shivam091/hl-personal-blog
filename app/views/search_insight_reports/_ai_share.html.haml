@@ -16,13 +16,7 @@
     = render layout: "shared/card", locals: {id: "ai-share", title: "Share of impressions from AI answers", icon: "sparkles"} do
       %div{class: "px-4 py-3"}
         - if shares.compact.any?
-          - share_now = ChartsHelper::Series.new(name: "AI share", values: shares)
-          - lines = [share_now]
-          - if earlier_share
-            - earlier_shares = ai.daily(earlier).zip(search.daily(:impressions, earlier)).map { |shown, seen| (shown.to_f / seen * 100).round(1) if shown && seen.to_i.positive? }
-            - lines << ChartsHelper::Series.new(name: "AI share, #{earlier}", values: aligned(earlier_shares, dates.size), dotted: true, color: ChartsHelper::LINE_COLORS[0], against: share_now)
-          = line_chart(dates, lines, y_title: "% of impressions", unit: "%",
-            label: "AI Overviews and AI Mode impressions as a share of search impressions per day", unsettled: search_unsettled_from)
+          = report_ai_share_chart(ai, search, dates, shares, earlier, earlier_share)
         - else
           %p{class: "text-sm text-slate-500"} No AI impressions uploaded for days in #{@period}.
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}

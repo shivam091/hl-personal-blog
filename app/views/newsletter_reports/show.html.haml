@@ -92,9 +92,7 @@
       - if sends.all? { |bucket| (bucket.sent + bucket.undelivered).zero? }
         %p{class: "text-sm text-slate-500"} No new-entry emails sent in #{@period}.
       - else
-        = stacked_chart(sends.map(&:start), [ChartsHelper::Series.new(name: "Delivered", values: sends.map(&:sent), color: ChartsHelper::SHARE_COLORS[2]),
-          ChartsHelper::Series.new(name: "Undelivered", values: sends.map(&:undelivered), color: ChartsHelper::SHARE_COLORS[1])],
-          y_title: "Emails", label: "New-entry emails per #{per}, delivered and still undelivered", per: per)
+        = report_newsletter_sends_chart(sends, per)
     %p{class: "flex justify-end border-t border-slate-200 px-4 py-2"}
       = link_to list_url(@period, @filtering, format: :csv, export: "sends"), class: export_class do
         = icon("download", size: 12)

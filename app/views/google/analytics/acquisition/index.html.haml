@@ -4,23 +4,15 @@
   - if @channel_mix
     = render layout: "shared/card", locals: {id: "channel-mix", title: "Channel mix by #{@channel_mix[:unit]}", icon: "bar-chart", class: "mb-6"} do
       %div{class: "px-4 py-3"}
-        = share_chart @channel_mix, key_label: ->(channel) { channel.presence || "(not set)" },
-          count_name: "session", empty: "No sessions in this period.", y_title: "Share of sessions",
-          label: "Each #{@channel_mix[:unit]}'s sessions split by channel, as a share of that #{@channel_mix[:unit]}"
+        = analytics_channel_mix_chart(@channel_mix)
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
         The period's five busiest channels keep the same colour in every bar, so a channel growing or shrinking shows
         even when sessions overall don't change.
 
   - if @campaign_results&.any?
     = render layout: "shared/card", locals: {id: "campaign-results", title: "What each campaign brought", icon: "bar-chart", class: "mb-6"} do
-      - sessions_total = @campaign_results.sum { |_, figures| figures[:sessions] }
-      - results = lambda do |figures|
-        - engaged = figures[:sessions].positive? ? number_to_percentage(figures[:engaged_sessions] * 100.0 / figures[:sessions], precision: 0) : "—"
-        - tag.span("#{engaged} engaged · #{pluralize(figures[:key_events], "key event")}", class: "text-slate-500")
       %div{class: "px-4 py-3"}
-        = ranking_chart(@campaign_results.map { |campaign, figures| [campaign, figures[:sessions], "bg-slate-600", ChartsHelper::BAR_COLOR] }, total: sessions_total,
-          changes: @campaign_results.to_h { |campaign, figures| [campaign, results.(figures)] },
-          x_title: "Sessions", y_title: "Campaign", label: "Sessions of the busiest campaigns in #{@period}, with how engaged they were and the key events they led to")
+        = analytics_campaign_chart(@campaign_results, @period)
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
         Each campaign's links and sources added together. Key events are the ones marked in Google Analytics, so a campaign that reads zero may simply not have led to one.
 

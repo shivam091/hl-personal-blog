@@ -36,7 +36,7 @@
     -# drop is where entries are lost.
     = render layout: "shared/card", locals: {id: "seo-funnel", title: "From published to read", icon: "trending-up"} do
       %div{class: "px-4 py-3"}
-        = funnel_chart(content.funnel, label: "Entries at each step from published to read", unit: "entry", previous: before&.funnel, previous_name: vs)
+        = overview_funnel_chart(content, before, vs)
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
         Search, reads and likes count entries with any in the period; the sitemap and index are as they stand now.
 
@@ -230,13 +230,7 @@
         -# place whichever period is picked.
         - x_max = decay_months
         %div{class: "px-4 py-3"}
-          = scatter_chart(points.map { |point| ChartsHelper::ScatterPoint.new(x: point.age_months, y: point.item.views, color: colors[point.item.type],
-              tip: chart_tip(point.item.entry.name, [{value: number_with_delimiter(point.item.views), name: "Views", color: colors[point.item.type]},
-                {value: l(point.item.entry.published_at.to_date), name: "Published"}, {value: point.item.type.capitalize, name: "Type"}])) },
-            x_min: 0, x_max: x_max, x_ticks: [0, x_max / 4.0, x_max / 2.0, x_max * 3 / 4.0, x_max],
-            x_tick: ->(months) { number_with_precision(months, precision: 1, strip_insignificant_zeros: true) }, y_tick: ->(views) { compact_number(views) },
-            x_title: "Months since publishing", y_title: "Views", label: "Views in the period against each entry's age",
-            key: colors.map { |type, color| [type.pluralize.capitalize, color] })
+          = overview_decay_chart(points, colors, x_max)
 
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "refresh", title: "Worth refreshing", icon: "refresh"} do
@@ -272,8 +266,7 @@
         #{number_with_delimiter(updates.updated)} of #{pluralize(content.items.size, "entry")} updated after the day they went
         out#{typical}. Every entry, by its latest update, whatever the period.
       %div{class: "border-b border-slate-200 px-4 py-3"}
-        = ranking_chart(updates.bands.map { |band, count| [band, count, "bg-slate-600", ChartsHelper::BAR_COLOR] },
-          total: content.items.size, x_title: "Entries", y_title: "Latest update", label: "Entries by how long after publishing they were last updated")
+        = overview_updates_chart(updates, content)
       - if updates.latest.any?
         %div{class: "overflow-x-auto"}
           %table{class: table_class}
@@ -300,9 +293,7 @@
         -# Per entry, so a tag on many middling entries doesn't outrank one
         -# whose few entries are each read far more.
         %div{class: "border-b border-slate-200 px-4 py-3"}
-          = ranking_chart(rows.sort_by { |row| [-row[:average_views], row[:tag]] }.map { |row| [row[:tag], row[:average_views].round, "bg-slate-600", ChartsHelper::BAR_COLOR] },
-            total: nil, x_title: "Views per entry", y_title: "Tag", label: "Views per entry for each of the most viewed tags",
-            previous: earlier_tags&.transform_values { |row| row[:average_views].round }, previous_name: vs)
+          = overview_tags_chart(rows, earlier_tags, vs)
         %div{class: "overflow-x-auto"}
           %table{class: table_class}
             %thead{class: "text-slate-500"}
@@ -335,9 +326,7 @@
         %p{class: "px-4 py-3 text-sm text-slate-500"} No entries in a category.
       - else
         %div{class: "border-b border-slate-200 px-4 py-3"}
-          = ranking_chart(rows.sort_by { |row| [-row[:average_views], row[:category]] }.map { |row| [row[:category], row[:average_views].round, "bg-slate-600", ChartsHelper::BAR_COLOR] },
-            total: nil, x_title: "Views per entry", y_title: "Category", label: "Views per entry for each category",
-            previous: earlier_categories&.transform_values { |row| row[:average_views].round }, previous_name: vs)
+          = overview_categories_chart(rows, earlier_categories, vs)
         %div{class: "overflow-x-auto"}
           %table{class: table_class}
             %thead{class: "text-slate-500"}
@@ -489,8 +478,7 @@
           - if recent.empty?
             %p{class: "text-sm text-slate-500"} No two publishing days in the last year to measure between.
           - else
-            = time_chart(recent.map { |gap| [gap.to, gap.days] }, y_title: "Days since the one before", x_title: "Publishing day",
-              label: "Days since the publishing day before, for each publishing day in the last year#{" with a #{gaps_type}" if gaps_type}")
+            = overview_gaps_chart(recent, gaps_type)
         %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
           #{gaps_type ? "Only #{gaps_type.pluralize}" : "Every entry"}, whatever the period. A streak is a run of weeks with at least one
           #{gaps_type || "entry"}; two #{(gaps_type || "entry").pluralize} on one day count as one publishing day.

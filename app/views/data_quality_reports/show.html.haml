@@ -40,8 +40,7 @@
       - if before
         - lines << ChartsHelper::Series.new(name: "Blog's own count, #{vs}", values: aligned(@granularity.sums_for(earlier_period, @stats.daily(:views, earlier_period)), buckets.size), dotted: true, color: ChartsHelper::LINE_COLORS[0], against: own)
         - lines << ChartsHelper::Series.new(name: "Google Analytics, #{vs}", values: aligned(@granularity.sums_for(earlier_period, @analytics.daily_views(earlier_period)), buckets.size), dotted: true, color: ChartsHelper::LINE_COLORS[1], against: analytics_now)
-      = line_chart(buckets, lines, per: @granularity.per,
-        y_title: "Views", label: "The blog's own views against Google Analytics views, per #{@granularity.by}")
+      = overview_own_vs_ga_chart(buckets, lines, @granularity)
     %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
       GA misses readers who block its script, and the blog leaves out hits it takes for bots, so neither count
       is the whole truth; a gap that suddenly widens is the thing to look into.
@@ -179,8 +178,7 @@
       %p{class: "px-4 py-3 text-sm text-slate-500"} Every crawled page is indexed.
     - else
       %div{class: "border-b border-slate-200 px-4 py-3"}
-        = ranking_chart(@coverage.waiting_ages.map { |bucket, count| [bucket, count, "bg-slate-600", ChartsHelper::BAR_COLOR] },
-          total: waiting.size, x_title: "Pages", y_title: "Waiting", label: "Pages not indexed, by how long they've waited")
+        = overview_waiting_chart(@coverage, waiting)
       %div{class: "overflow-x-auto"}
         %table{class: table_class}
           %thead{class: "text-slate-500"}

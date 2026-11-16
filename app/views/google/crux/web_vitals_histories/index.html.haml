@@ -58,8 +58,7 @@
       - label = crux_metric_label(metric)
       = render layout: "shared/card", locals: {id: "chart-#{metric}", title: "#{label} (p75)", icon: "trending-up"} do
         %div{class: "px-4 py-3"}
-          = line_chart(dates, [ChartsHelper::Series.new(name: label, values: stats.map { |stat| stat.p75[metric] })],
-            y_title: crux_unit(metric), label: "#{label}, 75th percentile, by 28-day window")
+          = analytics_crux_metric_chart(dates, stats, metric, label)
         - good, poor = Google::Crux::Stat::THRESHOLDS.fetch(metric)
         %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
           Good up to #{crux_value(metric, good)}, poor beyond #{crux_value(metric, poor)}.

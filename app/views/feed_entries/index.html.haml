@@ -27,10 +27,7 @@
           Emails delivered and still undelivered for the last #{pluralize(@notified_entries.size, "entry", plural: "entries")} sent to subscribers.
           Undelivered ones can be sent again from the entry's page.
         %div{class: "px-4 py-3"}
-          = stacked_chart(@notified_entries.map { |entry| entry.notified_at.to_date },
-            [ChartsHelper::Series.new(name: "Delivered", values: @notified_entries.map(&:notified_count), color: ChartsHelper::SHARE_COLORS[0]),
-             ChartsHelper::Series.new(name: "Undelivered", values: @notified_entries.map { |entry| entry.notification_failures.size }, color: ChartsHelper::SHARE_COLORS[1])],
-            titles: @notified_entries.map(&:name), x_title: "Sent", y_title: "Emails", label: "Subscriber emails delivered and undelivered for each entry sent")
+          = overview_notified_entries_chart(@notified_entries)
 
   - chip_class = "inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
   - subscriber_count = NewsletterSubscriber.count

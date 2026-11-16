@@ -47,23 +47,13 @@
       actions: chart_granularity_picker(@granularity, "Requests", "requests-by")} do
       %div{class: "px-4 py-3"}
         - buckets = @granularity.dates(requests.dates)
-        = stacked_chart(buckets, requests.daily_by_status.map { |name, values| ChartsHelper::Series.new(name: name, values: @granularity.sums(requests.dates, values), color: status_colors[name]) },
-          y_title: "Requests", label: "Requests per #{@granularity.by}, split by status class", per: @granularity.per,
-          previous: (aligned(before.daily_by_status.transform_values { |values| @granularity.sums(before.dates, values) }.values.transpose.map(&:sum), buckets.size) if before), previous_name: vs)
+        = report_requests_status_chart(requests, before, @granularity, buckets, status_colors, vs)
 
     -# Median and slow tail on one scale, so the gap between them shows how
     -# uneven the day was.
     = render layout: "shared/card", locals: {id: "response-times", title: "Response time", icon: "clock"} do
       %div{class: "px-4 py-3"}
-        - timings = requests.daily_timings
-        - earlier = before&.daily_timings
-        - lines = [ChartsHelper::Series.new(name: "Median", values: timings[:median]),
-          ChartsHelper::Series.new(name: "95th percentile", values: timings[:p95], dashed: true)]
-        - if earlier
-          - lines << ChartsHelper::Series.new(name: "Median, #{vs}", values: aligned(earlier[:median], requests.dates.size), dotted: true, color: ChartsHelper::LINE_COLORS[0], against: lines[0])
-          - lines << ChartsHelper::Series.new(name: "95th percentile, #{vs}", values: aligned(earlier[:p95], requests.dates.size), dotted: true, color: ChartsHelper::LINE_COLORS[1], against: lines[1])
-        = line_chart(requests.dates, lines,
-          y_title: "Milliseconds", unit: " ms", label: "Median and 95th percentile response time per day")
+        = report_requests_timing_chart(requests, before, vs)
 
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "slowest-paths", title: "Slowest pages", icon: "timer"} do
@@ -166,8 +156,7 @@
                   %th{scope: "row", class: "px-2 py-0.5 text-left font-medium"}= weekday
                   - cells[row].each_with_index do |count, hour|
                     %td{class: "p-0.5"}
-                      = heat_cell(count, count, max, class: "min-w-6",
-                        tip: chart_tip("#{Date::DAYNAMES.rotate[row]}, #{format("%02d:00", hour)}", cell_readings("Requests", count, (before.hours[row][hour] if before), vs.to_s)))
+                      = report_requests_hour_cell(count, max, row, hour, before, vs)
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
         In #{Time.zone.name}, the app's time zone.
         - if before
@@ -176,18 +165,12 @@
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "memory", title: "Server memory", icon: "database"} do
       %div{class: "px-4 py-3"}
-        - memory = [ChartsHelper::Series.new(name: "Memory", values: requests.daily_memory_mb, color: ChartsHelper::LINE_COLORS[0])]
-        - memory << ChartsHelper::Series.new(name: "Memory, #{vs}", values: aligned(before.daily_memory_mb, requests.dates.size), dotted: true, color: ChartsHelper::LINE_COLORS[0], against: memory[0]) if before
-        = line_chart(requests.dates, memory,
-          y_title: "MB", unit: " MB", label: "The most memory the server process held on each day")
+        = report_requests_memory_chart(requests, before, vs)
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
         Each day's highest, as the whole process held it after a request, so a climb that never comes down shows.
 
     = render layout: "shared/card", locals: {id: "cpu", title: "CPU per request", icon: "cpu"} do
       %div{class: "px-4 py-3"}
-        - cpu = [ChartsHelper::Series.new(name: "CPU", values: requests.daily_cpu, color: ChartsHelper::LINE_COLORS[0])]
-        - cpu << ChartsHelper::Series.new(name: "CPU, #{vs}", values: aligned(before.daily_cpu, requests.dates.size), dotted: true, color: ChartsHelper::LINE_COLORS[0], against: cpu[0]) if before
-        = line_chart(requests.dates, cpu,
-          y_title: "% of time", unit: "%", label: "Average share of each request's time spent on the CPU, per day")
+        = report_requests_cpu_chart(requests, before, vs)
       %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
         Low on a slow day means requests were waiting on the database or the network, not working.

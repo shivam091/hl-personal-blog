@@ -23,15 +23,12 @@
   = render layout: "shared/card", locals: {id: "chart-over-time", title: "#{label} by #{by} over time", icon: "activity", actions: chart_granularity_picker(chart.plotting, label)} do
     %div{class: "px-4 py-3"}
       - if series.any?
-        = line_chart(chart.dates, series, y_title: label, label: "#{label} per #{per} for the charted rows#{" and in total" if total}", selectable: true, per: per.to_sym,
-          unsettled: unsettled_from)
+        = search_rows_over_time_chart(chart, series, label: label, total: total, unsettled: unsettled_from)
       - else
         %p{class: "py-10 text-center text-sm text-slate-500"}= empty
   = render layout: "shared/card", locals: {id: "chart-ranking", title: "#{label} by #{by}", icon: "bar-chart", class: "flex flex-col"} do
     %div{class: "flex flex-1 flex-col px-4 py-3"}
       - if chart.rows.any?
-        = ranking_chart(chart.rows.zip(ChartsHelper::SHARE_SWATCHES, ChartsHelper::SHARE_COLORS, ChartsHelper::ROW_MARKERS).map { |row, swatch, color, marker| [row.label, row.value, swatch, color, marker] },
-          x_title: label, y_title: @breakdown.headings.join(" · "), label: "#{label} of the charted rows, with each one's share of the total", total: @totals.value(chart.metric.field), first_series: total ? 1 : 0,
-          previous: (chart.rows.to_h { |row| [row.label, row.previous_value] } if chart.previous_name), previous_name: chart.previous_name)
+        = search_rows_ranking_chart(chart, label: label, headings: @breakdown.headings, total: @totals.value(chart.metric.field), offset: total ? 1 : 0)
       - else
         %p{class: "py-10 text-center text-sm text-slate-500"}= empty

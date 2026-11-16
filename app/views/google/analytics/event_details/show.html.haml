@@ -1,11 +1,5 @@
 - content_for :title, "#{@event_name} – Analytics engagement"
--# The period before is dashed, as in GA, so a figure is read against it.
--# Counts are summed into the bucket picked; a ratio can't be, so events per
--# session stays daily.
-- over_time = ->(current, previous) { now = ChartsHelper::Series.new(name: @period.to_s, values: current); [now, (ChartsHelper::Series.new(name: @period.previous.to_s, values: previous, dashed: true, against: now) if previous)].compact }
 - dates = (@period.from..@period.to).to_a
-- buckets = @granularity.dates(dates)
-- bucketed = ->(values, period) { values && @granularity.sums_for(period, values) }
 
 = link_to google_analytics_engagement_path(**@period.query), class: "mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900" do
   = icon("arrow-left")
@@ -34,8 +28,7 @@
     actions: chart_granularity_picker(@granularity, "Event count", "event-count-by")} do
     %div{class: "px-4 py-3"}
       - if @totals.event_count.positive?
-        = line_chart(buckets, over_time.(bucketed.(@event_counts, @period), (bucketed.(@previous_event_counts, @period.previous)&.first(buckets.size) if @previous_totals)), y_title: "Event count",
-          per: @granularity.per, label: "#{@event_name} events per #{@granularity.by}")
+        = analytics_event_count_chart(dates, @event_counts, (@previous_event_counts if @previous_totals), @period, @granularity, @event_name)
       - else
         %p{class: "py-10 text-center text-sm text-slate-500"} No #{@event_name} events in #{@period}.
   = render layout: "shared/card", locals: {id: "realtime", title: "Events in the last 30 minutes", icon: "clock"} do
@@ -55,8 +48,7 @@
   = render layout: "shared/card", locals: {id: "events-per-session-over-time", title: "Events per session over time", icon: "activity"} do
     %div{class: "px-4 py-3"}
       - if @events_per_session
-        = line_chart(dates, over_time.(@events_per_session, @previous_events_per_session), y_title: "Events per session", precision: 2,
-          label: "#{@event_name} events per session that had it, per day")
+        = analytics_events_per_session_chart(dates, @events_per_session, @previous_events_per_session, @period, @event_name)
       - else
         %p{class: "py-10 text-center text-sm text-slate-500"} Only Google Analytics can count sessions, and it couldn't be asked.
 

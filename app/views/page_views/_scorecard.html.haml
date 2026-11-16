@@ -32,8 +32,7 @@
                 %span{class: "text-slate-900 tabular-nums"}= number_with_delimiter(daily.sum)
                 in the period
                 = change.(daily.sum, counts.(by_day, before_days).sum)
-            = time_chart(dates.zip(granularity.sums(days, daily)), y_title: name, label: "#{name} of #{slug} per #{per}", style: style,
-              per: granularity.per)
+            = report_page_trend_chart(dates, days, granularity, daily, name, slug, style)
       - if (note = counted_since_note(period, views: views_since, likes: likes_since))
         %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}= note
 
@@ -100,8 +99,7 @@
     %p{class: "px-4 py-3 text-sm text-slate-500"} Google didn't show this page in the period.
   - else
     %div{class: "px-4 py-3"}
-      = measures_chart days, page_search_measures(daily),
-        label: "Clicks, impressions and average position of #{slug} per day, each on its own scale"
+      = report_page_search_chart(days, daily, slug)
 
 = render layout: "shared/card", locals: {id: "page-queries", title: "Search queries for this page", icon: "search", class: "mb-6"} do
   - queries = search.page_queries(slug)

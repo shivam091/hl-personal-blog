@@ -91,18 +91,8 @@
       -# A line per step, so a day readers stopped going on shows as the
       -# lines parting. Past five steps the hues repeat dashed.
       - if dates.size > 1 && funnel.trend.any?
-        - colors = ChartsHelper::SHARE_COLORS
         %div{class: "border-t border-slate-200 px-4 py-3"}
-          -# The period compared with, dotted in each step's colour and after
-          -# the steps, lined up under these dates.
-          - before_dates = (@period.previous.from..@period.previous.to).first(dates.size) if previous
-          - steps_now = funnel.steps.each_with_index.map { |step, index| ChartsHelper::Series.new(name: step.name,
-            values: dates.map { |date| funnel.trend[date]&.[](index) || 0 }, color: colors[index % colors.size], dashed: (true if index >= colors.size)) }
-          = line_chart(dates, [*steps_now,
-            *(previous ? funnel.steps.each_with_index.map { |step, index| ChartsHelper::Series.new(name: "#{step.name}, #{@period.previous}",
-              values: dates.each_index.map { |position| (previous.trend[before_dates[position]]&.[](index) || 0 if before_dates[position]) },
-              color: colors[index % colors.size], dotted: true, against: steps_now[index]) } : [])],
-            y_title: "Readers", label: "#{funnel.title}: readers at each step per day")
+          = analytics_funnel_trend_chart(funnel, previous, @period, dates)
       %div{class: "overflow-x-auto border-t border-slate-200"}
         %table{class: table_class}
           %thead{class: "text-slate-500"}

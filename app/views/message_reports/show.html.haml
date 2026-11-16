@@ -50,11 +50,7 @@
       = render layout: "shared/card", locals: {id: "messages-by-verdict", title: "Messages by #{messages.per}", icon: "message-square",
         actions: chart_granularity_picker(@granularity, "Messages", "messages-by")} do
         %div{class: "px-4 py-3"}
-          -# Bars of a different width, as with a longer compared period, wouldn't line up with these.
-          - before_totals = before.timeline.last.values.transpose.map(&:sum) if before && before.per == messages.per
-          = stacked_chart(keys, verdict_series(by_verdict),
-            label: "Contact messages per #{messages.per}, by your verdict#{", against #{previous}" if before_totals}", y_title: "Messages", per: messages.per,
-            previous: (aligned(before_totals, keys.size) if before_totals), previous_name: (previous.to_s if before_totals))
+          = report_messages_verdict_chart(messages, keys, by_verdict, before, previous)
 
     -# Whether verdicts reach Google, since one that never arrives teaches
     -# its model nothing.
@@ -89,8 +85,7 @@
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "score-vs-verdict", title: "Score against your verdicts", icon: "shield"} do
       %div{class: "px-4 py-3"}
-        = stacked_chart(bands.map(&:label), band_series(bands), label: "Contact messages by reCAPTCHA score, split by your verdict",
-          y_title: "Messages", x_title: "reCAPTCHA score")
+        = report_message_bands_chart(bands)
       %div{class: "overflow-x-auto border-t border-slate-200"}
         %table{class: "w-full border-collapse text-sm"}
           %thead{class: "text-slate-500"}

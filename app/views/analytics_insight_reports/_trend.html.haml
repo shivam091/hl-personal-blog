@@ -34,6 +34,4 @@
     - compared = before if tab.split || insights.previous_unsplit?
     %div{role: "tabpanel", id: "trend-panel-#{tab.field}", aria: {labelledby: "trend-tab-#{tab.field}"}, hidden: tab.field.to_s != trend,
       class: "px-4 pt-1 pb-3", data: {metric_tabs_target: "panel"}}
-      = line_chart(dates, analytics_trend_series(insights, tab, dates, compared, before_dates), y_title: tab.label,
-        unit: (tab.format == :count ? "" : "%"), per: granularity.per, events: events, event_name: "Published",
-        label: "#{tab.label} per #{granularity.by}#{", against #{compared}" if compared}")
+      = overview_trend_chart(insights, tab, dates, compared, before_dates, granularity, events)

@@ -24,11 +24,7 @@
     - if counted.none?
       %p{class: "text-sm text-slate-500"} No visitors counted in this period yet.
     - else
-      = stacked_chart(dates,
-        [ChartsHelper::Series.new(name: "Unique visitors", values: dates.each_index.map { |i| visitors[i] if counted[i] }, color: ChartsHelper::SHARE_COLORS[0]),
-         ChartsHelper::Series.new(name: "Repeat views", values: dates.each_index.map { |i| [views[i] - visitors[i], 0].max if counted[i] }, color: ChartsHelper::SHARE_COLORS[1])],
-        y_title: "Views", label: "Each day's views split into unique visitors and repeat views#{", against #{before}" if before}",
-        previous: (aligned(stats.daily(:views, before), dates.size) if before), previous_name: before&.to_s)
+      = overview_audience_chart(dates, stats, visitors, views, counted, before)
   %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}
     A visitor is counted once a day by a keyed hash of their IP; every further view that day is a repeat.
     - if counted_since
