@@ -19,7 +19,7 @@
   - previous = period.previous if compare && period.compare? && !period.compare_countries?
   %p{class: "text-xs tabular-nums text-slate-500 sm:ml-auto sm:text-right"}
     %span{class: "whitespace-nowrap sm:hidden"}= period_dates(period, compact: true)
-    %span{class: "hidden sm:block"}= period_dates(period)
+    %span{class: "hidden sm:block", data: {export_period: true}}= period_dates(period)
     - if previous
       %span{class: "whitespace-nowrap text-slate-400 sm:hidden"}
         vs

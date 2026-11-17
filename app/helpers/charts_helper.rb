@@ -509,16 +509,31 @@ module ChartsHelper
     tag.div(class: ["group/chart relative touch-pan-y touch-pinch-zoom rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-400",
       options[:class]],
       tabindex: 0, role: "group", aria: {label: "#{label}. Arrow keys read each value."},
-      data: {controller: "chart-tooltip",
+      data: {controller: "chart-tooltip chart-export",
              action: "pointerdown->chart-tooltip#point pointermove->chart-tooltip#point pointerleave->chart-tooltip#leave pointercancel->chart-tooltip#cancel " \
                "focus->chart-tooltip#focus blur->chart-tooltip#hide keydown->chart-tooltip#key"}) do
       safe_join([
         capture(&block),
+        export_button,
         (tag.span(hidden: true, class: "pointer-events-none absolute w-px bg-slate-400", data: {chart_tooltip_target: "crosshair"}) if crosshair),
         tag.div(hidden: true, role: "status",
           class: "pointer-events-none fixed z-50 max-w-xs rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg",
           data: {chart_tooltip_target: "tooltip"})
       ].compact)
+    end
+  end
+
+  # Shown only while the chart is hovered or focused, so it doesn't sit over
+  # the figures at rest, and top left because a map's zoom controls take the
+  # right. Its pointer and key events stop here so using it
+  # doesn't move the readout.
+  def export_button
+    tag.button(type: "button", title: "Download as PNG", aria: {label: "Download chart as PNG"},
+      class: "absolute left-1 top-1 z-10 rounded border border-slate-200 bg-white/90 p-1 text-slate-500 opacity-0 shadow-sm " \
+        "hover:text-slate-800 focus-visible:opacity-100 group-hover/chart:opacity-100 group-focus-within/chart:opacity-100",
+      data: {export_skip: true,
+             action: "pointerdown->chart-export#stop pointermove->chart-export#stop keydown->chart-export#stop click->chart-export#download"}) do
+      icon("download", size: 14)
     end
   end
 

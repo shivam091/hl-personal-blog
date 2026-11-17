@@ -442,6 +442,11 @@ input[type="radio"][aria-invalid="true"] {
   }
 }
 
+/* A picture taken mid-reveal would show the chart half drawn. */
+[data-exporting] [data-reveal] {
+  animation: none;
+}
+
 /*
   The wrapper decides the cursor while a map is zoomed or being moved, so
   nothing inside it may name one of its own.

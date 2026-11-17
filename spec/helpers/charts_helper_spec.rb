@@ -11,6 +11,18 @@ RSpec.describe ChartsHelper, type: :helper do
     node.css("[data-chart-tooltip-target=hit]").map { |hit| JSON.parse(hit["data-tip"]) }
   end
 
+  describe "#chart_tooltip export" do
+    it "offers a PNG download that is only shown on hover or focus and leaves the readout alone" do
+      wrapper = html(helper.chart_tooltip(label: "Views") { "".html_safe }).at_css("[data-controller~=chart-export]")
+      button = wrapper.at_css("button[data-export-skip]")
+
+      expect(wrapper["data-controller"]).to eq("chart-tooltip chart-export")
+      expect(button["aria-label"]).to eq("Download chart as PNG")
+      expect(button["class"]).to include("opacity-0", "group-hover/chart:opacity-100", "group-focus-within/chart:opacity-100")
+      expect(button["data-action"].split).to include("click->chart-export#download", "pointerdown->chart-export#stop", "keydown->chart-export#stop")
+    end
+  end
+
   describe "#world_map" do
     it "shades countries on a log scale, greys out empty ones and lists those too small to draw" do
       map = html(helper.world_map({"IN" => 1000, "US" => 10, "SG" => 4, "XX" => 3, "ZZ" => 7}, label: "Views by country", unit: "view"))
@@ -131,7 +143,7 @@ RSpec.describe ChartsHelper, type: :helper do
       chart = html(helper.line_chart(days, [ChartsHelper::Series.new(name: "Views", values: [1, 2, 3])], label: "Views", y_title: "Views"))
 
       expect(tips(chart).map { |tip| tip["key"] }).to eq(%w[2026-08-01 2026-08-02 2026-08-03])
-      expect(chart.css("button")).to be_empty
+      expect(chart.css("button").map { |button| button["aria-label"] }).to eq(["Download chart as PNG"])
       expect(chart.at_css("linearGradient#area-fade")).not_to be_nil
       expect(chart.at_css("polygon")["fill"]).to eq("url(#area-fade)")
     end
@@ -146,7 +158,7 @@ RSpec.describe ChartsHelper, type: :helper do
       map = html(helper.world_map({"IN" => 5}, label: "Views", unit: "view", links: {"IN" => "/somewhere"}))
 
       expect(tips(map).find { |tip| tip["title"].include?("India") }["href"]).to eq("/somewhere")
-      expect(map.css("button").map { |button| button["aria-label"] }).to eq(["Zoom in", "Zoom out"])
+      expect(map.css("button").map { |button| button["aria-label"] }).to eq(["Zoom in", "Zoom out", "Download chart as PNG"])
       expect(map.at_css("[data-controller=map-zoom]")["data-action"]).to include("map-zoom#wheel")
     end
   end
