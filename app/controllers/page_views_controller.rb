@@ -42,7 +42,6 @@ class PageViewsController < ApplicationController
     @search = Google::SearchConsole::Summary.new(@period)
     @analytics = Google::Analytics::Summary.new(@period)
     @ai = Google::SearchConsole::GenerativeAiSummary.new(@period)
-    @views_since = PageView.first_day
     @likes_since = PageLike.first_day
     # Stored as full URLs, so they're matched on the path whatever the host.
     same_path = /\Ahttps?:\/\/[^\/]+#{Regexp.escape(@page_view.slug == "/" ? "" : @page_view.slug)}\/?\z/

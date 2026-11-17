@@ -62,12 +62,6 @@ class BlogStats
     @visitors_counted_since = parse_day(markers.order(day: :asc).only(:day).first&.day)
   end
 
-  def views_counted_since
-    return @views_counted_since if defined?(@views_counted_since)
-
-    @views_counted_since = PageView.first_day
-  end
-
   def likes_counted_since
     return @likes_counted_since if defined?(@likes_counted_since)
 

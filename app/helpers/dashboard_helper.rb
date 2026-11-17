@@ -97,14 +97,10 @@ module DashboardHelper
 
   # Only when the period reaches back before the first counted day, since an
   # empty stretch there reads as no traffic rather than no tracking.
-  def counted_since_note(period, views:, likes: nil)
-    gaps = {"views" => views, "likes" => likes}.select { |_, since| since && period.from < since }
-    return if gaps.empty?
+  def counted_since_note(period, likes: nil)
+    return unless likes && period.from < likes
 
-    (name, since), (other, other_since) = gaps.to_a
-    note = "Page #{name} are counted from #{l(since)}"
-    note += " and #{other} from #{l(other_since)}" if other
-    "#{note}, so earlier days in this period have none."
+    "Page likes are counted from #{l(likes)}, so earlier days in this period have none."
   end
 
   # Worded as the views and likes note is, so every figure that began on a

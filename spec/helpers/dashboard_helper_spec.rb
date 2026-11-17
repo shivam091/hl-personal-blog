@@ -23,15 +23,14 @@ RSpec.describe DashboardHelper, type: :helper do
     expect(helper.referrer_hosts("google_com" => 2, "google.com" => 1, "direct" => 3)).to eq("google.com" => 3, "direct" => 3)
   end
 
-  it "says when views and likes were first counted, only for a period reaching back before then" do
+  it "says when likes were first counted, only for a period reaching back before then" do
     period = Period.new({from: "2026-09-01", to: "2026-10-12"}, today: Date.new(2026, 10, 12))
-    views, likes = Date.new(2026, 9, 15), Date.new(2026, 10, 1)
+    likes = Date.new(2026, 10, 1)
 
-    expect(helper.counted_since_note(period, views: views, likes: likes))
-      .to eq("Page views are counted from #{helper.l(views)} and likes from #{helper.l(likes)}, so earlier days in this period have none.")
-    expect(helper.counted_since_note(period, views: Date.new(2026, 8, 1), likes: likes))
+    expect(helper.counted_since_note(period, likes: likes))
       .to eq("Page likes are counted from #{helper.l(likes)}, so earlier days in this period have none.")
-    expect(helper.counted_since_note(period, views: Date.new(2026, 8, 1), likes: nil)).to be_nil
+    expect(helper.counted_since_note(period, likes: Date.new(2026, 8, 1))).to be_nil
+    expect(helper.counted_since_note(period, likes: nil)).to be_nil
   end
 
   it "says when any other figure was first counted the same way, with why when there's one" do

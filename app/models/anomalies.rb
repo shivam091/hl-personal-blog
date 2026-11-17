@@ -45,9 +45,10 @@ class Anomalies
     daily = stats.daily(:views)
     latest = daily.last
     # The same weekday in each earlier week, every seventh day back, but only
-    # from when views were counted, so the weeks before read as unknown
+    # from when Google Analytics began, which the views before the blog
+    # counted its own are estimated from, so the weeks before read as unknown
     # rather than as none.
-    since = stats.views_counted_since
+    since = Google::Analytics::TrackedSince::ANALYTICS
     weeks = (1..WEEKS_BACK).select { |back| since && yesterday - back * 7 >= since }
     return if weeks.size < MIN_WEEKS
 

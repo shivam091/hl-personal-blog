@@ -34,7 +34,7 @@
                 = change.(daily.sum, counts.(by_day, before_days).sum)
             = time_chart(dates.zip(granularity.sums(days, daily)), y_title: name, label: "#{name} of #{slug} per #{per}", style: style,
               per: granularity.per)
-      - if (note = counted_since_note(period, views: views_since, likes: likes_since))
+      - if (note = counted_since_note(period, likes: likes_since))
         %p{class: "border-t border-slate-200 px-4 py-2 text-xs text-slate-500"}= note
 
   %div{class: "grid gap-6"}

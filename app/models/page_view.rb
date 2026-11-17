@@ -112,12 +112,6 @@ class PageView
       end.sort_by { |slug, bots, _, share| [-share, -bots, slug] }.first(limit)
     end
 
-    # The frontend only began counting views on some day, so a period
-    # reaching back before it shows none rather than few.
-    def first_day
-      first_day_in(%w[viewsByDay countriesByDay])
-    end
-
     # Every page's together, as a campaign's link can land anywhere.
     def campaigns_within(period)
       only(:campaignsByDay).each_with_object(Hash.new(0)) do |page_view, totals|

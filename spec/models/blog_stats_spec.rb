@@ -71,8 +71,7 @@ RSpec.describe BlogStats do
     expect(described_class.new(early).country_tracking_since).to eq(Date.new(2026, 10, 1))
   end
 
-  it "finds the first day views and likes were counted, whatever the period" do
-    expect(stats.views_counted_since).to eq(Date.new(2026, 9, 1))
+  it "finds the first day likes were counted, whatever the period" do
     expect(stats.likes_counted_since).to eq(Date.new(2026, 10, 1))
   end
 

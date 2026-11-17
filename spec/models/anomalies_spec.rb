@@ -40,13 +40,13 @@ RSpec.describe Anomalies do
     expect(described_class.new(today: today).flags).to be_empty
   end
 
-  it "judges only by weeks views were counted in, and not at all with too few" do
-    views_on("2026-10-11" => 90, "2026-10-04" => 20, "2026-09-27" => 20)
-    expect(anomalies.flags.first.detail).to eq("90 views against a usual 20 on a Sunday.")
+  it "judges only by weeks since Google Analytics began, and not at all with too few" do
+    views_on("2026-07-04" => 90, "2026-06-27" => 20, "2026-06-20" => 20, "2026-06-13" => 500)
+    expect(described_class.new(today: Date.new(2026, 7, 5)).flags.first.detail).to eq("90 views against a usual 20 on a Saturday.")
 
     PageView.delete_all
-    views_on("2026-10-11" => 90, "2026-10-04" => 20)
-    expect(described_class.new(today: today).flags).to be_empty
+    views_on("2026-07-01" => 90, "2026-06-24" => 20, "2026-06-17" => 500)
+    expect(described_class.new(today: Date.new(2026, 7, 2)).flags).to be_empty
   end
 
   it "flags search clicks falling week on week, from the latest synced day" do

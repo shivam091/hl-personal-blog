@@ -80,7 +80,7 @@ RSpec.describe "Month and year review", type: :request do
     get month_and_year_review_report_path(for: "2026")
 
     expect(page.at_css("h1").text).to eq("Review of 2026 so far")
-    expect(page.text).to include("Page views are counted from 10 Aug, 2026, so earlier days in this period have none.")
+    expect(page.text).not_to include("Page views are counted from")
   end
 
   it "offers months from June 2026 and years from 2026 only" do
