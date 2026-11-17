@@ -22,6 +22,22 @@ RSpec.describe "Page views", type: :request do
       expect(Nokogiri::HTML5(response.body).css("thead th").map { |th| th.text.strip }).to include("URL")
     end
 
+    it "maps the views of every matching page by country, however the list is paged" do
+      PageView.collection.insert_many([
+        {"_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a", "visitorCount" => 3, "countries" => {"IN" => 3}},
+        {"_id" => "/post/b", "slug" => "/post/b", "url" => "https://blog.example.com/post/b", "visitorCount" => 2, "countries" => {"IN" => 1, "US" => 1}}
+      ])
+
+      get page_views_path
+
+      page = Nokogiri::HTML5(response.body)
+      expect(page.at_css("[aria-labelledby=page-views-map] svg")).to be_present
+      expect(page.at_css("[aria-labelledby=page-views-countries]").text.squish).to include("4")
+
+      get page_views_path(q: "nothing-matches")
+      expect(Nokogiri::HTML5(response.body).at_css("[aria-labelledby=page-views-map]")).to be_nil
+    end
+
     it "exports every matching page as CSV with its countries" do
       PageView.collection.insert_many([
         {"_id" => "/post/quiet", "slug" => "/post/quiet", "url" => "https://blog.example.com/post/quiet", "visitorCount" => 1, "countries" => {"US" => 1}},

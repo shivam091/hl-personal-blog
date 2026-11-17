@@ -22,8 +22,10 @@ class PageViewsController < ApplicationController
     load_list_period
     respond_to do |format|
       format.html do
-        @pagination = Pagination.new(filtered_page_views, params)
+        page_views = filtered_page_views
+        @pagination = Pagination.new(page_views, params)
         @page_views = @pagination.records
+        @country_views = country_views(page_views)
       end
       format.csv do
         send_csv PageView.to_csv(filtered_page_views, period: (@period unless @period.all_time?)),
@@ -60,6 +62,18 @@ class PageViewsController < ApplicationController
   # Withheld below the views a rate needs, as everywhere else.
   def like_rate(likes, views)
     (likes * 100.0 / views).round(2) if views >= BlogStats::MIN_VIEWS_FOR_RATE
+  end
+
+  # Over every matching page rather than the visible one, so the map answers
+  # for the whole filter however the list is paged.
+  def country_views(page_views)
+    page_views.each_with_object(Hash.new(0)) do |page_view, totals|
+      view_countries(page_view).each { |country, count| totals[country] += count.to_i }
+    end
+  end
+
+  def view_countries(page_view)
+    @period.all_time? ? page_view.countries : page_view.countries_within(@period)
   end
 
   def filtered_page_views
