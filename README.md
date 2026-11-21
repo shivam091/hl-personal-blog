@@ -277,6 +277,18 @@ Without that address the task fails, so the workflow run shows as failed
 rather than quietly sending nothing. Run it by hand with
 `RAILS_ENV=production bin/rails sync_requests:digest`.
 
+### Monitoring review and clear
+
+Request logs and external calls aren't deleted by anything else, so two
+workflows keep them from filling the database:
+
+| Workflow | When (UTC) | Task | Covers |
+|---|---|---|---|
+| [Scheduled monitoring review](.github/workflows/scheduled-monitoring-review.yml) | Sunday 04:00 | `admin_mail:monitoring_review` | Mails `mailer.notify_to` a reminder to review the week's logs, with the counts of server errors and failed calls |
+| [Scheduled monitoring clear](.github/workflows/scheduled-monitoring-clear.yml) | Monday 00:00 | `monitoring:clear` | Deletes every request log and external call from before today (IST), so all of Sunday goes |
+
+Sync requests aren't cleared.
+
 ## Dates and times
 
 Shown as `12 Mar, 2026`, and times as `12 Mar, 2026 12:00 IST`
