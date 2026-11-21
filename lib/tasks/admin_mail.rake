@@ -19,4 +19,12 @@ namespace :admin_mail do
     message = AdminMailer.attention(anomalies).message
     puts "Sent to #{Array(message.to).join(", ")}: #{message.subject}"
   end
+
+  desc "Mail credentials mailer.notify_to a reminder to review the monitoring data before it is cleared"
+  task monitoring_review: :environment do
+    abort "No recipient configured (credentials mailer.notify_to)" if SyncMailer.notify_to.blank?
+
+    message = AdminMailer.monitoring_review.message
+    puts "Sent to #{Array(message.to).join(", ")}: #{message.subject}"
+  end
 end
