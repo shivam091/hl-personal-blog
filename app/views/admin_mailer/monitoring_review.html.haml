@@ -1,0 +1,16 @@
+- content_for :preheader, "Request logs and external calls are cleared tomorrow at 00:00 UTC."
+- content_for :hero, @review.clean? ? "✅ A quiet week" : "⚠️ Worth a look before it goes"
+
+%h1.mail-h1{style: "margin:0 0 14px;font-size:26px;line-height:1.3;font-weight:800;letter-spacing:-0.4px;color:#0f172a;"}
+  Review the monitoring data
+%p{style: "margin:0 0 24px;font-size:16px;line-height:1.65;color:#334155;"}
+  Request logs and external calls up to Sunday are cleared tomorrow at 00:00 UTC. Look at them now if anything should be kept.
+
+%p{style: "margin:0 0 8px;font-size:15px;line-height:1.65;color:#334155;"}
+  = "#{pluralize(@review.requests.count, "request")}, #{@review.server_errors.count} with a server error"
+%p{style: "margin:0 0 24px;font-size:15px;line-height:1.65;color:#334155;"}
+  = "#{pluralize(@review.external_calls.count, "external call")}, #{@review.failed_external_calls.count} failed"
+
+= render "mailers/button", url: request_logs_url, label: "Open the request logs →"
+%p{style: "margin:12px 0 0;text-align:center;font-size:14px;"}
+  %a{href: external_calls_url, style: "color:#4f46e5;text-decoration:none;"} Open the external calls
