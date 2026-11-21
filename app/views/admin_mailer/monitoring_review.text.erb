@@ -1,0 +1,9 @@
+Review the monitoring data
+
+Request logs and external calls up to Sunday are cleared tomorrow at 00:00 UTC.
+
+- <%= pluralize(@review.requests.count, "request") %>, <%= @review.server_errors.count %> with a server error
+- <%= pluralize(@review.external_calls.count, "external call") %>, <%= @review.failed_external_calls.count %> failed
+
+Request logs: <%= request_logs_url %>
+External calls: <%= external_calls_url %>
