@@ -21,4 +21,13 @@ class AdminMailer < ApplicationMailer
       mail(to: SyncMailer.notify_to, subject: "Needs attention: #{subject}")
     end
   end
+
+  # A reminder, not an alert: it goes out every Sunday whatever the week held,
+  # since the logs are cleared the next morning.
+  def monitoring_review(review = MonitoringReview.new)
+    deliver_with_logging(__method__) do
+      @review = review
+      mail(to: SyncMailer.notify_to, subject: "Review the monitoring data before Monday's clear")
+    end
+  end
 end
