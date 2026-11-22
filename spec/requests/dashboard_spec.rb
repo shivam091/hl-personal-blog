@@ -254,6 +254,36 @@ RSpec.describe "Dashboard", type: :request do
     expect(link["href"]).to eq(google_analytics_acquisition_breakdown_path("referrers", from: "2026-10-01", to: "2026-10-10"))
   end
 
+  it "gives GA's share of our views against its usual one, with a faint line for what GA would usually count" do
+    seed
+    Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: "/post/busy", views: 60)
+    record = ->(date, first_party, analytics) do
+      ConsentSnapshot.record(ConsentSnapshot::Inputs.new(date: date, first_party: first_party, analytics: analytics, states: {}, ga: {}, suspects: {}, banner: nil))
+    end
+    (1..5).each { |offset| record.(Date.new(2026, 10, offset), 100, 60) }
+    record.(Date.new(2026, 10, 10), 150, 60)
+
+    get root_path(from: "2026-10-09", to: "2026-10-10")
+    card = page.at_css("section[aria-labelledby=analytics]")
+    hint = card.css("p a").find { |a| a.text.start_with?("GA sees") }
+    expect(hint.text.squish).to eq("GA sees 40% of our views (usual 60%)")
+    expect(hint["href"]).to eq(consent_report_path(from: "2026-10-09", to: "2026-10-10"))
+    expect(hint["title"]).to include("the 14 days before it")
+    expect(card.css("li").map { |li| li.text.squish }).to include("Expected GA (our views × usual 60%)")
+
+    get root_path(from: "2026-10-09", to: "2026-10-10", country: "IN")
+    card = page.at_css("section[aria-labelledby=analytics]")
+    expect(card.text).not_to include("GA sees", "Expected GA")
+  end
+
+  it "leaves out GA's share and the expected line until there is a usual share to set them against" do
+    seed
+    Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: "/post/busy", views: 60)
+
+    get root_path(from: "2026-10-09", to: "2026-10-10")
+    expect(page.at_css("section[aria-labelledby=analytics]").text).not_to include("GA sees", "Expected GA")
+  end
+
   it "counts unique visitors across the period, with no change until the kept markers reach its start" do
     PageViewSeen.collection.insert_many([
       {"slug" => "/a", "day" => "2026-10-10", "ipHash" => "one", "country" => "IN"},
