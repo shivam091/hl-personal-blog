@@ -29,6 +29,8 @@ class PageView
   field :devicesByDay, type: Hash, default: {}, as: :devices_by_day
   field :referrersByDay, type: Hash, default: {}, as: :referrers_by_day
   field :campaignsByDay, type: Hash, default: {}, as: :campaigns_by_day
+  # Absent on pages counted before the frontend recorded consent, so it defaults to empty rather than to all unset.
+  field :consentByDay, type: Hash, default: {}, as: :consent_by_day
   field :uniqueVisitorCount, type: Integer, default: 0, as: :unique_visitor_count
   field :visitorCount, type: Integer, default: 0, as: :visitor_count
   field :botCount, type: Integer, default: 0, as: :bot_count
@@ -71,6 +73,11 @@ class PageView
     within(campaigns_by_day, period)
   end
 
+  # Views by the reader's consent state (granted, denied, unset) over the period.
+  def consent_within(period)
+    within(consent_by_day, period)
+  end
+
   # The deploy day can appear in both the legacy totals and the dated
   # breakdown, holding the counts from either side of the switch, so the two
   # are added rather than one replacing the other.
@@ -96,6 +103,23 @@ class PageView
         hits = page_view.bot_count + page_view.visitor_count
         [page_view.slug, page_view.bot_count, page_view.visitor_count, page_view.bot_count.fdiv(hits)] if hits >= MIN_HITS_FOR_BOT_SHARE
       end.sort_by { |slug, bots, _, share| [-share, -bots, slug] }.first(limit)
+    end
+
+    # Every page's together, by ISO day, since GA's views are compared with them
+    # day by day; days from before consent was recorded are absent.
+    def consent_daily(period)
+      from, to = period.from.iso8601, period.to.iso8601
+      only(:consentByDay).each_with_object(Hash.new { |hash, day| hash[day] = Hash.new(0) }) do |page_view, days|
+        page_view.consent_by_day.each do |day, states|
+          states.each { |state, count| days[day][state] += count.to_i } if day.between?(from, to)
+        end
+      end
+    end
+
+    # Views were only split by consent from some day, so a period reaching back
+    # before it covers fewer views than it seems to.
+    def consent_first_day
+      first_day_in(%w[consentByDay])
     end
 
     # Every page's together, as a campaign's link can land anywhere.
