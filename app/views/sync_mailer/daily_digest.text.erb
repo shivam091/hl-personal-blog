@@ -1,6 +1,9 @@
 Sync digest
 
 From <%= l(@digest.from, format: :short) %> to <%= l(@digest.to, format: :short) %>: <%= @digest.summary %>.
+<% if (share = @digest.ga_share) %>
+GA saw <%= number_to_percentage(share.last_week * 100, precision: 0) %> of our views last week (usual <%= number_to_percentage(share.usual * 100, precision: 0) %>).
+<% end %>
 <% if @digest.counts.any? %>
 <%= @digest.counts.map { |status, count| "#{count} #{sync_status_label(status).downcase}" }.join(" · ") %>
 <% end %>

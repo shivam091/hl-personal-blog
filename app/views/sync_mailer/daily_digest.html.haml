@@ -6,6 +6,10 @@
 %p{style: "margin:0 0 24px;font-size:16px;line-height:1.65;color:#334155;"}
   From #{l(@digest.from, format: :short)} to #{l(@digest.to, format: :short)}: #{@digest.summary}.
 
+- if (share = @digest.ga_share)
+  %p{style: "margin:0 0 16px;font-size:14px;line-height:1.65;color:#334155;"}
+    GA saw #{number_to_percentage(share.last_week * 100, precision: 0)} of our views last week (usual #{number_to_percentage(share.usual * 100, precision: 0)}).
+
 - if @digest.counts.any?
   %p{style: "margin:0 0 28px;font-size:14px;line-height:1.65;color:#64748b;"}
     = @digest.counts.map { |status, count| "#{count} #{sync_status_label(status).downcase}" }.join(" · ")
