@@ -11,6 +11,16 @@ module PageGapsHelper
   # can't squash the rest; it sits on the bottom edge, its figure in the tooltip.
   LOWEST_PERCENT = -1.0
 
+  # Short, as they label a bar a few words wide; the consent report spells each out.
+  CAUSES = {
+    denied_gap: ["Declined", ChartsHelper::SHARE_COLORS[0]],
+    pending_gap: ["Pending", ChartsHelper::SHARE_COLORS[1]],
+    blocked_gap: ["Blocked", ChartsHelper::SHARE_COLORS[2]],
+    unknown_gap: ["Undetected", ChartsHelper::SHARE_COLORS[3]],
+    datacentre_gap: ["Datacentre", ChartsHelper::SHARE_COLORS[4]],
+    remainder: ["Unexplained", ChartsHelper::SHARE_OTHER_COLOR]
+  }.freeze
+
   def page_gap_percent(value)
     value ? number_to_percentage(value * 100, precision: 1) : "—"
   end
@@ -30,6 +40,34 @@ module PageGapsHelper
       keys: [["Our views", ChartsHelper::LINE_COLORS.first, :circle], ["GA views", ORDINARY_COLOR, :square]],
       links: rows.to_h { |row| [row.slug, page_gap_link(row)] }, x_title: "Views", y_title: "Page",
       label: "Our views against GA's for each flagged page")
+  end
+
+  def page_gap_causes_key
+    swatch_legend(CAUSES.values)
+  end
+
+  # Each part as a share of what the causes and the unexplained rest add up to, so the bar always fills;
+  # an unexplained rest below zero means the causes found already cover more than the gap, so it is drawn as none.
+  def page_gap_causes_bar(row, gap)
+    return tag.span("No days with the consent split", class: "text-slate-400") unless gap
+
+    parts = CAUSES.to_h { |cause, _| [cause, cause == :remainder ? [gap.remainder, 0].max : gap.sum(cause)] }
+    total = parts.values.sum
+    readings = CAUSES.map do |cause, (name, color)|
+      share = share_of_total(parts[cause], gap.gap) if gap.gap.positive?
+      {value: [number_with_delimiter(cause == :remainder ? gap.remainder : parts[cause]), share].compact.join(" · "), name: name, color: color}
+    end
+    note = "Over #{pluralize(gap.days.size, "day")} with the consent split, a gap of #{number_with_delimiter(gap.gap)}."
+    note += " The causes found add up to more than the gap." if gap.over_counted?
+    tag.div(class: "flex h-4 overflow-hidden rounded-sm bg-slate-100", data: chart_tip(row.slug, readings, note: note)) do
+      next tag.span if total.zero?
+
+      safe_join(CAUSES.filter_map do |cause, (_, color)|
+        next if parts[cause].zero?
+
+        tag.span(class: "h-full border-r border-white last:border-r-0", style: "width: #{(parts[cause].fdiv(total) * 100).round(2)}%; background-color: #{color}")
+      end)
+    end
   end
 
   # Views on a log scale, so the few busy pages don't crowd every other one into the left edge.

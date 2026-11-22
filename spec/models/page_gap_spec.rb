@@ -64,6 +64,30 @@ RSpec.describe PageGap, type: :model do
     expect(gap.top_flagged(1).map(&:slug)).to eq(["/worse"])
   end
 
+  describe "#causes" do
+    def split(slug, consent:, ga: nil, suspects: nil)
+      fields = {"consentByDay" => {"2026-10-10" => consent}, "gaByDay" => ({"2026-10-10" => ga} if ga), "suspectByDay" => ({"2026-10-10" => suspects} if suspects)}
+      PageView.collection.update_one({"_id" => slug}, {"$set" => fields.compact})
+    end
+
+    it "puts a page's gap down to causes by the snapshot's rules, counting blocked and the rest only for readers GA could see" do
+      split("/broken", consent: {"granted" => 40, "denied" => 40, "pending" => 20}, ga: {"loaded" => 60, "blocked" => 30}, suspects: {"datacentre" => 10})
+
+      causes = gap.causes(["/broken"]).fetch("/broken")
+
+      expect(causes.days.size).to eq(1)
+      expect(ConsentSnapshot::BUCKETS.to_h { |bucket| [bucket, causes.sum(bucket)] })
+        .to eq(denied_gap: 40, pending_gap: 20, blocked_gap: 12, unknown_gap: 4, datacentre_gap: 4)
+      expect([causes.gap, causes.remainder]).to eq([80, 0])
+    end
+
+    it "leaves out a page whose days lack the consent split" do
+      split("/a", consent: {"unset" => 100})
+
+      expect(gap.causes(%w[/a /b])).to be_empty
+    end
+  end
+
   it "gives no share to a page too quiet to judge or one GA counted alone" do
     expect(gap.rows.find { |row| row.slug == "/quiet" }.percent).to be_nil
     expect(gap.rows.find { |row| row.slug == "/only-ga" }).to have_attributes(first_party: 0, percent: nil)

@@ -63,6 +63,20 @@
             The wider apart the two marks, the more of the page's views GA missed.
           %div{class: "px-4 py-3"}
             = page_gap_dumbbell(worst)
+  - if worst.any?
+    - causes = page_gap.causes(worst.map(&:slug))
+    = render layout: "shared/card", locals: {id: "flagged-causes", title: "Causes on flagged pages", icon: "split", class: "mb-6"} do
+      %p{class: lead_note_class}
+        Each flagged page's gap over the synced days its consent split was recorded, put down to causes the way the consent report does.
+        Blocked, undetected and datacentre views count only for readers GA could otherwise have seen.
+      %div{class: "px-4 py-3"}
+        = page_gap_causes_key
+        = chart_tooltip(label: "Causes of each flagged page's gap") do
+          %ul{class: "grid text-xs"}
+            - worst.each do |row|
+              %li{class: "grid min-h-8 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-x-3 rounded px-1 sm:grid-cols-[minmax(0,11rem)_1fr]"}
+                = chart_row_name(row.slug, page_gap_link(row))
+                = page_gap_causes_bar(row, causes[row.slug])
   %div{id: "page-gap-table", class: "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"}
     %div{class: "relative overflow-x-auto"}
       %table{class: "w-full border-collapse text-left text-sm"}
