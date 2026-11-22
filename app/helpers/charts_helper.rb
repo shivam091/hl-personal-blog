@@ -90,14 +90,20 @@ module ChartsHelper
     number_to_human(value, format: "%n%u", units: COMPACT_UNITS, precision: 3, significant: true)
   end
 
-  # Stretched to its box so one drawing fits any size.
+  # Stretched to its box so one drawing fits any size. A nil is a stretch with
+  # too little to go on, left as a break in the line rather than drawn as zero,
+  # and a series reaching below zero is drawn down to its lowest value.
   def sparkline(values, label:, width: 80, height: 24)
-    return tag.span("—", class: "text-slate-400") if values.empty? || values.all?(&:zero?)
+    known = values.compact
+    return tag.span("—", class: "text-slate-400") if known.empty? || known.all?(&:zero?)
 
-    max = values.max.to_f
+    low = [known.min, 0].min.to_f
+    span = [known.max, 0].max.to_f - low
+    span = 1.0 if span.zero?
     step = values.size > 1 ? width.to_f / (values.size - 1) : 0
-    points = values.each_with_index.map { |value, index| "#{(index * step).round(1)},#{(height - 2 - value / max * (height - 4)).round(1)}" }
-    end_x, end_y = points.last.split(",")
+    placed = values.each_with_index.map { |value, index| "#{(index * step).round(1)},#{(height - 2 - (value - low) / span * (height - 4)).round(1)}" unless value.nil? }
+    runs = placed.slice_when { |before, after| before.nil? != after.nil? }.reject { |run| run.first.nil? }
+    end_x, end_y = placed.compact.last.split(",")
     tag.svg(
       viewBox: "0 0 #{width} #{height}",
       preserveAspectRatio: "none",
@@ -108,20 +114,27 @@ module ChartsHelper
     ) do
       safe_join([
         tag.title(label),
-        tag.polyline(
-          points: points.join(" "),
-          fill: "none",
-          stroke: "currentColor",
-          "stroke-width": 1.5,
-          "stroke-linejoin": "round",
-          "vector-effect": "non-scaling-stroke"
-        ),
+        *runs.map do |run|
+          next sparkline_dot(*run.first.split(","), 3) if run.size == 1
+
+          tag.polyline(
+            points: run.join(" "),
+            fill: "none",
+            stroke: "currentColor",
+            "stroke-width": 1.5,
+            "stroke-linejoin": "round",
+            "vector-effect": "non-scaling-stroke"
+          )
+        end,
         # A zero-length round-capped line, since a circle would be squashed
         # by the stretch to the box.
-        tag.line(x1: end_x, y1: end_y, x2: end_x, y2: end_y,
-          stroke: "currentColor", "stroke-width": 5, "stroke-linecap": "round", "vector-effect": "non-scaling-stroke")
+        sparkline_dot(end_x, end_y, 5)
       ])
     end
+  end
+
+  def sparkline_dot(x, y, size)
+    tag.line(x1: x, y1: y, x2: x, y2: y, stroke: "currentColor", "stroke-width": size, "stroke-linecap": "round", "vector-effect": "non-scaling-stroke")
   end
 
   # Both styles start at zero so heights compare honestly. A unit that is a

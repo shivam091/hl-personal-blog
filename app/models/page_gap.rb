@@ -89,6 +89,16 @@ class PageGap
     end
   end
 
+  # The page's share lost week by week over the period, so one always out of line can be told from one that
+  # just changed; nil for a week with too few of our views to judge, or none GA had synced.
+  def weekly_percents(slug)
+    weekly[slug] || weeks.map { nil }
+  end
+
+  def weeks
+    (period.from.beginning_of_week..period.to).step(7).to_a
+  end
+
   # Only pages GA counted fewer views on, so one it counted more on can't hide views missing elsewhere.
   def missing_total
     rows.sum { |row| [row.gap, 0].max }
@@ -126,6 +136,26 @@ class PageGap
 
   def analytics_views
     @analytics.pages.each_with_object(Hash.new(0)) { |(path, row), totals| totals[slug_of(path)] += row.views.to_i }
+  end
+
+  def weekly
+    @weekly ||= begin
+      ours = first_party_views_by_day
+      seen = analytics_views_by_day
+      spans = weeks.map { |week| synced_days.select { |day| day.between?(week.iso8601, (week + 6).iso8601) } }
+      (ours.keys | seen.keys).index_with do |slug|
+        spans.map do |days|
+          counted = days.sum { |day| ours.dig(slug, day).to_i }
+          (counted - days.sum { |day| seen.dig(slug, day).to_i }).fdiv(counted) if counted >= MIN_VIEWS
+        end
+      end
+    end
+  end
+
+  def first_party_views_by_day
+    PageView.only(:slug, :countriesByDay, :viewsByDay).to_h do |page_view|
+      [page_view.slug, page_view.views_by_day.select { |day, _| synced_days.include?(day) }]
+    end
   end
 
   def analytics_views_by_day

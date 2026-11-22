@@ -100,6 +100,13 @@ RSpec.describe "Consent page gaps", type: :request do
       expect(readings).to include("Declined" => "50 · 55.56%", "Unexplained" => "40 · 44.44%")
     end
 
+    it "trends each page's gap by week" do
+      get consent_page_gap_report_path(from: "2026-10-05", to: "2026-10-12")
+
+      row = Nokogiri::HTML5(response.body).css("#page-gap-table tbody tr").find { |tr| tr.text.include?("/broken") }
+      expect(row.at_css("svg[role='img']")["aria-label"]).to eq("Gap % of /broken by week starting 5 Oct: 90.0%, 12 Oct: —")
+    end
+
     it "sorts by a column asked for" do
       get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12", sort: "gap", direction: "asc")
 

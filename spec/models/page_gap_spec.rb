@@ -88,6 +88,17 @@ RSpec.describe PageGap, type: :model do
     end
   end
 
+  it "gives each page's share lost by week, leaving a week too quiet to judge empty" do
+    PageView.collection.update_one({"_id" => "/broken"}, {"$set" => {"countriesByDay.2026-10-12" => {"IN" => 10}}})
+    Google::Analytics::Stat.create!(date: Date.new(2026, 10, 12), page_path: "/broken", views: 10)
+
+    wide = described_class.new(Period.new({from: "2026-10-01", to: "2026-10-12"}))
+
+    expect(wide.weeks).to eq([Date.new(2026, 9, 28), Date.new(2026, 10, 5), Date.new(2026, 10, 12)])
+    expect(wide.weekly_percents("/broken")).to eq([nil, 0.8, nil])
+    expect(wide.weekly_percents("/missing")).to eq([nil, nil, nil])
+  end
+
   it "gives no share to a page too quiet to judge or one GA counted alone" do
     expect(gap.rows.find { |row| row.slug == "/quiet" }.percent).to be_nil
     expect(gap.rows.find { |row| row.slug == "/only-ga" }).to have_attributes(first_party: 0, percent: nil)
