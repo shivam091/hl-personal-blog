@@ -69,12 +69,19 @@ class ConsentSnapshot
     # The median rather than the mean, so one odd day among the settled ones can't move what counts as
     # usual; nil until enough of them have the measure, as a usual drawn from two days would flag noise.
     def usual(field, day)
-      values = where(:day.gte => (day - Anomalies::CONSENT_BASELINE_DAYS).iso8601, :day.lt => day.iso8601).filter_map(&field)
-      return if values.size < Anomalies::MIN_CONSENT_BASELINE
+      usuals(field, [day])[day]
+    end
 
-      sorted = values.sort
-      middle = sorted.size / 2
-      sorted.size.odd? ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2.0
+    # Each day's usual from one read, so a chart over a period doesn't ask once a day.
+    def usuals(field, days)
+      return {} if days.empty?
+
+      values = where(:day.gte => (days.min - Anomalies::CONSENT_BASELINE_DAYS).iso8601, :day.lt => days.max.iso8601)
+        .to_h { |snapshot| [snapshot.date, snapshot.public_send(field)] }
+      days.index_with do |day|
+        before = ((day - Anomalies::CONSENT_BASELINE_DAYS)...day).filter_map { |date| values[date] }
+        median(before) if before.size >= Anomalies::MIN_CONSENT_BASELINE
+      end
     end
 
     # Summed over the days before dividing, so a busy day weighs as much as its views; days GA has no
@@ -86,6 +93,12 @@ class ConsentSnapshot
     end
 
     private
+
+    def median(values)
+      sorted = values.sort
+      middle = sorted.size / 2
+      sorted.size.odd? ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2.0
+    end
 
     def compose_attributes(inputs)
       states = inputs.states || {}
@@ -158,5 +171,10 @@ class ConsentSnapshot
 
   def date
     Date.iso8601(day)
+  end
+
+  # Only once enough banners were shown for the answers to say anything, as the morning check judges it.
+  def no_answer_share
+    no_answer.to_i.fdiv(shown) if shown.to_i >= Anomalies::MIN_BANNERS
   end
 end
