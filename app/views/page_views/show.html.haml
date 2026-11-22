@@ -52,6 +52,61 @@
 = render layout: "shared/card", locals: {id: "period-campaigns", title: "Campaigns in the period", icon: "target", class: "mt-6"} do
   = render "shared/campaigns", campaigns: page_view.campaigns_within(@period), empty: "No visit landed here from a tagged link in this period."
 
+- consent = @page_consent
+- if consent.any?
+  - signed = ->(share) { "#{"−" if share.negative?}#{number_to_percentage(share.abs * 100, precision: 1)}" }
+  = render layout: "shared/card", locals: {id: "page-vs-ga", title: "This page against GA", icon: "split", class: "mt-6"} do
+    %p{class: lead_note_class}
+      - if consent.percent
+        - synced = pluralize(consent.page_gap.days_covered, "day")
+        - if consent.percent.negative?
+          GA counted #{number_to_percentage(-consent.percent * 100, precision: 1)} more views of this page than the blog over the #{synced} it has synced
+        - else
+          GA missed #{number_to_percentage(consent.percent * 100, precision: 1)} of this page's views over the #{synced} it has synced
+        - if consent.median_percent
+          (median across pages #{signed.(consent.median_percent)}).
+        - if consent.flagged?
+          %span{class: "ml-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800",
+            title: "At least #{(PageGap::MARGIN * 100).round} points above the median, so this page is losing views for a reason of its own."}
+            Well above the median
+      - elsif consent.row
+        Fewer than #{PageGap::MIN_VIEWS} views on the days GA has synced, too few to judge this page's gap.
+      - else
+        No views of this page on the days GA has synced, so its gap can't be judged.
+    %div{class: "grid gap-6 px-4 py-3 lg:grid-cols-2"}
+      %div{class: "min-w-0"}
+        %p{class: "mb-2 text-xs font-medium text-slate-500"} Views by consent state
+        = donut_chart(consent.states, label: "This page's views in the period by the reader's consent state", unit: "view",
+          empty: "No consent recorded for this page in the period.")
+      %div{class: "min-w-0"}
+        %p{class: "mb-2 text-xs font-medium text-slate-500"} Where its gap goes
+        - colors = ChartsHelper::SHARE_COLORS.cycle
+        - parts = ConsentGap::CAUSES.map { |cause, name| [name, consent.causes[cause], colors.next] }
+        - parts << ["Unexplained", consent.unexplained, ChartsHelper::SHARE_OTHER_COLOR] if consent.unexplained
+        - parts = parts.select { |_, count, _| count.positive? }
+        - total = parts.sum { |_, count, _| count }
+        - if !consent.gap?
+          %p{class: "text-sm text-slate-500"} GA counted as many of this page's views as the blog or more, so there's no gap to put down to causes.
+        - elsif total.zero?
+          %p{class: "text-sm text-slate-500"} Nothing on this page's synced days is put down to a cause.
+        - else
+          = swatch_legend(parts.map { |name, _, color| [name, color] })
+          = share_bar(parts.map { |name, count, color| [name, count.fdiv(total), color, [{value: "#{number_with_delimiter(count)} #{"view".pluralize(count)} · #{number_to_percentage(count * 100.0 / total, precision: 1)}", name: name, color: color}]] },
+            label: "What this page's gap with GA is put down to", height: "h-4")
+        - if consent.gap?
+          %p{class: "mt-2 text-xs text-slate-500"}
+            Over the #{consent.days_explained} of #{pluralize(consent.days_compared, "day")} with views whose consent split is known, scaled as on
+            the consent report: a blocked, undetected or datacentre view counts only for the share of readers GA could have seen.
+            - if !consent.complete?
+              The unexplained rest is left out until every day can be explained.
+            - elsif !consent.unexplained
+              The causes found add up to more than the gap, so none of it is left unexplained.
+    %p{class: "flex justify-end border-t border-slate-200 px-4 py-2 text-xs"}
+      = link_to consent_page_gap_report_path(**@period.query),
+        class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+        Page gaps
+        = icon("chevron-right", size: 14)
+
 %h2{class: "mt-8 mb-3 text-sm font-semibold text-slate-700"} All time
 
 %div{class: "grid items-start gap-6 lg:grid-cols-2"}
