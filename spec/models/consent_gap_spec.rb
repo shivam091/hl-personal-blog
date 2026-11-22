@@ -57,4 +57,9 @@ RSpec.describe ConsentGap, type: :model do
     expect(flat.share_of_gap(:denied_gap)).to be_nil
     expect(described_class.new([])).not_to be_any
   end
+
+  it "places each day it can explain on its date, and counts the GA days it can't" do
+    expect(gap.by_date.keys).to eq([Date.new(2026, 10, 11), Date.new(2026, 10, 10)])
+    expect(gap.days_unexplained).to eq(1)
+  end
 end

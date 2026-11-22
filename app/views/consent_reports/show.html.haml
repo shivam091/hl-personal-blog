@@ -17,7 +17,7 @@
       = icon("download", size: 14)
       Export CSV
 
-= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: []
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@granularity_state]
 
 - notes = []
 - notes << "The banner has been recorded since #{l(consent.recording_since)}; earlier days show none." if consent.recording_since && consent.recording_since > @period.from
@@ -77,6 +77,7 @@
         - missing = decomposition.days_missing(:ga_recorded)
         - if missing.positive?
           #{pluralize(missing, "day")} had no record of whether the tag loaded, so blocked and undetected views read lower than they were.
+    = render "consent_reports/causes_over_time", decomposition: decomposition, granularity: @granularity, period: @period
     - if decomposition.days.any?
       = render layout: "shared/card", locals: {id: "unexplained-by-day", title: "Unexplained gap, by day", icon: "trending-up", class: "mb-6"} do
         = report_table([report_th("Date"), report_th("Gap", :right), report_th("Declined", :right), report_th("Pending", :right), report_th("Blocked", :right),
