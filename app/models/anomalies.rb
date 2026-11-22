@@ -43,7 +43,7 @@ class Anomalies
   end
 
   def flags
-    @flags ||= [views_flag, search_flag, ai_flag, *consent_flags, *sync_flags, *service_flags, server_errors_flag, link_safety_flag].compact
+    @flags ||= [views_flag, search_flag, ai_flag, *consent_flags, consent_snapshot_flag, *sync_flags, *service_flags, server_errors_flag, link_safety_flag].compact
   end
 
   def any?
@@ -187,6 +187,15 @@ class Anomalies
       Flag.new(level: :warning, icon: "refresh", title: "#{info.section} sync keeps failing",
         detail: "Its last #{FAILING_RUNS} runs failed.", path: [:sync_requests_path, {section: info.key}])
     end
+  end
+
+  def consent_snapshot_flag
+    day = ConsentSnapshotCheck.new(today: @today).missing_day
+    return unless day
+
+    Flag.new(level: :warning, icon: "refresh", title: "Consent snapshot missing",
+      detail: "No snapshot was stored for #{I18n.l(day)}, so the consent flags can't judge it. Run bin/rails consent:snapshot.",
+      path: [:sync_requests_path, {section: "consent_snapshot"}])
   end
 
   def service_flags

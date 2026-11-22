@@ -39,7 +39,14 @@ class SyncDigest
   # A day without a single sync means the schedule itself stopped, which
   # GitHub does to a quiet repository after 60 days.
   def healthy?
-    requests.any? && problems.empty?
+    requests.any? && problems.empty? && missing_snapshot.nil?
+  end
+
+  # A night the snapshot job didn't run leaves no request to list, only a day without a snapshot.
+  def missing_snapshot
+    return @missing_snapshot if defined?(@missing_snapshot)
+
+    @missing_snapshot = ConsentSnapshotCheck.new(today: to.to_date).missing_day
   end
 
   def freshness
@@ -47,6 +54,14 @@ class SyncDigest
   end
 
   def summary
+    return sync_summary unless missing_snapshot
+
+    "#{sync_summary}, and no consent snapshot for #{I18n.l(missing_snapshot, format: :short)}"
+  end
+
+  private
+
+  def sync_summary
     return "no syncs ran in the last 24 hours" if requests.empty?
     if counts.keys == ["succeeded"]
       return (requests.one? ? "the 1 sync succeeded" : "all #{requests.size} syncs succeeded")

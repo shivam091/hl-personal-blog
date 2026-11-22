@@ -124,7 +124,27 @@ RSpec.describe Anomalies do
       settled(days: 4)
       yesterday(ga_ratio: 0.2)
 
+      # The day before yesterday is one of the days not stored, which is a flag of its own.
+      expect(titles).to eq(["Consent snapshot missing"])
+    end
+
+    it "flags a day with no snapshot once they are being stored, but not before" do
       expect(titles).to be_empty
+
+      ConsentSnapshot.create!(day: "2026-10-01")
+
+      expect(described_class.new(today: today).flags.map(&:title)).to eq(["Consent snapshot missing"])
+      expect(described_class.new(today: today).flags.first.detail).to include(I18n.l(Date.new(2026, 10, 10)))
+
+      ConsentSnapshot.create!(day: "2026-10-10")
+
+      expect(described_class.new(today: today).flags).to be_empty
+    end
+
+    it "flags the snapshot job failing like a sync" do
+      2.times { |n| SyncRequest.create!(kind: "consent_snapshot", status: "failed", finished_at: n.hours.ago) }
+
+      expect(titles).to eq(["Consent snapshots sync keeps failing"])
     end
 
     it "flags GA suddenly missing more of our views" do

@@ -4,9 +4,14 @@ From <%= l(@digest.from, format: :short) %> to <%= l(@digest.to, format: :short)
 <% if @digest.counts.any? %>
 <%= @digest.counts.map { |status, count| "#{count} #{sync_status_label(status).downcase}" }.join(" · ") %>
 <% end %>
-<% if @digest.problems.any? %>
+<% if @digest.problems.any? || @digest.missing_snapshot %>
 
 Needs a look
+<% if @digest.missing_snapshot %>
+
+- Consent snapshots: Missing
+  None was stored for <%= l(@digest.missing_snapshot) %>, so the consent flags can't judge that day. Run bin/rails consent:snapshot.
+<% end %>
 <% @digest.problems.each do |request| %>
 
 - <%= request.section %>: <%= sync_status_label(request.display_status) %>
