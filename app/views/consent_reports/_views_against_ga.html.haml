@@ -1,0 +1,33 @@
+- dates = (period.from..period.to).to_a
+- keys = granularity.dates(dates)
+- ours = dates.map { |date| first_party[date] }
+- theirs = dates.map { |date| analytics[date] }
+-# Only days GA has figures for, so a day it hasn't synced doesn't read as GA missing every view.
+- ours_known = dates.each_index.map { |index| ours[index] unless theirs[index].nil? }
+- shares = granularity.sums(dates, ours_known).zip(granularity.sums(dates, theirs)).map do |views, ga|
+  - (ga * 100.0 / views).round(1) if views && ga && views >= ConsentSnapshot::MIN_VIEWS
+= render layout: "shared/card", locals: {id: "views-against-ga", title: "Our views against GA's", icon: "trending-up", class: "mb-6",
+  actions: chart_granularity_picker(granularity, "Our views against GA's", "views-against-ga-by")} do
+  %div{class: "px-4 py-3"}
+    %p{class: "mb-1 text-xs font-medium text-slate-500"} Views per #{granularity.by}
+    = line_chart(keys, [ChartsHelper::Series.new(name: "Our views", values: granularity.sums(dates, ours)),
+      ChartsHelper::Series.new(name: "GA views", values: granularity.sums(dates, theirs), dashed: true)],
+      y_title: "Views", label: "Our views against GA's views, per #{granularity.by}", per: granularity.per,
+      events: granularity.events(published), event_name: "Published")
+  %div{class: "border-t border-slate-100 px-4 py-3"}
+    %p{class: "mb-1 text-xs font-medium text-slate-500"} GA's share of our views, per #{granularity.by}
+    - if shares.compact.empty?
+      %p{class: empty_note_class} No #{granularity.by} had #{ConsentSnapshot::MIN_VIEWS} of our views on days GA has figures for.
+    - else
+      = line_chart(keys, [ChartsHelper::Series.new(name: "GA's share", values: shares)], y_title: "GA's share", unit: "%", precision: 1,
+        label: "GA views as a share of our views, per #{granularity.by}", per: granularity.per)
+  %p{class: footnote_class}
+    GA's share is left out on days it hasn't synced, and on any #{granularity.by} with fewer than #{ConsentSnapshot::MIN_VIEWS} of our views, where a handful of readers would swing it.
+  = report_table([report_th("Date"), report_th("Our views", :right), report_th("GA views", :right), report_th("Gap", :right), report_th("Declined views", :right)]) do
+    - gap.days.first(31).each do |day|
+      %tr{class: table_row_class}
+        %td{class: "px-3 py-1.5 whitespace-nowrap"}= day_label(day.date.iso8601)
+        %td{class: cell_class}= number_with_delimiter(day.first_party)
+        %td{class: cell_class}= number_with_delimiter(day.analytics)
+        %td{class: cell_class}= number_with_delimiter(day.first_party - day.analytics)
+        %td{class: cell_class}= number_with_delimiter(day.denied)
