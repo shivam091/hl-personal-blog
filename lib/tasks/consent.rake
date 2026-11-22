@@ -3,7 +3,7 @@
 namespace :consent do
   desc "Snapshot the last few days' views against GA's, with what the gap is put down to"
   task snapshot: :environment do
-    puts "Consent snapshots written: #{ConsentSnapshotJob.perform_now}"
+    puts "Consent snapshots written: #{ConsentSnapshotJob.perform_now(trigger: "rake")}"
   end
 
   desc "Snapshot every day from one date to another (ISO dates; the second defaults to yesterday)"
@@ -14,6 +14,6 @@ namespace :consent do
     to = args[:to].present? ? Date.iso8601(args[:to]) : Date.current - 1
     abort "From must not be after to" if from > to
 
-    puts "Consent snapshots written: #{ConsentSnapshotJob.perform_now(from: from, to: to)}"
+    puts "Consent snapshots written: #{ConsentSnapshotJob.perform_now(from: from, to: to, trigger: "rake")}"
   end
 end

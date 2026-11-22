@@ -54,4 +54,19 @@ RSpec.describe SyncMailer, type: :mailer do
     expect(html).not_to include("Day 4 failed")
     expect(text).to include("- Analytics acquisition, engagement, users & retention: With errors", "  Day <1> failed", "  and 2 more errors")
   end
+
+  it "says when a consent snapshot is missing, though no sync failed" do
+    SyncRequest.create!(kind: "feed", status: "succeeded", created_at: now - 1.hour, finished_at: now - 1.hour)
+    ConsentSnapshot.create!(day: "2026-10-01")
+
+    message = digest_message
+
+    expect(message.subject).to eq("Sync digest: the 1 sync succeeded, and no consent snapshot for #{I18n.l(Date.new(2026, 10, 18), format: :short)}")
+    expect(message.html_part.body.to_s).to include("Some syncs need a look", "Consent snapshots", "Missing", I18n.l(Date.new(2026, 10, 18)))
+    expect(message.text_part.body.to_s).to include("- Consent snapshots: Missing")
+
+    ConsentSnapshot.create!(day: "2026-10-18")
+
+    expect(digest_message.subject).to eq("Sync digest: the 1 sync succeeded")
+  end
 end
