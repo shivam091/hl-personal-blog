@@ -18,6 +18,24 @@
 
 = render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: [@sort], likes_note: false
 
+-# Neither is split by country, so an earlier figure only means something for an earlier period.
+- consent_before = @period.previous if @period.compare? && !@period.compare_countries?
+- ga_share = @consent.ga_share
+- acceptance = @consent.acceptance_rate
+- ga_share_hint = "GA's views as a share of the blog's own, on the nightly snapshots' days GA has figures for. Lower means more readers GA can't see (declined, blocked or not yet answered), not fewer readers, so read the Analytics measures below with it. Every country."
+- acceptance_hint = "Accepted as a share of answers to the consent banner, once there are #{CountryBanners::MIN_ANSWERS_FOR_RATE}+. Only readers in the EEA, UK and Switzerland are asked. Every country."
+%dl{id: "consent-kpis", class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+  = render "dashboard/tile", label: "GA's share of our views", tile_icon: "eye",
+    value: (ga_share ? number_to_percentage(ga_share * 100, precision: 1) : "—"),
+    change: metric_change(ga_share, (@consent.ga_share(consent_before) if consent_before), CompareHelper::HIGHER_RATE_IS_BETTER),
+    compared_with: consent_before,
+    hint: ga_share_hint
+  = render "dashboard/tile", label: "Banner acceptance", tile_icon: "check",
+    value: (acceptance ? number_to_percentage(acceptance * 100, precision: 1) : "—"),
+    change: metric_change(acceptance, (@consent.acceptance_rate(consent_before) if consent_before), CompareHelper::HIGHER_RATE_IS_BETTER),
+    compared_with: consent_before,
+    hint: acceptance_hint
+
 %nav{class: "mb-4 flex flex-wrap gap-1", aria: {label: "Order"}}
   - ContentScorecard::SORTS.each do |key, label|
     - current = key == @sort.key
