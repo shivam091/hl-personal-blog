@@ -1307,9 +1307,10 @@ module ChartsHelper
     safe_join([fade, *areas, *lines.reverse, *hits])
   end
 
-  # Nothing where either period has no data, so no change is made up.
+  # Nothing where either period has no data, so no change is made up, nor
+  # from a figure below zero, which a percentage change can't be read from.
   def compare_change(current, before)
-    CompareChange.label(current, before) unless current.nil? || before.nil?
+    CompareChange.label(current, before) unless current.nil? || before.nil? || current.negative? || before.negative?
   end
 
   # So a line's ends are found at a glance and a line of one point still

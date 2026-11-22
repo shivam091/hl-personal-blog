@@ -562,5 +562,13 @@ RSpec.describe ChartsHelper, type: :helper do
       expect(first).to eq("Found" => "10", "Later" => "No data", "Left" => "5", "Gap" => "15")
       expect(second).to include("Left" => "-15", "Gap" => "20")
     end
+
+    it "sets each bar's total against the earlier one, but gives no change from a total below zero" do
+      chart = html(helper.stacked_chart(days, [ChartsHelper::Series.new(name: "Found", values: [10, 30], color: "#2a78d6")],
+        y_title: "Views", label: "Views", total_name: "Gap", previous: [5, -2], previous_name: "Before"))
+
+      changes = tips(chart).map { |tip| tip["rows"].find { |row| row["name"] == "Gap" && !row["earlier"] }["change"] }
+      expect(changes).to eq(["(+100%)", nil])
+    end
   end
 end
