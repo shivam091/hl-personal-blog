@@ -19,8 +19,17 @@ module PageGapsHelper
     row.flagged ? FLAGGED_COLOR : ORDINARY_COLOR
   end
 
-  def page_gap_link(row)
-    page_view_path(row.slug) if row.first_party.positive?
+  # Over the same period, so the page's statistics show the views being compared.
+  def page_gap_link(row, period = @period)
+    page_view_path(row.slug, **period&.query.to_h) if row.first_party.positive?
+  end
+
+  def page_gap_dumbbell(rows)
+    step, top = axis_scale(rows.flat_map { |row| [row.first_party, row.analytics] }.max.to_f)
+    dumbbell_chart(rows.map { |row| [row.slug, [row.first_party, row.analytics]] }, top: top, ticks: (0..(top / step).round).map { |index| (index * step).round },
+      keys: [["Our views", ChartsHelper::LINE_COLORS.first, :circle], ["GA views", ORDINARY_COLOR, :square]],
+      links: rows.to_h { |row| [row.slug, page_gap_link(row)] }, x_title: "Views", y_title: "Page",
+      label: "Our views against GA's for each flagged page")
   end
 
   # Views on a log scale, so the few busy pages don't crowd every other one into the left edge.

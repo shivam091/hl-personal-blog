@@ -67,7 +67,7 @@ RSpec.describe "Consent page gaps", type: :request do
       expect(tips.keys).to contain_exactly("/a", "/b", "/c", "/d", "/e", "/broken")
       style, tip = tips["/broken"]
       expect(style).to include(PageGapsHelper::FLAGGED_COLOR)
-      expect(tip["href"]).to eq(page_view_path("/broken"))
+      expect(tip["href"]).to eq(page_view_path("/broken", from: "2026-10-10", to: "2026-10-12"))
       expect(tip["rows"].map { |row| row["value"] }).to eq(["100", "10", "90.0%"])
     end
 
@@ -78,6 +78,14 @@ RSpec.describe "Consent page gaps", type: :request do
       expect(rows.first["title"]).to eq("/broken")
       expect(rows.first["rows"].map { |row| row["value"] }).to eq(["90", "47.37%"])
       expect(rows.size).to eq(6)
+    end
+
+    it "sets our views against GA's for each flagged page" do
+      get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      rows = Nokogiri::HTML5(response.body).css("section[aria-labelledby='flagged-views'] li[data-tip]")
+      expect(rows.map { |row| row.at_css("a").text }).to eq(["/broken"])
+      expect(JSON.parse(rows.first["data-tip"])["rows"].map { |row| row["value"] }).to eq(["100", "10", "90"])
     end
 
     it "sorts by a column asked for" do

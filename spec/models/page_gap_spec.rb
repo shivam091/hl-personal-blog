@@ -56,6 +56,14 @@ RSpec.describe PageGap, type: :model do
     expect(gap.missing_total).to eq(180)
   end
 
+  it "lists the flagged pages costing most views first" do
+    page("/worse", 300)
+    analytics("/worse", 30)
+
+    expect(gap.top_flagged.map(&:slug)).to eq(["/worse", "/broken"])
+    expect(gap.top_flagged(1).map(&:slug)).to eq(["/worse"])
+  end
+
   it "gives no share to a page too quiet to judge or one GA counted alone" do
     expect(gap.rows.find { |row| row.slug == "/quiet" }.percent).to be_nil
     expect(gap.rows.find { |row| row.slug == "/only-ga" }).to have_attributes(first_party: 0, percent: nil)
