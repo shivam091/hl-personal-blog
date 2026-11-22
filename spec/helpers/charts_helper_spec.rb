@@ -526,6 +526,17 @@ RSpec.describe ChartsHelper, type: :helper do
       expect(chart.css("div.ml-14 span.absolute.top-1\\.5").map(&:text)).to eq(%w[1 15 30])
       expect(chart.css("ul li").map(&:text)).to eq(["Usual"])
     end
+
+    it "reaches below zero when asked, with level lines across" do
+      points = [ChartsHelper::ScatterPoint.new(x: 1, y: -0.5, color: "#2a78d6", tip: helper.chart_tip("a", []))]
+      chart = html(helper.scatter_chart(points, x_max: 2, x_ticks: [1, 2], y_tick: ->(value) { value.to_s }, y_min: -1.0, y_max: 1.0,
+        lines: [{y: 0.0, color: "#1e293b"}, {y: 0.5, color: "#eda100", dashed: true}], x_title: "Views", y_title: "Gap", label: "Gap by views"))
+
+      expect(chart.at_css("span[data-tip]")["style"]).to include("top: 75.0%")
+      expect(chart.css("svg line[stroke='#1e293b'], svg line[stroke='#eda100']").map { |line| [line["y1"], line["stroke-dasharray"]] })
+        .to eq([["60.0", nil], ["30.0", "4 3"]])
+      expect(chart.css("div.h-56 > span").map(&:text).reject(&:empty?)).to include("1.0", "0.0", "-1.0")
+    end
   end
 
   describe "#ranking_chart" do

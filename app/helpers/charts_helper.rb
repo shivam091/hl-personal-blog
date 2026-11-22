@@ -431,15 +431,23 @@ module ChartsHelper
 
   # Against a dashed curve of what's usual so a row far off it stands out.
   # The points sit over the SVG rather than in it, so they stay round however
-  # wide the chart is drawn.
-  def scatter_chart(points, label:, x_title:, y_title:, x_max:, x_ticks:, y_tick:, curve: [], key: [], x_min: 1, x_tick: ->(tick) { tick })
-    y_top = round_top([*points.map(&:y), *curve.map(&:last)].compact.max.to_f)
+  # wide the chart is drawn. y_min keeps a measure that falls below zero on
+  # the chart, and lines mark levels such as a median the points are read against.
+  def scatter_chart(points, label:, x_title:, y_title:, x_max:, x_ticks:, y_tick:, curve: [], key: [], x_min: 1, x_tick: ->(tick) { tick },
+    y_min: 0, y_max: nil, lines: [])
+    y_top = y_max || round_top([*points.map(&:y), *curve.map(&:last)].compact.max.to_f)
+    y_span = y_top - y_min
     left = ->(x) { ((x.to_f - x_min) / (x_max - x_min) * 100).clamp(0, 100).round(2) }
-    top = ->(y) { (100 - y.to_f / y_top * 100).clamp(0, 100).round(2) }
+    top = ->(y) { (100 - (y.to_f - y_min) / y_span * 100).clamp(0, 100).round(2) }
     line = if curve.size > 1
       tag.polyline(points: curve.map { |x, y| "#{(left.(x) * CHART_WIDTH / 100).round(2)},#{(top.(y) * CHART_HEIGHT / 100).round(2)}" }.join(" "),
         fill: "none", stroke: LINE_COLORS.first, "stroke-width": 2, "stroke-dasharray": "4 3", "vector-effect": "non-scaling-stroke",
         class: "pointer-events-none")
+    end
+    levels = lines.map do |level|
+      y = (top.(level[:y]) * CHART_HEIGHT / 100).round(2)
+      tag.line(x1: 0, x2: CHART_WIDTH, y1: y, y2: y, stroke: level[:color] || LINE_COLORS.first, "stroke-width": level[:width] || 2,
+        "stroke-dasharray": ("4 3" if level[:dashed]), "vector-effect": "non-scaling-stroke", class: "pointer-events-none")
     end
     dots = points.map do |point|
       # Matched to its key by colour, so a point needs no series of its own.
@@ -455,11 +463,11 @@ module ChartsHelper
           tag.div(class: "flex") do
             safe_join([
               y_axis_title(y_title, tall: true),
-              y_axis([y_tick.(y_top), y_tick.(y_top / 2.0), y_tick.(0)], tall: true),
+              y_axis([y_tick.(y_top), y_tick.(y_min + y_span / 2.0), y_tick.(y_min)], tall: true),
               tag.div(class: "relative min-w-0 flex-1") do
                 safe_join([
                   tag.svg(viewBox: "0 0 #{CHART_WIDTH} #{CHART_HEIGHT}", preserveAspectRatio: "none", role: "img", aria: {label: label},
-                    class: "block h-56 w-full overflow-visible", data: {reveal: "fade"}) { safe_join([grid_lines, line].compact) },
+                    class: "block h-56 w-full overflow-visible", data: {reveal: "fade"}) { safe_join([grid_lines, *levels, line].compact) },
                   *dots
                 ])
               end
