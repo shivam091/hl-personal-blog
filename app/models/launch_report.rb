@@ -45,6 +45,11 @@ class LaunchReport
     @measures ||= [views, likes, search_clicks, analytics_views]
   end
 
+  # From the same days as Analytics views, so the two lines describe one window.
+  def ga_share
+    LaunchGaShare.new(@slug, days).share
+  end
+
   def summary
     views = measures.first
     case views.verdict

@@ -33,6 +33,38 @@ RSpec.describe AdminMailer, type: :mailer do
     end
   end
 
+  describe "#launch_report's GA share" do
+    let(:entry) do
+      FeedEntry.create!(url: "https://blog.example.com/post/new/", name: "New post", type: "post",
+        published_at: Time.zone.parse("2026-10-13 09:00"), last_modified_at: Time.zone.parse("2026-10-13 09:00"))
+    end
+
+    def message_for(share)
+      report = LaunchReport.new(entry, 7, today: Date.new(2026, 10, 20))
+      allow(report).to receive_messages(measures: [LaunchReport::Measure.new(label: "Views", value: 60, typical: 20, settled: true),
+        LaunchReport::Measure.new(label: "Analytics views", value: 24, typical: 30, settled: true)], ga_share: share)
+      described_class.launch_report(report).message
+    end
+
+    it "sits beside Analytics views, so a low GA figure isn't read as a weak entry" do
+      message = message_for(0.4)
+
+      expect(message.html_part.body.to_s).to include("share of its views: 40%")
+      expect(message.text_part.body.to_s).to include("- Analytics views: 24, typical 30\n  GA's share of its views: 40%")
+    end
+
+    it "shows a dash when it can't be told" do
+      expect(message_for(nil).text_part.body.to_s).to include("GA's share of its views: —")
+    end
+
+    it "is worked out from the entry's own views over the same days" do
+      PageView.collection.insert_one("_id" => "/post/new", "slug" => "/post/new", "countriesByDay" => {"2026-10-14" => {"IN" => 50}})
+      Google::Analytics::Stat.create!(date: Date.new(2026, 10, 14), page_path: "/post/new/", views: 25)
+
+      expect(LaunchReport.new(entry, 7, today: Date.new(2026, 10, 20)).ga_share).to eq(0.5)
+    end
+  end
+
   describe "#attention" do
     it "lists every item, each linking back to where to look in the admin" do
       anomalies = instance_double(Anomalies, flags: [
