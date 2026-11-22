@@ -50,6 +50,12 @@ RSpec.describe PageGap, type: :model do
     expect(gap.threshold).to be_within(1e-9).of(0.4)
   end
 
+  it "ranks the pages GA missed most views on, against every view it missed" do
+    expect(gap.missing(3).map { |row| [row.slug, row.gap] }).to eq([["/broken", 80], ["/a", 20], ["/b", 20]])
+    expect(gap.missing.map(&:slug)).not_to include("/quiet", "/only-ga")
+    expect(gap.missing_total).to eq(180)
+  end
+
   it "gives no share to a page too quiet to judge or one GA counted alone" do
     expect(gap.rows.find { |row| row.slug == "/quiet" }.percent).to be_nil
     expect(gap.rows.find { |row| row.slug == "/only-ga" }).to have_attributes(first_party: 0, percent: nil)

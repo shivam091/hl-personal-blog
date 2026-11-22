@@ -43,6 +43,16 @@
         median page; amber pages sit on or above the dashed line, #{(PageGap::MARGIN * 100).round} points over it. Click a page for its statistics.
       %div{class: "px-4 py-3"}
         = page_gap_scatter(page_gap)
+  - missing = page_gap.missing
+  - if missing.any?
+    = render layout: "shared/card", locals: {id: "missing-views", title: "Where the missing views are", icon: "bar-chart", class: "mb-6"} do
+      %p{class: lead_note_class}
+        The #{pluralize(missing.size, "page")} GA missed the most views on, our views minus GA's. Each share is of the
+        #{number_with_delimiter(page_gap.missing_total)} views missing over every page GA counted fewer on. Amber pages are flagged.
+      %div{class: "px-4 py-3"}
+        = ranking_chart(missing.map { |row| [row.slug, row.gap, row.flagged ? PageGapsHelper::FLAGGED_SWATCH : "bg-slate-600", row.flagged ? PageGapsHelper::FLAGGED_COLOR : ChartsHelper::BAR_COLOR] },
+          total: page_gap.missing_total, x_title: "Views missing", y_title: "Page", links: missing.to_h { |row| [row.slug, page_gap_link(row)] },
+          label: "The pages GA missed the most views on in #{@period}")
   %div{id: "page-gap-table", class: "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"}
     %div{class: "relative overflow-x-auto"}
       %table{class: "w-full border-collapse text-left text-sm"}

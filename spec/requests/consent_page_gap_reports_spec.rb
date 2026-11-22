@@ -71,6 +71,15 @@ RSpec.describe "Consent page gaps", type: :request do
       expect(tip["rows"].map { |row| row["value"] }).to eq(["100", "10", "90.0%"])
     end
 
+    it "ranks the pages by views missing, each with its share of them all" do
+      get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      rows = Nokogiri::HTML5(response.body).css("section[aria-labelledby='missing-views'] li [data-tip]").map { |bar| JSON.parse(bar["data-tip"]) }
+      expect(rows.first["title"]).to eq("/broken")
+      expect(rows.first["rows"].map { |row| row["value"] }).to eq(["90", "47.37%"])
+      expect(rows.size).to eq(6)
+    end
+
     it "sorts by a column asked for" do
       get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12", sort: "gap", direction: "asc")
 

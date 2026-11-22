@@ -3,6 +3,7 @@
 module PageGapsHelper
   ORDINARY_COLOR = ChartsHelper::SHARE_COLORS[0]
   FLAGGED_COLOR = ChartsHelper::SHARE_COLORS[3]
+  FLAGGED_SWATCH = ChartsHelper::SHARE_SWATCHES[3]
   # Views marked on the log axis, so ticks land on round figures however busy the busiest page is.
   LOG_STEPS = [1, 2, 5].freeze
   MAX_LOG_TICKS = 7
