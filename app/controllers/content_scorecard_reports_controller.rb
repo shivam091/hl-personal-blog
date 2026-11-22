@@ -18,6 +18,7 @@ class ContentScorecardReportsController < ApplicationController
     @ai = Google::SearchConsole::GenerativeAiSummary.new(@period)
     @scorecard = ContentScorecard.new(@content, ai: @ai)
     @rows = @scorecard.rows(sort: @sort.key)
+    @consent = ConsentKpis.new(@period)
 
     respond_to do |format|
       format.html

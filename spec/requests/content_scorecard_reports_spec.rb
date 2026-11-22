@@ -81,4 +81,35 @@ RSpec.describe "Content scorecard", type: :request do
     expect(page.at_css("[aria-controls=period-compare]")).to be_present
     expect(page.at_css("[aria-controls=period-country]")).to be_present
   end
+
+  describe "consent figures" do
+    def tile(label)
+      page.css("#consent-kpis > div").find { |tile| tile.at_css("dt").text.include?(label) }.css("dd").map { |dd| dd.text.squish }
+    end
+
+    it "shows GA's share of our views and the banner's acceptance, each against the period before" do
+      ConsentSnapshot.create!(day: "2026-10-10", first_party: 100, analytics: 60)
+      ConsentSnapshot.create!(day: "2026-09-10", first_party: 100, analytics: 80)
+      ConsentChoice.collection.insert_many([
+        {"_id" => "2026-10-10", "day" => "2026-10-10", "countries" => {"DE" => {"shown" => 20, "granted" => 6, "denied" => 4}, "FR" => {"granted" => 3, "denied" => 1}}},
+        {"_id" => "2026-09-10", "day" => "2026-09-10", "countries" => {"DE" => {"shown" => 20, "granted" => 5, "denied" => 5}}}
+      ])
+
+      get content_scorecard_report_path
+
+      expect(tile("GA's share of our views")).to eq(["60.0%", "25.0%"])
+      expect(page.at_css("#consent-kpis").css("dd span[title]").map { |span| span["title"] }).to eq(["Down from 80.0% in the period before", "Up from 50.0% in the period before"])
+      expect(tile("Banner acceptance")).to eq(["64.3%", "28.6%"])
+    end
+
+    it "shows a dash with too few views or answers to judge" do
+      ConsentSnapshot.create!(day: "2026-10-10", first_party: 10, analytics: 6)
+      ConsentChoice.collection.insert_one("_id" => "2026-10-10", "day" => "2026-10-10", "countries" => {"DE" => {"shown" => 4, "granted" => 2, "denied" => 1}})
+
+      get content_scorecard_report_path(compare: "off")
+
+      expect(tile("GA's share of our views")).to eq(["—"])
+      expect(tile("Banner acceptance")).to eq(["—"])
+    end
+  end
 end
