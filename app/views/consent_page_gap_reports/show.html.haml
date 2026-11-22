@@ -84,6 +84,7 @@
           %tr
             - {"slug" => "Page", "first_party" => "Our views", "analytics" => "GA views", "gap" => "Gap", "gap_percent" => "Gap %"}.each do |column, heading|
               = sort_header @sorting, heading, column, keep: [@period], class: ["px-3 py-2.5 font-semibold whitespace-nowrap", ("text-right" unless column == "slug")]
+            %th{scope: "col", class: "px-3 py-2.5 font-semibold whitespace-nowrap", title: "Gap % by week; a break is a week with under #{PageGap::MIN_VIEWS} of our views"} Trend
             %th{scope: "col", class: "px-3 py-2.5 font-semibold whitespace-nowrap"} Flag
         %tbody
           - @rows.each do |row|
@@ -96,4 +97,6 @@
               %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.analytics)
               %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.gap)
               %td{class: "px-3 py-2 text-right tabular-nums"}= row.percent ? number_to_percentage(row.percent * 100, precision: 1) : "—"
+              %td{class: "px-3 py-2"}
+                = page_gap_trend(row.slug, page_gap)
               %td{class: "px-3 py-2 whitespace-nowrap"}= row.flagged ? "Well above the median" : ""

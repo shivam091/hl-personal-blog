@@ -513,6 +513,25 @@ RSpec.describe ChartsHelper, type: :helper do
     end
   end
 
+  describe "#sparkline" do
+    it "draws from zero to the highest value" do
+      chart = html(helper.sparkline([0, 5, 10], label: "Views by day"))
+
+      expect(chart.at_css("polyline")["points"]).to eq("0.0,22.0 40.0,12.0 80.0,2.0")
+    end
+
+    it "breaks the line at a missing value and reaches below zero" do
+      chart = html(helper.sparkline([-10, 10, nil, 0, 10], label: "Gap by week"))
+
+      expect(chart.css("polyline").map { |line| line["points"] }).to eq(["0.0,22.0 20.0,2.0", "60.0,12.0 80.0,2.0"])
+      expect(chart.css("line").last.to_h.values_at("x1", "y1")).to eq(%w[80.0 2.0])
+    end
+
+    it "has nothing to draw when every value is missing" do
+      expect(helper.sparkline([nil, nil], label: "Gap by week")).to include("—")
+    end
+  end
+
   describe "#scatter_chart" do
     it "places each point by its two figures over a dashed curve, position 1 at the left" do
       points = [ChartsHelper::ScatterPoint.new(x: 1, y: 0.2, color: "#2a78d6", tip: helper.chart_tip("a", [])),

@@ -42,6 +42,12 @@ module PageGapsHelper
       label: "Our views against GA's for each flagged page")
   end
 
+  def page_gap_trend(slug, page_gap)
+    percents = page_gap.weekly_percents(slug)
+    readings = page_gap.weeks.zip(percents).map { |week, percent| "#{l(week, format: :day_month)}: #{page_gap_percent(percent)}" }
+    sparkline(percents, label: "Gap % of #{slug} by week starting #{readings.join(", ")}")
+  end
+
   def page_gap_causes_key
     swatch_legend(CAUSES.values)
   end
