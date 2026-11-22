@@ -1,0 +1,54 @@
+# encoding: UTF-8
+
+require "rails_helper"
+
+RSpec.describe "Consent report", type: :request do
+  around { |example| travel_to(Time.zone.parse("2026-10-12 12:00")) { example.run } }
+
+  def card(id)
+    Nokogiri::HTML5(response.body).css("section[aria-labelledby=#{id}]").text.squish
+  end
+
+  it "says so when nothing has been recorded" do
+    get consent_report_path
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include("No consent answers or consent-split views recorded")
+  end
+
+  context "with consent recorded" do
+    before do
+      ConsentChoice.collection.insert_one("_id" => "2026-10-10", "day" => "2026-10-10", "countries" => {"GB" => {"shown" => 10, "granted" => 3, "denied" => 5}})
+      PageView.collection.insert_one(
+        "_id" => "/post/a", "slug" => "/post/a",
+        "countriesByDay" => {"2026-10-10" => {"GB" => 100}},
+        "consentByDay" => {"2026-10-10" => {"granted" => 20, "denied" => 30, "unset" => 50}}
+      )
+    end
+
+    it "shows the funnel and the views by consent state" do
+      get consent_report_path
+
+      expect(card("banner-by-country")).to include("GB", "10", "37.5%")
+      expect(card("views-by-consent")).to include("Declined", "30", "30.0%")
+      expect(response.body).not_to include("Explained by declines")
+    end
+
+    it "sets our views against GA's once GA has synced, and explains the gap" do
+      Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: "/post/a", views: 60)
+
+      get consent_report_path
+
+      page = Nokogiri::HTML5(response.body)
+      expect(page.text.squish).to include("Explained by declines")
+      expect(card("views-against-ga")).to include("Oct", "100", "60", "40", "30")
+    end
+
+    it "exports the funnel as CSV" do
+      get consent_report_path(format: :csv)
+
+      expect(response.media_type).to eq("text/csv")
+      expect(CSV.parse(response.body, headers: true).map { |row| row["Country"] }).to eq(%w[GB All])
+    end
+  end
+end

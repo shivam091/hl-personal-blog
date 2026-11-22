@@ -1,0 +1,88 @@
+- content_for :title, "Consent report"
+- consent = @consent
+- total = consent.total
+- states = consent.views_by_state
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Consent report
+    %p{class: subtitle_class}
+      What readers answered the cookie banner, and how much of the gap between page views and GA's it explains.
+  = link_to list_url(@period, @filtering, format: :csv),
+    class: outline_button_class do
+    = icon("download", size: 14)
+    Export CSV
+
+= render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: []
+
+- notes = []
+- notes << "The banner has been recorded since #{l(consent.recording_since)}; earlier days show none." if consent.recording_since && consent.recording_since > @period.from
+- notes << "Views have been split by consent since #{l(consent.views_tracked_since)}; earlier days are left out of the views below." if consent.views_tracked_since && consent.views_tracked_since > @period.from
+- notes << "Consent isn't split by country on views, so those figures cover every country." if @stats.country
+= render "shared/period_notes", notes: notes
+
+%dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+  = render "dashboard/tile", label: "Banner shown", tile_icon: "eye", value: number_with_delimiter(total.shown), change: nil,
+    hint: "Times the banner appeared, once per browser session. Only readers in the EEA, UK and Switzerland are asked."
+  = render "dashboard/tile", label: "Accepted", tile_icon: "check", value: number_with_delimiter(total.granted),
+    change: (number_to_percentage(total.acceptance_rate * 100, precision: 1) + " of answers" if total.acceptance_rate),
+    hint: "Readers who chose Accept."
+  = render "dashboard/tile", label: "Declined", tile_icon: "x", value: number_with_delimiter(total.denied), change: nil,
+    hint: "Readers who chose Decline. GA counts their views only as unnamed, unmodelled pings."
+  = render "dashboard/tile", label: "No answer", tile_icon: "clock", value: number_with_delimiter(total.no_answer),
+    change: ("#{number_with_delimiter(total.changed)} changed their mind" if total.changed.positive?),
+    hint: "Banners shown that were closed or left without a choice. Analytics stays denied for them."
+
+- if @gap
+  %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+    = render "dashboard/tile", label: "Our views", tile_icon: "eye", value: number_with_delimiter(@gap.first_party), change: nil,
+      hint: "Page views counted by the blog itself on the days GA has synced and consent was recorded."
+    = render "dashboard/tile", label: "GA views", tile_icon: "bar-chart", value: number_with_delimiter(@gap.analytics), change: nil,
+      hint: "The same days in Google Analytics."
+    = render "dashboard/tile", label: "Gap", tile_icon: "alert-triangle", value: number_with_delimiter(@gap.difference),
+      change: (number_to_percentage(@gap.percent * 100, precision: 1) + " of our views" if @gap.percent),
+      hint: "Our views minus GA's."
+    = render "dashboard/tile", label: "Explained by declines", tile_icon: "cookie", value: number_with_delimiter(@gap.explained),
+      change: (number_to_percentage(@gap.explained_share * 100, precision: 1) + " of the gap" if @gap.explained_share),
+      hint: "Views from readers who declined, up to the size of the gap. The rest is ad blockers, bots and GA's own filtering."
+
+- if consent.any? || states.any?
+  %div{class: split_grid_class}
+    = render layout: "shared/card", locals: {id: "views-by-consent", title: "Views by consent state", icon: "eye"} do
+      - if consent.tracked_views.zero?
+        %p{class: empty_note_class} No views split by consent in #{@period}.
+      - else
+        = report_table([report_th("State"), report_th("Views", :right), report_th("Share", :right)]) do
+          - {"granted" => "Accepted", "denied" => "Declined", "unset" => "Not asked or not answered"}.each do |state, label|
+            %tr{class: table_row_class}
+              %td{class: "py-1.5 pr-3"}= label
+              %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(states[state])
+              %td{class: "py-1.5 pl-3 text-right tabular-nums"}= number_to_percentage(states[state] * 100.0 / consent.tracked_views, precision: 1)
+    = render layout: "shared/card", locals: {id: "banner-by-country", title: "Banner by country", icon: "globe"} do
+      - rows = consent.countries
+      - if rows.empty?
+        %p{class: empty_note_class} The banner wasn't shown in #{@period}.
+      - else
+        = report_table([report_th("Country"), report_th("Shown", :right), report_th("Accepted", :right), report_th("Declined", :right),
+          report_th("No answer", :right), report_th("Accept rate", :right)]) do
+          - rows.each do |row|
+            %tr{class: table_row_class}
+              %td{class: "py-1.5 pr-3 whitespace-nowrap"}= country_label(row.country)
+              %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(row.shown)
+              %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(row.granted)
+              %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(row.denied)
+              %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(row.no_answer)
+              %td{class: "py-1.5 pl-3 text-right tabular-nums"}= row.acceptance_rate ? number_to_percentage(row.acceptance_rate * 100, precision: 1) : "—"
+
+  - if @gap && @gap.days.any?
+    = render layout: "shared/card", locals: {id: "views-against-ga", title: "Our views against GA's, by day", icon: "trending-up"} do
+      = report_table([report_th("Date"), report_th("Our views", :right), report_th("GA views", :right), report_th("Gap", :right), report_th("Declined views", :right)]) do
+        - @gap.days.first(31).each do |day|
+          %tr{class: table_row_class}
+            %td{class: "py-1.5 pr-3 whitespace-nowrap"}= day_label(day.date.iso8601)
+            %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(day.first_party)
+            %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(day.analytics)
+            %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(day.first_party - day.analytics)
+            %td{class: "py-1.5 pl-3 text-right tabular-nums"}= number_with_delimiter(day.denied)
+- else
+  = render "shared/empty_state", message: "No consent answers or consent-split views recorded in #{@period}."

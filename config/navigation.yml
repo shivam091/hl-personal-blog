@@ -62,6 +62,9 @@ shared:
         - label: Data quality
           icon: database
           route: data_quality_report
+        - label: Consent
+          icon: cookie
+          route: consent_report
 
     - label: Google
       icon: globe
