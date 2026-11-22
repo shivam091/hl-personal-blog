@@ -11,6 +11,8 @@ class ConsentGap
     unknown_gap: "Left before the tag could be checked",
     datacentre_gap: "Suspected datacentre traffic"
   }.freeze
+  # Short enough for a chart's key.
+  SHORT_NAMES = {denied_gap: "Declined", pending_gap: "Pending", blocked_gap: "Blocked", unknown_gap: "Undetected", datacentre_gap: "Datacentre"}.freeze
 
   attr_reader :snapshots
 
@@ -25,6 +27,16 @@ class ConsentGap
 
   def any?
     days.any?
+  end
+
+  # So a chart can put each day that could be explained on its own date.
+  def by_date
+    @by_date ||= days.index_by(&:date)
+  end
+
+  # Days GA had figures for that couldn't be explained, as the consent split wasn't recorded on them.
+  def days_unexplained
+    snapshots.size - days.size
   end
 
   def first_party

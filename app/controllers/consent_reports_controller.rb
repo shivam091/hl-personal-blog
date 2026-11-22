@@ -3,8 +3,20 @@
 class ConsentReportsController < ApplicationController
   include BlogStatsFilters
 
+  # Banners and their answers run to a handful a day, so weeks are shown until days are asked for.
+  DEFAULT_GRANULARITY = "week"
+
+  # What was asked for, not what the period allowed, so days forced by a short period don't stick to a longer one.
+  GranularityState = Struct.new(:by) do
+    def query
+      by.nil? || by == DEFAULT_GRANULARITY ? {} : {by: by}
+    end
+  end
+
   def show
     load_blog_stats
+    @granularity = ChartGranularity.new({by: params[:by].presence || DEFAULT_GRANULARITY}, period: @period)
+    @granularity_state = GranularityState.new(params[:by].presence_in(ChartGranularity::BUCKETS.keys))
     @consent = ConsentStats.new(@period, country: @stats.country)
     @analytics = Google::Analytics::Summary.new(@period)
     @gap = @consent.gap(first_party_views, analytics_views) if @analytics.any?

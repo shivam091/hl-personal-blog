@@ -546,4 +546,21 @@ RSpec.describe ChartsHelper, type: :helper do
       expect(chart.css("li [data-tip]").map { |bar| JSON.parse(bar["data-tip"])["rows"].first["marker"] }).to eq(%w[circle square])
     end
   end
+
+  describe "#stacked_chart" do
+    let(:days) { (Date.new(2026, 9, 1)..Date.new(2026, 9, 2)).to_a }
+
+    it "leaves a part below zero and one not recorded undrawn, but reads out their figures and the parts added up" do
+      chart = html(helper.stacked_chart(days, [
+        ChartsHelper::Series.new(name: "Found", values: [10, 30], color: "#2a78d6"),
+        ChartsHelper::Series.new(name: "Later", values: [nil, 5], color: "#eb6834"),
+        ChartsHelper::Series.new(name: "Left", values: [5, -15], color: "#a8a7a1")
+      ], y_title: "Views", label: "Views", total_name: "Gap"))
+
+      expect(chart.css("rect[fill^='#']").map { |bar| bar["fill"] }).to eq(%w[#2a78d6 #a8a7a1 #2a78d6 #eb6834])
+      first, second = tips(chart).map { |tip| tip["rows"].to_h { |row| [row["name"], row["value"]] } }
+      expect(first).to eq("Found" => "10", "Later" => "No data", "Left" => "5", "Gap" => "15")
+      expect(second).to include("Left" => "-15", "Gap" => "20")
+    end
+  end
 end

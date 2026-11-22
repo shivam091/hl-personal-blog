@@ -173,12 +173,13 @@ module ChartsHelper
 
   # The first part sits at the base so its height can be read straight off
   # the axis. A line gets its own scale because its figures differ in size
-  # from the bars'.
-  def stacked_chart(keys, series, label:, y_title:, x_title: nil, per: :day, titles: nil, unsettled: nil, previous: nil, previous_name: nil, line: nil)
+  # from the bars'. A part below zero can't be stacked, so it is left undrawn
+  # and only read out; total_name adds each bar's sum to the readout, so a stack's height can be read as a figure.
+  def stacked_chart(keys, series, label:, y_title:, x_title: nil, per: :day, titles: nil, unsettled: nil, previous: nil, previous_name: nil, line: nil, total_name: nil)
     skip = leading_empty(keys, [*[*series, *line].map(&:values), previous].compact)
     keys, series, titles, previous = keys.drop(skip), trimmed_series(series, skip), titles&.drop(skip), previous&.drop(skip)
     line = line.dup.tap { |copy| copy.values = line.values.drop(skip) } if line && skip.positive?
-    totals = keys.each_index.map { |index| series.sum { |part| part.values[index].to_i } }
+    totals = keys.each_index.map { |index| series.sum { |part| [part.values[index].to_i, 0].max } }
     top = round_top([*totals, *previous&.compact].max.to_f, whole: true)
     line_top = round_top(line.values.compact.max.to_f, whole: line.whole) if line
     safe_join([
@@ -186,7 +187,8 @@ module ChartsHelper
       chart_frame(keys, top, label, x_title: x_title, y_title: y_title, per: per, left: series.any?,
         right: (measure_axis(line, line_top, side: :right, outer: false, tall: false) if line)) do |max|
         safe_join([
-          stacked_marks(keys, series, max, per, titles, unsettled: unsettled, previous: previous, previous_name: previous_name, line: line, line_top: line_top),
+          stacked_marks(keys, series, max, per, titles, unsettled: unsettled, previous: previous, previous_name: previous_name, line: line, line_top: line_top,
+            total_name: total_name),
           (previous_bars_line(keys, previous, max) if previous),
           (measure_line(keys, line, line_top) if line)
         ].compact)
@@ -1153,7 +1155,7 @@ module ChartsHelper
 
   # Parts are inset by a gap, so touching colours stay apart; a day with no
   # data has no bar and no readout, so it isn't read as a day of none.
-  def stacked_marks(keys, series, max, per, titles = nil, unsettled: nil, previous: nil, previous_name: nil, line: nil, line_top: nil)
+  def stacked_marks(keys, series, max, per, titles = nil, unsettled: nil, previous: nil, previous_name: nil, line: nil, line_top: nil, total_name: nil)
     slot = CHART_WIDTH.to_f / [keys.size, 1].max
     gap = [slot * 0.2, 2].min
     earlier = previous && previous_chart_keys(keys, per)
@@ -1162,28 +1164,32 @@ module ChartsHelper
 
       y = CHART_HEIGHT.to_f
       parts = series.filter_map do |part|
-        height = part.values[index].to_f / max * CHART_HEIGHT
+        height = [part.values[index].to_f, 0].max / max * CHART_HEIGHT
         y -= height
         next if height.zero?
 
         tag.rect(x: (index * slot + gap / 2).round(2), y: y.round(2), width: (slot - gap).round(2), height: height.round(2), fill: part.color,
           class: "stroke-white", "stroke-width": 1, "vector-effect": "non-scaling-stroke")
       end
+      # A part not recorded beside others that were reads as unknown, not as none.
       rows = series.map do |part|
-        {value: number_with_delimiter(part.values[index].to_i), **compared_name(part.name, key, per, previous), color: part.color}
+        value = part.values[index]
+        {value: value.nil? ? "No data" : number_with_delimiter(value.to_i), **compared_name(part.name, key, per, previous), color: part.color}
       end
       if line
         value = line.values[index]
         rows << {value: value.nil? ? "No data" : line.reading.(value), **compared_name(line.name, key, per, previous), color: line.color,
                  y: (((1 - value.to_f / [line_top.to_f, 1].max) * CHART_HEIGHT).round(2) unless value.nil?)}.compact
       end
+      total = series.sum { |part| part.values[index].to_i }
       if previous
         before = previous[index]
-        total = series.sum { |part| part.values[index].to_i }
-        rows << {value: number_with_delimiter(total), **compared_name("Total", key, per, true), color: BAR_COLOR,
+        rows << {value: number_with_delimiter(total), **compared_name(total_name || "Total", key, per, true), color: BAR_COLOR,
                  change: compare_change(total, before), tone: (total <=> before if before)}.compact
-        rows << {value: before.nil? ? "No data" : number_with_delimiter(before), **compared_name("Total", earlier&.at(index), per, true, previous_name),
+        rows << {value: before.nil? ? "No data" : number_with_delimiter(before), **compared_name(total_name || "Total", earlier&.at(index), per, true, previous_name),
                  color: BAR_COLOR, dotted: true, earlier: true}
+      elsif total_name
+        rows << {value: number_with_delimiter(total), **compared_name(total_name, key, per, previous), color: BAR_COLOR}
       end
       tag.g(class: "group", data: chart_tip(titles&.at(index) || time_tip_title(key, per, index, previous), rows, note: unsettled_note(key, per, unsettled), key: zoom_key(key, per))) do
         safe_join([
@@ -1239,7 +1245,8 @@ module ChartsHelper
   def previous_bars_line(keys, previous, max)
     slot = CHART_WIDTH.to_f / [keys.size, 1].max
     safe_join(line_runs(previous).flat_map do |run|
-      points = run.map { |value, i| "#{((i + 0.5) * slot).round(2)},#{(CHART_HEIGHT - value.to_f / max * CHART_HEIGHT).round(2)}" }.join(" ")
+      # Held at the axis below zero, as there are no bars there to read it against; the readout gives the figure.
+      points = run.map { |value, i| "#{((i + 0.5) * slot).round(2)},#{(CHART_HEIGHT - [value.to_f, 0].max / max * CHART_HEIGHT).round(2)}" }.join(" ")
       [["white", 4, "0 4"], [BAR_COLOR, 2, "0 4"]].map do |stroke, width, dashes|
         tag.polyline(points: points, fill: "none", stroke: stroke, "stroke-width": width, "stroke-linejoin": "round", "stroke-linecap": "round",
           "stroke-dasharray": dashes, "vector-effect": "non-scaling-stroke", class: "pointer-events-none", data: {previous: ""})

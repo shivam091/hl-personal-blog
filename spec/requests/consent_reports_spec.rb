@@ -72,6 +72,31 @@ RSpec.describe "Consent report", type: :request do
       expect(card("unexplained-by-day")).to include("Oct", "70")
     end
 
+    it "charts the gap's causes by day while the period is too short for weeks, leaving out days it can't explain" do
+      get consent_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      expect(card("gap-causes-over-time")).to include("Declined", "Datacentre", "Unexplained", "2 days without GA's figures or the consent split are left out")
+      expect(Nokogiri::HTML5(response.body).at_css("select#causes-by")).to be_nil
+    end
+
+    it "charts the causes by week by default once the period allows, and by day when asked" do
+      get consent_report_path(from: "2026-09-20", to: "2026-10-12")
+
+      expect(Nokogiri::HTML5(response.body).at_css("select#causes-by option[selected]")["value"]).to eq("week")
+
+      get consent_report_path(from: "2026-09-20", to: "2026-10-12", by: "day")
+
+      expect(Nokogiri::HTML5(response.body).at_css("select#causes-by option[selected]")["value"]).to eq("day")
+    end
+
+    it "says so when the causes found add up to more than the gap" do
+      Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: "/post/b", views: 65)
+
+      get consent_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      expect(card("gap-causes-over-time")).to include("the causes found add up to more than the gap, so Unexplained is below zero")
+    end
+
     it "splits views by the finer states" do
       get consent_report_path(from: "2026-10-10", to: "2026-10-12")
 
