@@ -66,6 +66,25 @@ class ConsentSnapshot
       where(:day.gte => period.from.iso8601, :day.lte => period.to.iso8601).index_by(&:day)
     end
 
+    # The median rather than the mean, so one odd day among the settled ones can't move what counts as
+    # usual; nil until enough of them have the measure, as a usual drawn from two days would flag noise.
+    def usual(field, day)
+      values = where(:day.gte => (day - Anomalies::CONSENT_BASELINE_DAYS).iso8601, :day.lt => day.iso8601).filter_map(&field)
+      return if values.size < Anomalies::MIN_CONSENT_BASELINE
+
+      sorted = values.sort
+      middle = sorted.size / 2
+      sorted.size.odd? ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2.0
+    end
+
+    # Summed over the days before dividing, so a busy day weighs as much as its views; days GA has no
+    # figure for are left out of both sides, or they would read as GA missing every view.
+    def ga_share(period)
+      days = stored(period).values.reject { |snapshot| snapshot.analytics.nil? }
+      views = days.sum { |snapshot| snapshot.first_party.to_i }
+      days.sum(&:analytics).fdiv(views) if views >= MIN_VIEWS
+    end
+
     private
 
     def compose_attributes(inputs)

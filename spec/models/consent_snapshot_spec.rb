@@ -94,6 +94,55 @@ RSpec.describe ConsentSnapshot, type: :model do
     end
   end
 
+  describe ".usual" do
+    def day(date, first_party, analytics)
+      described_class.record(ConsentSnapshot::Inputs.new(date: date, first_party: first_party, analytics: analytics, states: {}, ga: {}, suspects: {}, banner: nil))
+    end
+
+    it "takes the median over the settled days before the one judged, skipping days without the measure" do
+      [0.5, 0.6, 0.9, 0.4, 0.55].each_with_index { |share, index| day(date - (index + 1), 100, (share * 100).round) }
+      day(date - 6, 10, 1)
+      day(date, 100, 10)
+
+      expect(described_class.usual(:ga_ratio, date)).to eq(0.55)
+    end
+
+    it "has no usual with too few days to call one" do
+      4.times { |index| day(date - (index + 1), 100, 50) }
+
+      expect(described_class.usual(:ga_ratio, date)).to be_nil
+    end
+
+    it "leaves out days older than the baseline" do
+      5.times { |index| day(date - (index + 1), 100, 50) }
+      day(date - 20, 100, 99)
+
+      expect(described_class.usual(:ga_ratio, date)).to eq(0.5)
+    end
+  end
+
+  describe ".ga_share" do
+    let(:period) { Period.new({from: "2026-10-01", to: "2026-10-31"}) }
+
+    def day(date, first_party, analytics)
+      described_class.record(ConsentSnapshot::Inputs.new(date: date, first_party: first_party, analytics: analytics, states: {}, ga: {}, suspects: {}, banner: nil))
+    end
+
+    it "divides GA's views by ours over the days GA has figures for" do
+      day(Date.new(2026, 10, 2), 100, 50)
+      day(Date.new(2026, 10, 3), 300, 210)
+      day(Date.new(2026, 10, 4), 500, nil)
+
+      expect(described_class.ga_share(period)).to eq(0.65)
+    end
+
+    it "has no share with too few views to go on" do
+      day(Date.new(2026, 10, 2), 20, 10)
+
+      expect(described_class.ga_share(period)).to be_nil
+    end
+  end
+
   describe ".precise?" do
     it "is true only when no view is still in the old unset state and some are split" do
       expect(described_class.precise?("pending" => 1)).to be(true)
