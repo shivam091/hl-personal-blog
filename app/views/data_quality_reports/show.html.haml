@@ -79,31 +79,48 @@
 
   %div{class: "grid gap-6"}
     = render layout: "shared/card", locals: {id: "coverage", title: "Days with data", icon: "calendar"} do
-      - sources_in = ->(within, blog_daily) { {"Blog views" => blog_daily.each_with_index.filter_map { |count, index| (within.from + index) if count.positive? },
-        "Search Console" => @search.days_with_data(within), "Google Analytics" => @analytics.days_with_data(within),
-        "reCAPTCHA" => Google::Recaptcha::Stat.where(date: within.from..within.to).distinct(:date).map(&:to_date)} }
+      - sources_in = ->(within, blog_daily) { [DayCoverage.new("Blog views", blog_daily.each_with_index.filter_map { |count, index| (within.from + index) if count.positive? }),
+        DayCoverage.new("Search Console", @search.days_with_data(within)), DayCoverage.new("Google Analytics", @analytics.days_with_data(within)),
+        DayCoverage.new("reCAPTCHA", Google::Recaptcha::Stat.where(date: within.from..within.to).distinct(:date).map(&:to_date)),
+        *DayCoverage.tallies(within)] }
       - sources = sources_in.(@period, @stats.daily(:views))
-      - earlier_sources = sources_in.(earlier_period, @stats.daily(:views, earlier_period)) if before
+      - earlier_sources = sources_in.(earlier_period, @stats.daily(:views, earlier_period)).index_by(&:name) if before
+      - shades = {present: "bg-slate-600", missing: "bg-amber-200", before: "bg-slate-100", quiet: "bg-slate-300"}
       %div{class: "space-y-3 px-4 py-3"}
-        - sources.each do |name, present|
-          - present = present.to_set
-          - missing = dates.count { |date| !present.include?(date) }
+        - sources.each do |source|
+          - name = source.name
+          - missing = source.missing(dates)
+          - since = source.recorded_since(dates)
           %div
-            %p{class: "mb-1 flex justify-between text-xs"}
-              %span{class: "font-medium text-slate-700"}= name
-              %span{class: missing.zero? ? "text-emerald-700" : "text-amber-700"}
-                = missing.zero? ? "Every day" : "#{pluralize(missing, "day")} missing"
+            %p{class: "mb-1 flex justify-between gap-3 text-xs"}
+              %span{class: "font-medium text-slate-700"}
+                = name
+                - if since
+                  %span{class: "font-normal whitespace-nowrap text-slate-500"} from #{l(since, format: "%-d %b")}
+              - recorded = source.recorded?(dates)
+              - tone = if !recorded then "text-slate-500" elsif missing.zero? then "text-emerald-700" else "text-amber-700" end
+              %span{class: ["text-right", tone]}
+                - if !recorded
+                  Not recorded yet
+                - else
+                  = missing.zero? ? "Every day" : "#{pluralize(missing, "day")} missing"
                 - if earlier_sources
-                  - earlier_present = earlier_sources.fetch(name).to_set
-                  - earlier_missing = (earlier_period.from..earlier_period.to).count { |date| !earlier_present.include?(date) }
-                  %span{class: "text-slate-400", title: "Missing in #{vs}"}= earlier_missing.zero? ? "(was every day)" : "(was #{earlier_missing})"
+                  - earlier_source = earlier_sources.fetch(name)
+                  - earlier_dates = (earlier_period.from..earlier_period.to).to_a
+                  - earlier_missing = earlier_source.missing(earlier_dates)
+                  - if earlier_source.recorded?(earlier_dates)
+                    %span{class: "text-slate-400", title: "Missing in #{vs}"}= earlier_missing.zero? ? "(was every day)" : "(was #{earlier_missing})"
+                  - else
+                    %span{class: "text-slate-400", title: "Not recorded yet in #{vs}"} (new)
             = chart_tooltip(label: "#{name}: #{missing} of #{dates.size} days missing") do
               %div{class: "flex gap-px"}
                 - dates.each do |date|
-                  %span{class: ["h-4 flex-1 rounded-sm hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900", present.include?(date) ? "bg-slate-600" : "bg-amber-200"],
-                    data: chart_tip(l(date, format: "%a, %-d %b, %Y"), [{value: present.include?(date) ? "Has data" : "Missing", name: name}])}
+                  %span{class: ["h-4 flex-1 rounded-sm hover:ring-2 hover:ring-slate-900 data-active:ring-2 data-active:ring-slate-900", shades.fetch(source.state(date))],
+                    data: chart_tip(l(date, format: "%a, %-d %b, %Y"), [{value: source.label(date), name: name}])}
       %p{class: footnote_class}
-        Search Console fills in the last two or three days late, so they read as missing until the next sync.
+        Search Console fills in the last two or three days late, so they read as missing until the next sync. The palest days
+        came before the frontend recorded that tally, so they aren't missing; automation is only written on a day something is
+        flagged, so a day without it had none.
 
     = render layout: "shared/card", locals: {id: "caveats", title: "Known gaps", icon: "info"} do
       - bots = @lifetime_hits[:bots]
