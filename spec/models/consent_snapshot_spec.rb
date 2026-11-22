@@ -121,6 +121,25 @@ RSpec.describe ConsentSnapshot, type: :model do
     end
   end
 
+  describe ".usuals" do
+    it "gives each day the usual .usual would, from one read" do
+      [0.5, 0.6, 0.9, 0.4, 0.55, 0.7].each_with_index { |share, index| described_class.create!(day: (date - (index + 1)).iso8601, ga_ratio: share) }
+
+      usuals = described_class.usuals(:ga_ratio, [date, date - 1, date - 2])
+
+      expect(usuals).to eq(date => described_class.usual(:ga_ratio, date), date - 1 => described_class.usual(:ga_ratio, date - 1), date - 2 => nil)
+      expect(usuals[date]).to be_within(1e-9).of(0.575)
+      expect(described_class.usuals(:ga_ratio, [])).to eq({})
+    end
+  end
+
+  describe "#no_answer_share" do
+    it "is the share of banners left unanswered, once enough were shown" do
+      expect(described_class.new(shown: Anomalies::MIN_BANNERS, no_answer: 5).no_answer_share).to eq(5.0 / Anomalies::MIN_BANNERS)
+      expect(described_class.new(shown: Anomalies::MIN_BANNERS - 1, no_answer: 5).no_answer_share).to be_nil
+    end
+  end
+
   describe ".ga_share" do
     let(:period) { Period.new({from: "2026-10-01", to: "2026-10-31"}) }
 

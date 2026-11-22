@@ -114,6 +114,7 @@
         %td{class: "px-3 py-1.5 text-slate-600"} These readers were never asked, as the banner needs a country, so a high share is a gap in consent too.
 
 - if consent.any? || states.any?
+  = render "consent_reports/flag_measures", measures: @flag_measures, period: @period
   %div{class: split_grid_class}
     = render layout: "shared/card", locals: {id: "views-by-consent", title: "Views by consent state", icon: "eye"} do
       - if consent.tracked_views.zero?
