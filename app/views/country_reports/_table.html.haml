@@ -6,6 +6,12 @@
   (row_change(row.public_send(metric), previous[metric][row.country], DashboardHelper::HIGHER_IS_BETTER) if previous)].compact, " ") }
 - headings["search_clicks"] = "Search clicks" if extras.include?(:search_clicks)
 - headings["analytics_views"] = "GA views" if extras.include?(:analytics_views)
+- banners = local_assigns[:banners]&.any? ? local_assigns[:banners] : nil
+- headings["banners"] = "Banners" if banners
+- headings["accept_rate"] = "Accept rate" if banners
+- asked = "Only readers in the EEA, UK and Switzerland are asked, so other countries show —."
+- titles = {"banners" => "Times the consent banner was shown, once per browser session. #{asked}",
+  "accept_rate" => "Accepted ÷ answered, once a country has #{CountryBanners::MIN_ANSWERS_FOR_RATE}+ answers. #{asked}"}
 -# Google's totals over the latest upload's range rather than the period's,
 -# so they can't be sorted or compared with the columns beside them.
 - uploaded_ai = local_assigns[:ai] if local_assigns[:ai]&.covered
@@ -16,9 +22,9 @@
         - headings.each do |column, heading|
           - th_class = ["px-3 py-2.5 font-semibold whitespace-nowrap", ("text-right" unless column == "country")]
           - if local_assigns[:sorting]
-            = sort_header sorting, heading, column, keep: [@period, @filtering], class: th_class
+            = sort_header sorting, heading, column, keep: [@period, @filtering], class: th_class, title: titles[column]
           - else
-            %th{scope: "col", class: th_class}= heading
+            %th{scope: "col", class: th_class, title: titles[column]}= heading
         - if uploaded_ai
           %th{scope: "col", class: "#{list_heading_right_class} whitespace-nowrap",
             title: "Google's total for #{l(uploaded_ai.covered.begin)} – #{l(uploaded_ai.covered.end)}, from the latest Generative AI upload, whatever period is picked"} AI impressions
@@ -43,6 +49,20 @@
               = number_with_delimiter(row.public_send(extra).to_i)
               - if previous&.key?(extra)
                 = row_change(row.public_send(extra).to_i, previous[extra][row.country].to_i, DashboardHelper::HIGHER_IS_BETTER)
+          - if banners
+            - banner = banners[row.country]
+            %td{class: "px-3 py-2 text-right tabular-nums"}
+              - if banner
+                = number_with_delimiter(banner.shown)
+              - else
+                %span{class: "text-slate-400", title: "No banner shown — only readers in the EEA, UK and Switzerland are asked"} —
+            %td{class: "px-3 py-2 text-right tabular-nums"}
+              - if banner&.acceptance_rate
+                = number_to_percentage(banner.acceptance_rate * 100, precision: 1)
+              - elsif banner
+                %span{class: "text-slate-400", title: "Too few answers for a meaningful rate (#{banner.answered} of #{CountryBanners::MIN_ANSWERS_FOR_RATE})"} —
+              - else
+                %span{class: "text-slate-400", title: "No banner shown — only readers in the EEA, UK and Switzerland are asked"} —
           - if uploaded_ai
             %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(uploaded_ai.countries.fetch(row.country, 0))
           %td{class: "px-3 py-2"}

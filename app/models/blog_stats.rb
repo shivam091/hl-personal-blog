@@ -195,14 +195,14 @@ class BlogStats
 
   FUNNEL_CSV_HEADERS = [
     "Country", "Views", "Likes", "Like rate", "Subscribers", "Subscribers per view", "Messages",
-    "Search clicks", "GA views"].freeze
+    "Search clicks", "GA views", "Banners", "Accept rate"].freeze
 
   FunnelRow = Struct.new(
     :country, :views, :likes, :subscribers, :messages, :trend, :search_clicks,
     :analytics_views, keyword_init: true
   ) do
     class << self
-      def to_csv(rows, ai: nil, previous: nil)
+      def to_csv(rows, ai: nil, previous: nil, banners: nil)
         ai = nil unless ai&.covered
         counted = ->(row, metric) { CompareChange.cell(row.public_send(metric), previous&.dig(metric, row.country), compare: !previous.nil?) }
         extra = ->(row, metric) { row.public_send(metric).nil? ? nil : CompareChange.cell(row.public_send(metric), previous&.dig(metric, row.country).to_i, compare: previous&.key?(metric)) }
@@ -219,6 +219,8 @@ class BlogStats
               counted.(row, :messages),
               extra.(row, :search_clicks),
               extra.(row, :analytics_views),
+              banners&.shown(row.country),
+              banners&.acceptance_rate(row.country)&.round(4),
               *(ai.countries.fetch(row.country, 0) if ai)
             ]
           end
