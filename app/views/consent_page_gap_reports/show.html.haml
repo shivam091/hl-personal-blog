@@ -44,15 +44,25 @@
       %div{class: "px-4 py-3"}
         = page_gap_scatter(page_gap)
   - missing = page_gap.missing
+  - worst = page_gap.top_flagged
   - if missing.any?
-    = render layout: "shared/card", locals: {id: "missing-views", title: "Where the missing views are", icon: "bar-chart", class: "mb-6"} do
-      %p{class: lead_note_class}
-        The #{pluralize(missing.size, "page")} GA missed the most views on, our views minus GA's. Each share is of the
-        #{number_with_delimiter(page_gap.missing_total)} views missing over every page GA counted fewer on. Amber pages are flagged.
-      %div{class: "px-4 py-3"}
-        = ranking_chart(missing.map { |row| [row.slug, row.gap, row.flagged ? PageGapsHelper::FLAGGED_SWATCH : "bg-slate-600", row.flagged ? PageGapsHelper::FLAGGED_COLOR : ChartsHelper::BAR_COLOR] },
-          total: page_gap.missing_total, x_title: "Views missing", y_title: "Page", links: missing.to_h { |row| [row.slug, page_gap_link(row)] },
-          label: "The pages GA missed the most views on in #{@period}")
+    %div{class: worst.any? ? split_grid_class : "mb-6"}
+      = render layout: "shared/card", locals: {id: "missing-views", title: "Where the missing views are", icon: "bar-chart"} do
+        %p{class: lead_note_class}
+          The #{pluralize(missing.size, "page")} GA missed the most views on, our views minus GA's. Each share is of the
+          #{number_with_delimiter(page_gap.missing_total)} views missing over every page GA counted fewer on. Amber pages are flagged.
+        %div{class: "px-4 py-3"}
+          = ranking_chart(missing.map { |row| [row.slug, row.gap, row.flagged ? PageGapsHelper::FLAGGED_SWATCH : "bg-slate-600", row.flagged ? PageGapsHelper::FLAGGED_COLOR : ChartsHelper::BAR_COLOR] },
+            total: page_gap.missing_total, x_title: "Views missing", y_title: "Page", links: missing.to_h { |row| [row.slug, page_gap_link(row)] },
+            label: "The pages GA missed the most views on in #{@period}")
+      - if worst.any?
+        = render layout: "shared/card", locals: {id: "flagged-views", title: "Our views against GA's, flagged pages", icon: "split"} do
+          %p{class: lead_note_class}
+            - if worst.size < flagged.size
+              The #{worst.size} flagged pages missing the most views, of #{flagged.size}.
+            The wider apart the two marks, the more of the page's views GA missed.
+          %div{class: "px-4 py-3"}
+            = page_gap_dumbbell(worst)
   %div{id: "page-gap-table", class: "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"}
     %div{class: "relative overflow-x-auto"}
       %table{class: "w-full border-collapse text-left text-sm"}

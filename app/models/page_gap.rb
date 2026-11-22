@@ -65,6 +65,11 @@ class PageGap
     rows.select { |row| row.gap.positive? }.sort_by { |row| [-row.gap, row.slug] }.first(limit)
   end
 
+  # The flagged pages costing the most views, which are the ones worth looking into first.
+  def top_flagged(limit = TOP_MISSING)
+    flagged.sort_by { |row| [-row.gap, row.slug] }.first(limit)
+  end
+
   # Only pages GA counted fewer views on, so one it counted more on can't hide views missing elsewhere.
   def missing_total
     rows.sum { |row| [row.gap, 0].max }
