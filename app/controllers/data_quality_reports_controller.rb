@@ -17,6 +17,8 @@ class DataQualityReportsController < ApplicationController
         @lifetime_hits = PageView.hit_totals
         @syncs = SyncRequest.freshness
         @coverage = IndexCoverage.new
+        # Every country's, as the page gaps are worked out for the whole site.
+        @page_gap = PageGap.new(@period)
       end
       format.csv do
         send_csv comparison.to_csv,

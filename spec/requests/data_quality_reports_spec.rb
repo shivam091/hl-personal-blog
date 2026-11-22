@@ -62,6 +62,24 @@ RSpec.describe "Data quality report", type: :request do
     expect(tag_loading.at_css("p").text.squish).to eq("Tag loading Not recorded yet (new)")
   end
 
+  it "marks the pages Page gaps flags and links to it for the same period" do
+    %w[/post/b /post/c /post/d /post/broken].each do |slug|
+      PageView.collection.insert_one("_id" => slug, "slug" => slug, "countriesByDay" => {"2026-10-10" => {"IN" => 100}})
+      Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: "#{slug}/", views: slug == "/post/broken" ? 20 : 75)
+    end
+
+    get data_quality_report_path(from: "2026-10-01", to: "2026-10-11")
+
+    rows = page.css("#page-comparison ~ div tbody tr").to_h { |row| [row.at_css("td a").text.strip, row.at_css("td")] }
+    marked = rows.select { |_, cell| cell.at_css("[title^='Page gaps flags']") }
+    expect(marked.keys).to eq(["/post/broken"])
+    expect(marked["/post/broken"].at_css("[title^='Page gaps flags']")["title"]).to eq(
+      "Page gaps flags this page: GA misses 80% of its views, against a median of 25% across pages."
+    )
+    link = page.css("#page-comparison ~ p a").find { it.text.squish == "Page gaps" }
+    expect(link["href"]).to eq(consent_page_gap_report_path(from: "2026-10-01", to: "2026-10-11"))
+  end
+
   it "sets each page's counts against the period before, and leaves the changes out with the comparison off" do
     PageView.collection.update_one({"_id" => "/post/a"}, {"$set" => {"countriesByDay.2026-09-01" => {"IN" => 20}}})
     Google::Analytics::Stat.create!(date: Date.new(2026, 9, 1), page_path: "/post/a", views: 15)
