@@ -70,6 +70,25 @@ class PageGap
     flagged.sort_by { |row| [-row.gap, row.slug] }.first(limit)
   end
 
+  # Each page's gap put down to causes by the rules the site's daily snapshot uses, worked out a day at a
+  # time from the page's own tallies so a page reads like the consent report. Only the synced days with the
+  # page's consent split count; a page with none is left out, as its gap can't be pinned on anything.
+  def causes(slugs)
+    seen = analytics_views_by_day
+    PageView.where(:slug.in => slugs.to_a).each_with_object({}) do |page_view, found|
+      days = synced_days.filter_map do |day|
+        next unless page_view.consent_by_day[day]
+
+        snapshot = ConsentSnapshot.compose(ConsentSnapshot::Inputs.new(
+          date: Date.iso8601(day), first_party: page_view.views_by_day[day].to_i, analytics: seen.dig(page_view.slug, day).to_i,
+          states: page_view.consent_by_day[day], ga: page_view.ga_by_day[day], suspects: page_view.suspect_by_day[day]
+        ))
+        snapshot if snapshot.complete?
+      end
+      found[page_view.slug] = ConsentGap.new(days) if days.any?
+    end
+  end
+
   # Only pages GA counted fewer views on, so one it counted more on can't hide views missing elsewhere.
   def missing_total
     rows.sum { |row| [row.gap, 0].max }
@@ -107,6 +126,13 @@ class PageGap
 
   def analytics_views
     @analytics.pages.each_with_object(Hash.new(0)) { |(path, row), totals| totals[slug_of(path)] += row.views.to_i }
+  end
+
+  def analytics_views_by_day
+    rows = Google::Analytics::Stat.where(:date.in => synced_days.map { |day| Date.iso8601(day) }).pluck(:date, :page_path, :views)
+    rows.each_with_object(Hash.new { |totals, slug| totals[slug] = Hash.new(0) }) do |(date, path, views), totals|
+      totals[slug_of(path)][date.to_date.iso8601] += views.to_i
+    end
   end
 
   # The blog names a page without its trailing slash and GA by the address it was loaded at.

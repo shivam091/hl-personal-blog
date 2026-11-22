@@ -88,6 +88,18 @@ RSpec.describe "Consent page gaps", type: :request do
       expect(JSON.parse(rows.first["data-tip"])["rows"].map { |row| row["value"] }).to eq(["100", "10", "90"])
     end
 
+    it "breaks each flagged page's gap into causes, or says it can't" do
+      get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12")
+      expect(Nokogiri::HTML5(response.body).at_css("section[aria-labelledby='flagged-causes']").text).to include("No days with the consent split")
+
+      PageView.collection.update_one({"_id" => "/broken"}, {"$set" => {"consentByDay" => {"2026-10-10" => {"granted" => 50, "denied" => 50}}}})
+      get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      bar = Nokogiri::HTML5(response.body).at_css("section[aria-labelledby='flagged-causes'] [data-tip]")
+      readings = JSON.parse(bar["data-tip"])["rows"].to_h { |row| [row["name"], row["value"]] }
+      expect(readings).to include("Declined" => "50 · 55.56%", "Unexplained" => "40 · 44.44%")
+    end
+
     it "sorts by a column asked for" do
       get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12", sort: "gap", direction: "asc")
 
