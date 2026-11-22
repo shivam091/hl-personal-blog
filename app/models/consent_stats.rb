@@ -6,6 +6,8 @@ class ConsentStats
   # "pending" is a reader the banner was due to ask who hasn't answered, which GA can't see; "default" needs no
   # banner and is counted; "unset" is how views were recorded before the two were told apart.
   STATES = %w[granted denied pending default unset].freeze
+  # Short enough for a chart's key.
+  STATE_NAMES = {"granted" => "Accepted", "denied" => "Declined", "pending" => "Banner due", "default" => "No banner needed", "unset" => "Unknown"}.freeze
 
   # "changed" is on top of the granted or denied it led to, so it is never added to
   # them as a fourth answer.

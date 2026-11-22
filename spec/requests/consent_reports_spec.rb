@@ -37,6 +37,8 @@ RSpec.describe "Consent report", type: :request do
 
       expect(card("banner-by-country")).to include("GB", "10", "37.5%")
       expect(card("views-by-consent")).to include("Declined", "30", "30.0%")
+      donut = Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=views-by-consent] svg[aria-label=\"Views by the reader's consent state\"]")
+      expect(donut.css("path").size).to eq(3)
       expect(response.body).not_to include("Explained by declines")
     end
 

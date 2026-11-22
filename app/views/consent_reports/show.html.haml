@@ -121,12 +121,17 @@
       - if consent.tracked_views.zero?
         %p{class: empty_note_class} No views split by consent in #{@period}.
       - else
-        = report_table([report_th("State"), report_th("Views", :right), report_th("Share", :right)]) do
-          - {"granted" => "Accepted", "denied" => "Declined", "pending" => "Banner due, not yet answered", "default" => "No banner needed", "unset" => "Unknown (before pending/default split)"}.each do |state, label|
-            %tr{class: table_row_class}
-              %td{class: title_cell_class}= label
-              %td{class: cell_class}= number_with_delimiter(states[state])
-              %td{class: cell_class}= number_to_percentage(states[state] * 100.0 / consent.tracked_views, precision: 1)
+        %div{class: "px-4 py-3"}
+          = donut_chart(ConsentStats::STATE_NAMES.to_h { |state, name| [name, states[state]] }, label: "Views by the reader's consent state", unit: "view",
+            empty: "No views split by consent in #{@period}.")
+        %details{class: "border-t border-slate-100"}
+          %summary{class: "cursor-pointer px-4 py-2 text-xs font-medium text-slate-500 hover:text-slate-900"} Every state, with what it means
+          = report_table([report_th("State"), report_th("Views", :right), report_th("Share", :right)]) do
+            - {"granted" => "Accepted", "denied" => "Declined", "pending" => "Banner due, not yet answered", "default" => "No banner needed", "unset" => "Unknown (before pending/default split)"}.each do |state, label|
+              %tr{class: table_row_class}
+                %td{class: title_cell_class}= label
+                %td{class: cell_class}= number_with_delimiter(states[state])
+                %td{class: cell_class}= number_to_percentage(states[state] * 100.0 / consent.tracked_views, precision: 1)
     = render layout: "shared/card", locals: {id: "banner-by-country", title: "Banner by country", icon: "globe"} do
       - rows = consent.countries
       - if rows.empty?
