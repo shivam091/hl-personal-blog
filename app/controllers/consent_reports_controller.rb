@@ -8,6 +8,8 @@ class ConsentReportsController < ApplicationController
     @consent = ConsentStats.new(@period, country: @stats.country)
     @analytics = Google::Analytics::Summary.new(@period)
     @gap = @consent.gap(first_party_views, analytics_views) if @analytics.any?
+    @decomposition = @consent.decomposition(first_party_views, analytics_views) if @analytics.any?
+    @health = @consent.banner_health
 
     respond_to do |format|
       format.html

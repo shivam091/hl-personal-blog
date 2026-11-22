@@ -8,16 +8,22 @@
     %h1{class: page_title_class} Consent report
     %p{class: subtitle_class}
       What readers answered the cookie banner, and how much of the gap between page views and GA's it explains.
-  = link_to list_url(@period, @filtering, format: :csv),
-    class: outline_button_class do
-    = icon("download", size: 14)
-    Export CSV
+  %div{class: "flex flex-wrap gap-2"}
+    = link_to consent_page_gap_report_path(**@period.query), class: outline_button_class do
+      = icon("table", size: 14)
+      Page gaps
+    = link_to list_url(@period, @filtering, format: :csv),
+      class: outline_button_class do
+      = icon("download", size: 14)
+      Export CSV
 
 = render "shared/stats_filters", stats: @stats, period: @period, filtering: @filtering, keep: []
 
 - notes = []
 - notes << "The banner has been recorded since #{l(consent.recording_since)}; earlier days show none." if consent.recording_since && consent.recording_since > @period.from
 - notes << "Views have been split by consent since #{l(consent.views_tracked_since)}; earlier days are left out of the views below." if consent.views_tracked_since && consent.views_tracked_since > @period.from
+- notes << "Whether GA's tag loaded has been recorded since #{l(consent.ga_first_day)}; the causes below that depend on it leave out earlier days." if consent.ga_first_day && consent.ga_first_day > @period.from
+- notes << "Suspected automation has been recorded since #{l(consent.suspects_first_day)}; earlier days can't show datacentre traffic." if consent.suspects_first_day && consent.suspects_first_day > @period.from
 - notes << "Consent isn't split by country on views, so those figures cover every country." if @stats.country
 = render "shared/period_notes", notes: notes
 
@@ -46,6 +52,66 @@
       change: (number_to_percentage(@gap.explained_share * 100, precision: 1) + " of the gap" if @gap.explained_share),
       hint: "Views from readers who declined, up to the size of the gap. The rest is ad blockers, bots and GA's own filtering."
 
+- if @decomposition
+  - decomposition = @decomposition
+  - if decomposition.any?
+    = render layout: "shared/card", locals: {id: "gap-causes", title: "Where the gap goes", icon: "split"} do
+      %p{class: "px-4 pt-3 text-sm text-slate-600"}
+        Our views minus GA's over the #{pluralize(decomposition.days.size, "day")} with the consent split recorded, put down to what is known about each reader.
+        Blocked, undetected and datacentre views count only for readers GA could otherwise have seen, so a declined reader isn't counted twice.
+      = report_table([report_th("Cause"), report_th("Views", :right), report_th("Share of gap", :right)]) do
+        - ConsentGap::CAUSES.each do |cause, label|
+          %tr{class: table_row_class}
+            %td{class: "py-1.5 pr-3"}= label
+            %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(decomposition.sum(cause))
+            %td{class: "py-1.5 pl-3 text-right tabular-nums"}= decomposition.share_of_gap(cause) ? number_to_percentage(decomposition.share_of_gap(cause) * 100, precision: 1) : "—"
+        %tr{class: [table_row_class, "font-semibold"]}
+          %td{class: "py-1.5 pr-3"} Unexplained
+          %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(decomposition.remainder)
+          %td{class: "py-1.5 pl-3 text-right tabular-nums"}= decomposition.remainder_share ? number_to_percentage(decomposition.remainder_share * 100, precision: 1) : "—"
+      %p{class: "px-4 pb-3 text-xs text-slate-500"}
+        - if decomposition.over_counted?
+          The causes found add up to more than the gap, so GA is counting more views than they leave room for. Treat the unexplained figure as zero.
+        - else
+          What is left is bots our rough check missed, GA filtering bots it knows, and views lost to timing.
+        - missing = decomposition.days_missing(:ga_recorded)
+        - if missing.positive?
+          #{pluralize(missing, "day")} had no record of whether the tag loaded, so blocked and undetected views read lower than they were.
+    - if decomposition.days.any?
+      = render layout: "shared/card", locals: {id: "unexplained-by-day", title: "Unexplained gap, by day", icon: "trending-up"} do
+        = report_table([report_th("Date"), report_th("Gap", :right), report_th("Declined", :right), report_th("Pending", :right), report_th("Blocked", :right),
+          report_th("Undetected", :right), report_th("Datacentre", :right), report_th("Unexplained", :right)]) do
+          - decomposition.days.first(31).each do |day|
+            %tr{class: table_row_class}
+              %td{class: "py-1.5 pr-3 whitespace-nowrap"}= day_label(day.day)
+              %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(day.gap)
+              - ConsentGap::CAUSES.each_key do |cause|
+                %td{class: "py-1.5 px-3 text-right tabular-nums"}= day.public_send(cause).nil? ? "—" : number_with_delimiter(day.public_send(cause))
+              %td{class: "py-1.5 pl-3 text-right tabular-nums"}= number_with_delimiter(day.remainder)
+- elsif @analytics.any? == false && (consent.any? || states.any?)
+  %p{class: "mb-6 text-sm text-slate-500"} GA hasn't synced, so the gap can't be put down to causes yet.
+
+- health = @health
+- if health.shown.positive? || health.pending_views.positive? || health.unknown_country_views.positive?
+  = render layout: "shared/card", locals: {id: "banner-health", title: "Banner health", icon: "heart-pulse"} do
+    = report_table([report_th("Check"), report_th("Figure", :right), report_th("What it means")]) do
+      %tr{class: table_row_class}
+        %td{class: "py-1.5 pr-3"} Banners shown
+        %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(health.shown)
+        %td{class: "py-1.5 pl-3 text-slate-600"} One per browser session.
+      %tr{class: table_row_class}
+        %td{class: "py-1.5 pr-3"} Views while the banner was due
+        %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(health.pending_views)
+        %td{class: "py-1.5 pl-3 text-slate-600"} From readers in the EEA, UK or Switzerland who hadn't answered.
+      %tr{class: table_row_class}
+        %td{class: "py-1.5 pr-3"} Such views per banner
+        %td{class: "py-1.5 px-3 text-right tabular-nums"}= health.pending_per_banner ? number_with_delimiter(health.pending_per_banner.round(1)) : "—"
+        %td{class: "py-1.5 pl-3 text-slate-600"} A few pages per session is normal; a figure that keeps climbing means the banner stopped appearing.
+      %tr{class: table_row_class}
+        %td{class: "py-1.5 pr-3"} Views with no country
+        %td{class: "py-1.5 px-3 text-right tabular-nums"}= health.unknown_country_share ? number_to_percentage(health.unknown_country_share * 100, precision: 1) : "—"
+        %td{class: "py-1.5 pl-3 text-slate-600"} These readers were never asked, as the banner needs a country, so a high share is a gap in consent too.
+
 - if consent.any? || states.any?
   %div{class: split_grid_class}
     = render layout: "shared/card", locals: {id: "views-by-consent", title: "Views by consent state", icon: "eye"} do
@@ -53,7 +119,7 @@
         %p{class: empty_note_class} No views split by consent in #{@period}.
       - else
         = report_table([report_th("State"), report_th("Views", :right), report_th("Share", :right)]) do
-          - {"granted" => "Accepted", "denied" => "Declined", "unset" => "Not asked or not answered"}.each do |state, label|
+          - {"granted" => "Accepted", "denied" => "Declined", "pending" => "Banner due, not yet answered", "default" => "No banner needed", "unset" => "Unknown (before pending/default split)"}.each do |state, label|
             %tr{class: table_row_class}
               %td{class: "py-1.5 pr-3"}= label
               %td{class: "py-1.5 px-3 text-right tabular-nums"}= number_with_delimiter(states[state])
