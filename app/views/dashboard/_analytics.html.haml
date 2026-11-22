@@ -1,6 +1,8 @@
 - dates = (analytics.period.from..analytics.period.to).to_a
 - views = analytics.views
 - sessions = analytics.sessions
+-# Snapshots are kept for the whole site, so a country's GA views have no share to set them against.
+- ga_share = GaShare.new(analytics.period) unless analytics.country
 = render layout: "shared/card", locals: {id: "analytics", title: "Google Analytics", icon: "bar-chart",
   actions: (chart_granularity_picker(granularity, "Views", "analytics-by") if analytics.any?)} do
   - if !analytics.any?
@@ -30,10 +32,21 @@
         hint: "Engagement time added up over every page, divided by sessions. Every country.",
         change: metric_change(analytics.engagement_seconds_per_session, (analytics.engagement_seconds_per_session(before) if before_sessions), DashboardHelper::HIGHER_IS_BETTER, format: :duration),
         compared_with: analytics.period.previous
+    - if ga_share&.any?
+      %p{class: "px-4 pt-3 text-xs text-slate-500"}
+        = link_to consent_report_path(**@period.query), class: "font-medium text-slate-700 hover:text-slate-900 hover:underline",
+          title: "Usual is the median of GA's daily share over #{ga_share.usual_basis}." do
+          GA sees #{number_to_percentage(ga_share.share * 100, precision: 0)} of our views (usual #{number_to_percentage(ga_share.usual * 100, precision: 0)})
     %div{class: "px-4 py-3"}
       %p{class: "mb-1 text-xs font-medium text-slate-500"} Views per #{granularity.by}
-      = line_chart(granularity.dates(dates), [ChartsHelper::Series.new(name: "Blog's own count", values: granularity.sums(dates, @stats.daily(:views))),
-        ChartsHelper::Series.new(name: "Google Analytics", values: granularity.sums(dates, analytics.daily_views), dashed: true)],
+      - own = granularity.sums(dates, @stats.daily(:views))
+      - lines = [ChartsHelper::Series.new(name: "Blog's own count", values: own),
+        ChartsHelper::Series.new(name: "Google Analytics", values: granularity.sums(dates, analytics.daily_views), dashed: true)]
+      -# Faint and dotted, as it's a guide to read GA's line against rather than a figure of its own.
+      - if ga_share&.usual
+        - lines << ChartsHelper::Series.new(name: "Expected GA (our views × usual #{number_to_percentage(ga_share.usual * 100, precision: 0)})",
+          values: ga_share.expected(own), dotted: true, color: "#cbd5e1")
+      = line_chart(granularity.dates(dates), lines,
         y_title: "Views", label: "The blog's own views against Google Analytics views, per #{granularity.by}", per: granularity.per)
   %p{class: "flex justify-end gap-4 border-t border-slate-200 px-4 py-2 text-xs"}
     = link_to google_analytics_acquisition_breakdown_path("referrers", **@period.query),
