@@ -20,6 +20,11 @@
         = measure.label
         - unless measure.settled
           %span{style: "font-weight:400;color:#94a3b8;"} (so far)
+        - if measure.label == "Analytics views"
+          - share = report.ga_share
+          %br
+          %span{style: "font-size:12px;font-weight:400;color:#64748b;"}
+            GA's share of its views: #{share ? number_to_percentage(share * 100, precision: 0) : "—"}
       %td{style: "padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap;color:#{verdict_colors.fetch(measure.verdict, "#0f172a")};"}
         = number_with_delimiter(measure.value)
         - if measure.ratio
@@ -29,5 +34,7 @@
 %p{style: "margin:0 0 8px;font-size:13px;line-height:1.6;color:#64748b;"}
   Typical is the median of earlier entries over their own first #{report.age} days. Google fills in recent days late, so a figure
   marked so far may still grow.
+  GA's share is its views against the blog's own on the days GA has synced: GA misses readers who decline or block it, so a
+  low share means Analytics views undercount this entry, not that it was read less.
 
 = render "mailers/button", url: page_view_url(report.path.chomp("/").presence || "/"), label: "Open in the admin →"
