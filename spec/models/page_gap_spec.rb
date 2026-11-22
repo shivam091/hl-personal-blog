@@ -45,6 +45,11 @@ RSpec.describe PageGap, type: :model do
     expect(gap.flagged.map(&:slug)).to eq(["/broken"])
   end
 
+  it "judges only the pages busy enough, flagging from the median plus the margin" do
+    expect(gap.judged.map(&:slug)).to contain_exactly("/a", "/b", "/c", "/d", "/e", "/broken")
+    expect(gap.threshold).to be_within(1e-9).of(0.4)
+  end
+
   it "gives no share to a page too quiet to judge or one GA counted alone" do
     expect(gap.rows.find { |row| row.slug == "/quiet" }.percent).to be_nil
     expect(gap.rows.find { |row| row.slug == "/only-ga" }).to have_attributes(first_party: 0, percent: nil)

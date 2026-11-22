@@ -36,6 +36,13 @@
       #{PageGap::MIN_VIEWS} views.
       - if flagged.any?
         #{pluralize(flagged.size, "page")} flagged.
+  - if page_gap.judged.any?
+    = render layout: "shared/card", locals: {id: "gap-against-views", title: "Gap against views", icon: "target", class: "mb-6"} do
+      %p{class: lead_note_class}
+        Each page with #{PageGap::MIN_VIEWS}+ views, by how many we counted and the share of them GA missed. The solid line is the
+        median page; amber pages sit on or above the dashed line, #{(PageGap::MARGIN * 100).round} points over it. Click a page for its statistics.
+      %div{class: "px-4 py-3"}
+        = page_gap_scatter(page_gap)
   %div{id: "page-gap-table", class: "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"}
     %div{class: "relative overflow-x-auto"}
       %table{class: "w-full border-collapse text-left text-sm"}

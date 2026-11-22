@@ -52,6 +52,16 @@ class PageGap
     rows.select(&:flagged)
   end
 
+  # The pages busy enough to have a share lost, which are the only ones the median is drawn from.
+  def judged
+    rows.select(&:percent)
+  end
+
+  # Worked out once, so the chart's dashed line and the flag can't disagree; nil without a median.
+  def threshold
+    median_percent + MARGIN if median_percent
+  end
+
   def any?
     @analytics.any?
   end

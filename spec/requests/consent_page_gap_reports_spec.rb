@@ -59,6 +59,18 @@ RSpec.describe "Consent page gaps", type: :request do
       expect(text).not_to include("loses -")
     end
 
+    it "plots each judged page against its views, amber when flagged, linking to its statistics" do
+      get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      dots = Nokogiri::HTML5(response.body).css("section[aria-labelledby='gap-against-views'] span[data-tip]")
+      tips = dots.to_h { |dot| [JSON.parse(dot["data-tip"])["title"], [dot["style"], JSON.parse(dot["data-tip"])]] }
+      expect(tips.keys).to contain_exactly("/a", "/b", "/c", "/d", "/e", "/broken")
+      style, tip = tips["/broken"]
+      expect(style).to include(PageGapsHelper::FLAGGED_COLOR)
+      expect(tip["href"]).to eq(page_view_path("/broken"))
+      expect(tip["rows"].map { |row| row["value"] }).to eq(["100", "10", "90.0%"])
+    end
+
     it "sorts by a column asked for" do
       get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12", sort: "gap", direction: "asc")
 
