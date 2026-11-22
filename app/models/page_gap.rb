@@ -10,6 +10,8 @@ class PageGap
   # In points of its share lost above the site's median, which is where a page stops being ordinary: readers
   # who decline or block lose every page alike, so a page well above is losing views for a reason of its own.
   MARGIN = 0.2
+  # Enough pages to show where the missing views go without the chart running down the page.
+  TOP_MISSING = 15
 
   Row = Struct.new(:slug, :first_party, :analytics, :flagged, keyword_init: true) do
     def gap
@@ -55,6 +57,17 @@ class PageGap
   # The pages busy enough to have a share lost, which are the only ones the median is drawn from.
   def judged
     rows.select(&:percent)
+  end
+
+  # Most missing first, whatever their share, since a busy page losing a little can cost more views than a
+  # quiet one losing most.
+  def missing(limit = TOP_MISSING)
+    rows.select { |row| row.gap.positive? }.sort_by { |row| [-row.gap, row.slug] }.first(limit)
+  end
+
+  # Only pages GA counted fewer views on, so one it counted more on can't hide views missing elsewhere.
+  def missing_total
+    rows.sum { |row| [row.gap, 0].max }
   end
 
   # Worked out once, so the chart's dashed line and the flag can't disagree; nil without a median.
