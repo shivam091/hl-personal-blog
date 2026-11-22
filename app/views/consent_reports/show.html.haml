@@ -27,29 +27,47 @@
 - notes << "Consent isn't split by country on views, so those figures cover every country." if @stats.country
 = render "shared/period_notes", notes: notes
 
+- before = @consent_before&.total
+- gap_before = @gap_before
+- higher, lower = DashboardHelper::HIGHER_IS_BETTER, DashboardHelper::LOWER_IS_BETTER
+-# The change leads, as it's what a comparison is opened for; what the figure is a share of follows as context.
+- lines = ->(*parts) { safe_join(parts.compact, tag.span(" · ", class: "text-slate-400")) if parts.compact.any? }
 %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
-  = render "dashboard/tile", label: "Banner shown", tile_icon: "eye", value: number_with_delimiter(total.shown), change: nil,
+  = render "dashboard/tile", label: "Banner shown", tile_icon: "eye", value: number_with_delimiter(total.shown),
+    change: metric_change(total.shown, before&.shown, higher), compared_with: @previous_name,
     hint: "Times the banner appeared, once per browser session. Only readers in the EEA, UK and Switzerland are asked."
   = render "dashboard/tile", label: "Accepted", tile_icon: "check", value: number_with_delimiter(total.granted),
-    change: (number_to_percentage(total.acceptance_rate * 100, precision: 1) + " of answers" if total.acceptance_rate),
-    hint: "Readers who chose Accept."
-  = render "dashboard/tile", label: "Declined", tile_icon: "x", value: number_with_delimiter(total.denied), change: nil,
+    change: lines.(metric_change(total.granted, before&.granted, higher),
+      (number_to_percentage(total.acceptance_rate * 100, precision: 1) + " of answers" if total.acceptance_rate)),
+    compared_with: @previous_name, hint: "Readers who chose Accept."
+  = render "dashboard/tile", label: "Declined", tile_icon: "x", value: number_with_delimiter(total.denied),
+    change: metric_change(total.denied, before&.denied, lower), compared_with: @previous_name,
     hint: "Readers who chose Decline. GA counts their views only as unnamed, unmodelled pings."
   = render "dashboard/tile", label: "No answer", tile_icon: "clock", value: number_with_delimiter(total.no_answer),
-    change: ("#{number_with_delimiter(total.changed)} changed their mind" if total.changed.positive?),
-    hint: "Banners shown that were closed or left without a choice. Analytics stays denied for them."
+    change: lines.(metric_change(total.no_answer, before&.no_answer, lower),
+      ("#{number_with_delimiter(total.changed)} changed their mind" if total.changed.positive?)),
+    compared_with: @previous_name, hint: "Banners shown that were closed or left without a choice. Analytics stays denied for them."
 
 - if @gap
   %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
-    = render "dashboard/tile", label: "Our views", tile_icon: "eye", value: number_with_delimiter(@gap.first_party), change: nil,
+    = render "dashboard/tile", label: "Our views", tile_icon: "eye", value: number_with_delimiter(@gap.first_party),
+      change: metric_change(@gap.first_party, gap_before&.first_party, higher), compared_with: @previous_name,
       hint: "Page views counted by the blog itself on the days GA has synced and consent was recorded."
-    = render "dashboard/tile", label: "GA views", tile_icon: "bar-chart", value: number_with_delimiter(@gap.analytics), change: nil,
+    = render "dashboard/tile", label: "GA views", tile_icon: "bar-chart", value: number_with_delimiter(@gap.analytics),
+      change: metric_change(@gap.analytics, gap_before&.analytics, higher), compared_with: @previous_name,
       hint: "The same days in Google Analytics."
+    -# A gap at or below zero, GA counting as many as us or more, has no percentage change to read from it, so the earlier figure is given instead.
+    - was = ->(current, earlier, metric) do
+      - next metric_change(current, earlier, metric) unless gap_before && !gap_before.difference.positive?
+      - tag.span("Was #{number_with_delimiter(earlier)}", class: "text-slate-500", title: "GA counted at least as many views as we did in #{@previous_name}")
     = render "dashboard/tile", label: "Gap", tile_icon: "alert-triangle", value: number_with_delimiter(@gap.difference),
-      change: (number_to_percentage(@gap.percent * 100, precision: 1) + " of our views" if @gap.percent),
-      hint: "Our views minus GA's."
+      change: lines.(was.(@gap.difference, gap_before&.difference, lower),
+        (number_to_percentage(@gap.percent * 100, precision: 1) + " of our views" if @gap.percent)),
+      compared_with: @previous_name, hint: "Our views minus GA's."
     = render "dashboard/tile", label: "Explained by declines", tile_icon: "cookie", value: number_with_delimiter(@gap.explained),
-      change: (number_to_percentage(@gap.explained_share * 100, precision: 1) + " of the gap" if @gap.explained_share),
+      change: lines.(was.(@gap.explained, gap_before&.explained, higher),
+        (number_to_percentage(@gap.explained_share * 100, precision: 1) + " of the gap" if @gap.explained_share)),
+      compared_with: @previous_name,
       hint: "Views from readers who declined, up to the size of the gap. The rest is ad blockers, bots and GA's own filtering."
 
 - if @decomposition
@@ -77,7 +95,8 @@
         - missing = decomposition.days_missing(:ga_recorded)
         - if missing.positive?
           #{pluralize(missing, "day")} had no record of whether the tag loaded, so blocked and undetected views read lower than they were.
-    = render "consent_reports/causes_over_time", decomposition: decomposition, granularity: @granularity, period: @period
+    = render "consent_reports/causes_over_time", decomposition: decomposition, granularity: @granularity, period: @period,
+      before: @decomposition_before, previous: @previous, previous_name: @previous_name
     - if decomposition.days.any?
       = render layout: "shared/card", locals: {id: "unexplained-by-day", title: "Unexplained gap, by day", icon: "trending-up", class: "mb-6"} do
         = report_table([report_th("Date"), report_th("Gap", :right), report_th("Declined", :right), report_th("Pending", :right), report_th("Blocked", :right),
@@ -116,14 +135,15 @@
 - if consent.any? || states.any?
   = render "consent_reports/flag_measures", measures: @flag_measures, period: @period
   %div{class: split_grid_class}
-    = render "consent_reports/banner_funnel", total: total, period: @period
+    = render "consent_reports/banner_funnel", total: total, period: @period, before: before, previous_name: @previous_name
     = render layout: "shared/card", locals: {id: "views-by-consent", title: "Views by consent state", icon: "eye"} do
       - if consent.tracked_views.zero?
         %p{class: empty_note_class} No views split by consent in #{@period}.
       - else
         %div{class: "px-4 py-3"}
-          = donut_chart(ConsentStats::STATE_NAMES.to_h { |state, name| [name, states[state]] }, label: "Views by the reader's consent state", unit: "view",
-            empty: "No views split by consent in #{@period}.")
+          - named = ->(counts) { ConsentStats::STATE_NAMES.to_h { |state, name| [name, counts[state]] } }
+          = donut_chart(named.(states), label: "Views by the reader's consent state", unit: "view", empty: "No views split by consent in #{@period}.")
+          = donut_comparison(named.(states), named.(@states_before), unit: "view", previous_name: @previous_name) if @states_before
         %details{class: "border-t border-slate-100"}
           %summary{class: "cursor-pointer px-4 py-2 text-xs font-medium text-slate-500 hover:text-slate-900"} Every state, with what it means
           = report_table([report_th("State"), report_th("Views", :right), report_th("Share", :right)]) do

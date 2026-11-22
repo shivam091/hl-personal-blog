@@ -67,6 +67,43 @@ RSpec.describe "Consent report", type: :request do
       expect(rows.flatten.map { |row| [row["name"], row["value"]] }).to include(["Our views", "100"], ["GA views", "60"], ["Published", "Post A"], ["GA's share", "60.0%"])
     end
 
+    context "against an earlier period" do
+      before do
+        ConsentChoice.collection.insert_one("_id" => "2026-10-03", "day" => "2026-10-03", "countries" => {"GB" => {"shown" => 5, "granted" => 1, "denied" => 2}})
+        PageView.collection.update_one({"_id" => "/post/a"}, {"$set" => {"consentByDay.2026-10-03" => {"granted" => 10, "denied" => 10}}})
+      end
+
+      def tile(label)
+        Nokogiri::HTML5(response.body).css("dl > div").find { |tile| tile.at_css("dt").text.squish.start_with?(label) }.css("dd").text.squish
+      end
+
+      it "gives each tile its change and sets the funnel and the views by state against the period before" do
+        get consent_report_path(from: "2026-10-08", to: "2026-10-14")
+
+        expect(tile("Banner shown")).to include("100.0%")
+        expect(tile("Accepted")).to include("200.0%", "37.5% of answers")
+        funnel = Nokogiri::HTML5(response.body).css("section[aria-labelledby=banner-funnel] [data-chart-tooltip-target=hit]").map { |hit| JSON.parse(hit["data-tip"]) }
+        expect(funnel.first["rows"].map { |row| row["value"] }).to eq(%w[10 5])
+        expect(card("views-by-consent")).to include("Against 1 Oct, 2026 – 7 Oct, 2026", "10 views")
+      end
+
+      it "leaves the changes out with the comparison off" do
+        get consent_report_path(from: "2026-10-08", to: "2026-10-14", compare: "off")
+
+        expect(tile("Banner shown")).to eq("10")
+        expect(card("views-by-consent")).not_to include("Against")
+      end
+
+      it "sets the banner against another country's but leaves the views, which aren't split by country, without one" do
+        ConsentChoice.collection.update_one({"_id" => "2026-10-10"}, {"$set" => {"countries.DE" => {"shown" => 5, "granted" => 2}}})
+
+        get consent_report_path(from: "2026-10-08", to: "2026-10-14", country: "GB", compare: "country", vs: "DE")
+
+        expect(tile("Banner shown")).to include("100.0%")
+        expect(card("views-by-consent")).not_to include("Against")
+      end
+    end
+
     it "exports the funnel as CSV" do
       get consent_report_path(format: :csv)
 

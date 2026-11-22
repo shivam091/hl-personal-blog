@@ -8,10 +8,13 @@
 - remainder = granularity.sums(dates, daily.(:remainder))
 - series << ChartsHelper::Series.new(name: "Unexplained", values: remainder, color: ChartsHelper::SHARE_OTHER_COLOR)
 - over = remainder.count { |value| value&.negative? }
+-# The earlier period's whole gap, as its split by cause would need a second set of bars.
+- before = local_assigns[:before]
+- earlier = before && aligned(granularity.sums_for(previous, (previous.from..previous.to).map { |date| before.by_date[date]&.gap }), keys.size)
 = render layout: "shared/card", locals: {id: "gap-causes-over-time", title: "Gap causes over time", icon: "bar-chart", class: "mb-6",
   actions: chart_granularity_picker(granularity, "Gap causes", "causes-by")} do
   %div{class: "px-4 py-3"}
-    = stacked_chart(keys, series, y_title: "Views", per: granularity.per, total_name: "Gap",
+    = stacked_chart(keys, series, y_title: "Views", per: granularity.per, total_name: "Gap", previous: earlier, previous_name: (local_assigns[:previous_name] if earlier),
       label: "Our views minus GA's per #{granularity.by}, split by what each missing view is put down to")
   %p{class: footnote_class}
     - left_out = dates.size - by_date.size
