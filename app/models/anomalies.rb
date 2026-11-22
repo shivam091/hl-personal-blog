@@ -20,6 +20,22 @@ class Anomalies
   MIN_CALLS = 10
   CALL_FAILURE_RATE = 0.2
 
+  # Past days a consent figure is judged against, and the fewest that make a usual: a week or two of
+  # settled snapshots, since a tag or banner breaking shows as a step change, not a drift.
+  CONSENT_BASELINE_DAYS = 14
+  MIN_CONSENT_BASELINE = 5
+  # Yesterday's GA-to-ours ratio below this share of the usual means GA lost views it used to keep.
+  GA_RATIO_DROP = 0.7
+  # In percentage points off the usual share of readers whose tag loaded, as a blocker list or a broken
+  # script moves it by tens of points while ordinary days wander by a few.
+  LOADED_SHARE_DROP = 0.15
+  # Banners shown per pending view, below this share of the usual, means the banner has stopped appearing.
+  BANNER_RATE_DROP = 0.4
+  # In points above the usual share of banners left without an answer.
+  NO_ANSWER_JUMP = 0.25
+  # Banners a day must show before its answer rate says anything.
+  MIN_BANNERS = 20
+
   Flag = Struct.new(:level, :icon, :title, :detail, :path, keyword_init: true)
 
   def initialize(today: Date.current)
@@ -27,7 +43,7 @@ class Anomalies
   end
 
   def flags
-    @flags ||= [views_flag, search_flag, ai_flag, *sync_flags, *service_flags, server_errors_flag, link_safety_flag].compact
+    @flags ||= [views_flag, search_flag, ai_flag, *consent_flags, *sync_flags, *service_flags, server_errors_flag, link_safety_flag].compact
   end
 
   def any?
@@ -63,6 +79,64 @@ class Anomalies
       Flag.new(level: :warning, icon: "arrow-down", title: "Views dropped yesterday",
         detail: "#{latest} views against a usual #{usual.round} on a #{weekday}.", path: [:page_views_path, {from: yesterday.iso8601, to: yesterday.iso8601}])
     end
+  end
+
+  # Yesterday's reconciliation against the settled days before it, so a deploy that broke the tag or the banner
+  # is flagged the next morning; none without enough snapshots to call anything usual, or enough views on the day.
+  def consent_flags
+    usual = ConsentSnapshot.where(:day.gte => (yesterday - CONSENT_BASELINE_DAYS).iso8601, :day.lt => yesterday.iso8601).to_a
+    return [] if usual.size < MIN_CONSENT_BASELINE
+
+    latest = ConsentSnapshot.where(day: yesterday.iso8601).first || ConsentSnapshot.compose(ConsentStats.inputs_for(yesterday, today: @today))
+    path = [:consent_report_path, {from: yesterday.iso8601, to: yesterday.iso8601}]
+    [ga_ratio_flag(latest, usual, path), loaded_share_flag(latest, usual, path), banner_flag(latest, usual, path), no_answer_flag(latest, usual, path)].compact
+  end
+
+  def ga_ratio_flag(latest, usual, path)
+    before = median(usual.filter_map(&:ga_ratio))
+    return unless latest.ga_ratio && before && latest.ga_ratio < before * GA_RATIO_DROP
+
+    Flag.new(level: :warning, icon: "alert-triangle", title: "GA is missing more views than usual",
+      detail: "GA counted #{percent(latest.ga_ratio)} of our views yesterday, against a usual #{percent(before)}.", path: path)
+  end
+
+  def loaded_share_flag(latest, usual, path)
+    before = median(usual.filter_map(&:loaded_share))
+    return unless latest.loaded_share && before && latest.loaded_share < before - LOADED_SHARE_DROP
+
+    Flag.new(level: :warning, icon: "alert-triangle", title: "The GA tag is loading less often",
+      detail: "It loaded for #{percent(latest.loaded_share)} of readers yesterday, against a usual #{percent(before)}.", path: path)
+  end
+
+  def banner_flag(latest, usual, path)
+    before = median(usual.filter_map(&:banner_per_pending))
+    return unless latest.banner_per_pending && before && latest.banner_per_pending < before * BANNER_RATE_DROP
+
+    Flag.new(level: :warning, icon: "cookie", title: "The cookie banner is showing less",
+      detail: "#{latest.shown} banners for #{latest.pending} views from readers it should ask yesterday; usually #{format("%.2f", before)} banners per such view, yesterday #{format("%.2f", latest.banner_per_pending)}.", path: path)
+  end
+
+  def no_answer_flag(latest, usual, path)
+    return unless latest.shown >= MIN_BANNERS
+
+    before = median(usual.select { |day| day.shown >= MIN_BANNERS }.map { |day| day.no_answer.fdiv(day.shown) })
+    share = latest.no_answer.fdiv(latest.shown)
+    return unless before && share > before + NO_ANSWER_JUMP
+
+    Flag.new(level: :warning, icon: "cookie", title: "More banners are going unanswered",
+      detail: "#{percent(share)} of banners got no answer yesterday, against a usual #{percent(before)}.", path: path)
+  end
+
+  def median(values)
+    return if values.size < MIN_CONSENT_BASELINE
+
+    sorted = values.sort
+    middle = sorted.size / 2
+    sorted.size.odd? ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2.0
+  end
+
+  def percent(value)
+    "#{(value * 100).round}%"
   end
 
   # The latest uploaded week against the week before, both whole, since

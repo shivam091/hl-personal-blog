@@ -101,4 +101,72 @@ RSpec.describe Anomalies do
     expect(titles).to eq(["Search Console is failing", "Server errors", "Unsafe outbound links"])
     expect(anomalies.flags.second.detail).to eq("1 request failed with a 5xx status in the last 24 hours.")
   end
+
+  describe "consent flags" do
+    let(:usual) { {ga_ratio: 0.8, loaded_share: 0.9, banner_per_pending: 1.0, shown: 40, no_answer: 10, first_party: 200} }
+
+    def settled(days: 6, **attributes)
+      days.times { |n| ConsentSnapshot.create!(usual.merge(attributes).merge(day: (Date.new(2026, 10, 5) + n).iso8601)) }
+    end
+
+    def yesterday(**attributes)
+      ConsentSnapshot.create!(usual.merge(attributes).merge(day: "2026-10-11"))
+    end
+
+    it "flags nothing on an ordinary day" do
+      settled
+      yesterday(ga_ratio: 0.75, loaded_share: 0.85, no_answer: 14)
+
+      expect(titles).to be_empty
+    end
+
+    it "says nothing without enough settled days to call anything usual" do
+      settled(days: 4)
+      yesterday(ga_ratio: 0.2)
+
+      expect(titles).to be_empty
+    end
+
+    it "flags GA suddenly missing more of our views" do
+      settled
+      yesterday(ga_ratio: 0.5)
+
+      expect(titles).to eq(["GA is missing more views than usual"])
+      expect(anomalies.flags.first.detail).to eq("GA counted 50% of our views yesterday, against a usual 80%.")
+      expect(anomalies.flags.first.path.last).to eq(from: "2026-10-11", to: "2026-10-11")
+    end
+
+    it "flags the tag loading for fewer readers" do
+      settled
+      yesterday(loaded_share: 0.6)
+
+      expect(titles).to eq(["The GA tag is loading less often"])
+    end
+
+    it "flags the banner showing far less for the readers it should ask" do
+      settled
+      yesterday(banner_per_pending: 0.2, shown: 10)
+
+      expect(titles).to eq(["The cookie banner is showing less"])
+    end
+
+    it "flags a jump in banners left unanswered, but not on a handful of banners" do
+      settled
+      yesterday(no_answer: 38)
+      expect(titles).to eq(["More banners are going unanswered"])
+
+      ConsentSnapshot.where(day: "2026-10-11").delete_all
+      yesterday(shown: 10, no_answer: 10)
+      expect(described_class.new(today: today).flags.map(&:title)).to be_empty
+    end
+
+    it "judges a day not snapshotted yet from the live data" do
+      settled
+      PageView.collection.insert_one("_id" => "/a", "slug" => "/a", "countriesByDay" => {"2026-10-11" => {"IN" => 100}},
+        "consentByDay" => {"2026-10-11" => {"granted" => 100}})
+      Google::Analytics::Stat.create!(date: Date.new(2026, 10, 11), page_path: "/a", views: 40)
+
+      expect(titles).to include("GA is missing more views than usual")
+    end
+  end
 end
