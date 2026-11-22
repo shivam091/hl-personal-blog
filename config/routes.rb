@@ -39,7 +39,8 @@ Rails.application.routes.draw do
     resource :month_and_year_review_report, only: :show, path: "month-and-year-review"
     resource :data_quality_report, only: :show, path: "data-quality"
     resource :consent_report, only: :show, path: "consent"
-    resource :consent_page_gap_report, only: :show, path: "consent-pages"
+    # Under the consent report so it is the one named in the breadcrumb and menus.
+    resource :consent_page_gap_report, only: :show, path: "consent/pages"
     resource :content_decay_report, only: :show, path: "content-decay"
     resource :topic_gap_report, only: :show, path: "topic-gaps"
   end
