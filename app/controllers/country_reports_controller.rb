@@ -12,6 +12,8 @@ class CountryReportsController < ApplicationController
     "messages" => "desc",
     "search_clicks" => "desc",
     "analytics_views" => "desc",
+    "banners" => "desc",
+    "accept_rate" => "desc",
     "country" => "asc"
   }.freeze
 
@@ -20,6 +22,7 @@ class CountryReportsController < ApplicationController
     load_google_summaries
     extras = funnel_extras
     @extras = extras.keys
+    @banners = CountryBanners.new(@period)
     @sorting = Sorting.new(params, columns: SORT_COLUMNS, tiebreaker: :country)
     funnel = @stats.funnel(extras)
     @rows = sorted(funnel.select { |row| @stats.country.nil? || row.country == @stats.country })
@@ -29,7 +32,7 @@ class CountryReportsController < ApplicationController
     respond_to do |format|
       format.html
       format.csv do
-        send_csv BlogStats::FunnelRow.to_csv(@rows, ai: @ai, previous: @previous),
+        send_csv BlogStats::FunnelRow.to_csv(@rows, ai: @ai, previous: @previous, banners: @banners),
                  filename: "countries-#{@period.from.iso8601}-to-#{@period.to.iso8601}.csv",
                  detail: "Countries, #{@period}"
       end
@@ -71,10 +74,19 @@ class CountryReportsController < ApplicationController
   # Rows without a rate (too few views) sort last either way, so a noisy
   # 100% never tops the list.
   def sorted(rows)
-    column = @sorting.column.to_sym
-    with_value, without = rows.partition { |row| !row.public_send(column).nil? }
-    with_value = with_value.sort_by { |row| [row.public_send(column), row.country] }
+    value = sort_value
+    with_value, without = rows.partition { |row| !value.(row).nil? }
+    with_value = with_value.sort_by { |row| [value.(row), row.country] }
     with_value = with_value.reverse if @sorting.direction == "desc"
     with_value + without.sort_by(&:country)
+  end
+
+  # The banner's figures aren't part of the funnel, so they're looked up by country.
+  def sort_value
+    case @sorting.column
+    when "banners" then ->(row) { @banners.shown(row.country) }
+    when "accept_rate" then ->(row) { @banners.acceptance_rate(row.country) }
+    else ->(row) { row.public_send(@sorting.column) }
+    end
   end
 end

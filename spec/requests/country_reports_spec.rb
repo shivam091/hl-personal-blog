@@ -100,7 +100,7 @@ RSpec.describe "Country report", type: :request do
     expect(response.media_type).to eq("text/csv")
     rows = CSV.parse(response.body)
     expect(rows.first).to eq(BlogStats::FUNNEL_CSV_HEADERS)
-    expect(rows.second).to eq(["IN", "200 (new)", "4 (new)", "0.02", "0 (–)", "0.0", "0 (–)", nil, nil])
+    expect(rows.second).to eq(["IN", "200 (new)", "4 (new)", "0.02", "0 (–)", "0.0", "0 (–)", nil, nil, nil, nil])
     expect(ExportRequest.count).to eq(1)
   end
 
@@ -141,5 +141,53 @@ RSpec.describe "Country report", type: :request do
 
     get country_report_path(compare: "off")
     expect(Nokogiri::HTML5(response.body).at_css("#country-table tbody tr").css("td")[1].text.squish).to eq("200")
+  end
+
+  describe "the banner's answers" do
+    before do
+      ConsentChoice.collection.insert_many([
+        {"_id" => "2026-10-10", "day" => "2026-10-10", "countries" => {"DE" => {"shown" => 14, "granted" => 6, "denied" => 4}}},
+        {"_id" => "2026-10-11", "day" => "2026-10-11", "countries" => {"DE" => {"shown" => 2}, "US" => {"shown" => 3, "granted" => 1}}},
+        {"_id" => "2025-08-01", "day" => "2025-08-01", "countries" => {"IN" => {"shown" => 50, "granted" => 50}}}
+      ])
+    end
+
+    def cells(country)
+      row = Nokogiri::HTML5(response.body).css("#country-table tbody tr").find { |tr| tr.at_css("td").text.include?(country) }
+      row.css("td").map { |td| td.text.squish }
+    end
+
+    it "shows banners and an accept rate for countries asked, and a dash for the rest or too few answers" do
+      get country_report_path
+
+      headings = Nokogiri::HTML5(response.body).css("#country-table thead th")
+      banners = headings.find { |th| th.text.strip == "Banners" }
+      expect(banners["title"]).to include("EEA, UK and Switzerland")
+      expect(cells("DE")[-3..-2]).to eq(["16", "60.0%"])
+      expect(cells("US")[-3..-2]).to eq(["3", "—"])
+      expect(cells("IN")[-3..-2]).to eq(["—", "—"])
+    end
+
+    it "sorts by banners, leaving countries without any last" do
+      get country_report_path(sort: "banners", direction: "desc")
+
+      expect(countries).to eq(["🇩🇪 DE", "🇺🇸 US", "🇮🇳 IN"])
+    end
+
+    it "exports them" do
+      get country_report_path(format: :csv)
+
+      csv = CSV.parse(response.body, headers: true)
+      expect(csv.map { |row| [row["Country"], row["Banners"], row["Accept rate"]] }).to eq([["IN", nil, nil], ["DE", "16", "0.6"], ["US", "3", nil]])
+    end
+
+    it "leaves the columns out when no banner was recorded in the period" do
+      ConsentChoice.collection.delete_many({})
+
+      get country_report_path
+
+      expect(countries).to eq(["🇮🇳 IN", "🇩🇪 DE", "🇺🇸 US"])
+      expect(response.body).not_to include("Accept rate")
+    end
   end
 end
