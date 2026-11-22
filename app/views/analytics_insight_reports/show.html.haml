@@ -40,6 +40,7 @@
                 %td{class: cell_class}
                   = number_with_delimiter(row.views)
                   = row_change(row.views, row.previous_views, DashboardHelper::HIGHER_IS_BETTER, force: true)
+                  = gap_shift_note(@gap_shifts[row.page_path])
         = csv_footer(list_url(@period, @filtering, format: :csv, export: "changes"), "Every page as CSV")
 
   %div{class: split_grid_class}
@@ -59,6 +60,7 @@
               %td{class: cell_class}
                 = number_with_delimiter(row.views)
                 = row_change(row.views, insights.previous_page_views.fetch(row[:page_path], 0), DashboardHelper::HIGHER_IS_BETTER) if insights.previous?
+                = gap_shift_note(@gap_shifts[row[:page_path]]) if insights.previous?
               %td{class: cell_class}= metric_value(row.engagement_rate, :rate)
               %td{class: cell_class}= metric_value(row.average_engagement_seconds, :duration)
       = csv_footer(list_url(@period, @filtering, format: :csv, export: "unengaging"))
@@ -91,6 +93,7 @@
               %td{class: cell_class}
                 = number_with_delimiter(row.views)
                 = row_change(row.views, insights.previous_page_views.fetch(row.page_path, 0), DashboardHelper::HIGHER_IS_BETTER) if insights.previous?
+                = gap_shift_note(@gap_shifts[row.page_path]) if insights.previous?
               %td{class: cell_class}= number_with_delimiter(row.completions)
               %td{class: cell_class}= row.seconds_per_read ? metric_value(row.seconds_per_read, :duration) : "—"
               %td{class: cell_class}= metric_value(row.rate, :percent)

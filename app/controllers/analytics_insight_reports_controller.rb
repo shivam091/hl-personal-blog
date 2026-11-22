@@ -11,6 +11,7 @@ class AnalyticsInsightReportsController < ApplicationController
     @granularity = ChartGranularity.new(params, period: @period)
     @trend = params[:trend].presence_in(TRENDS) || TRENDS.first
     @published = FeedEntry.published_names(@period)
+    @gap_shifts = PageGapShift.new(@period)
 
     respond_to do |format|
       format.html
