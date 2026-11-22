@@ -28,7 +28,35 @@ RSpec.describe "Consent page gaps", type: :request do
       page = Nokogiri::HTML5(response.body)
       row = page.css("#page-gap-table tbody tr").find { |tr| tr.text.include?("/broken") }
       expect(row.text.squish).to include("100", "10", "90", "90.0%", "Well above the median")
-      expect(page.text.squish).to include("1 page flagged")
+      expect(page.text.squish).to include("The median page loses 20.0% of its views to GA.", "1 page flagged")
+    end
+
+    it "sits under the consent report in the breadcrumb" do
+      get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      crumbs = Nokogiri::HTML5(response.body).css("nav[aria-label='Breadcrumb'] li").map { |item| item.text.squish }
+      expect(crumbs).to eq(["Dashboard", "Reports", "Consent", "Page gaps"])
+    end
+
+    it "keeps a long address from widening the table" do
+      long = "/unsubscribe/#{"a" * 120}"
+      PageView.collection.insert_one("_id" => long, "slug" => long, "countriesByDay" => {"2026-10-10" => {"IN" => 3}})
+
+      get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      link = Nokogiri::HTML5(response.body).css("#page-gap-table a").find { |anchor| anchor.text == long }
+      expect(link["title"]).to eq(long)
+      expect(link["class"]).to include("truncate")
+    end
+
+    it "words a median GA counts more on as GA's extra" do
+      Google::Analytics::Stat.where(:page_path.in => %w[/a /b /c /d /e]).update_all(views: 125)
+
+      get consent_page_gap_report_path(from: "2026-10-10", to: "2026-10-12")
+
+      text = Nokogiri::HTML5(response.body).text.squish
+      expect(text).to include("GA counts 25.0% more views than we do on the median page.")
+      expect(text).not_to include("loses -")
     end
 
     it "sorts by a column asked for" do

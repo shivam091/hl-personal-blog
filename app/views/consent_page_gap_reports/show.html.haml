@@ -24,9 +24,16 @@
   - median = page_gap.median_percent
   = render "shared/period_notes", notes: ["Only the #{pluralize(page_gap.days_covered, "day")} GA has synced in #{@period} are counted."]
   - if median
+    - share = number_to_percentage(median.abs * 100, precision: 1)
     %p{class: "mb-3 text-sm text-slate-600"}
-      The median page loses #{number_to_percentage(median * 100, precision: 1)} of its views to GA. A page is flagged when it loses
-      #{(PageGap::MARGIN * 100).round} points more than that, with at least #{PageGap::MIN_VIEWS} views.
+      - if median.positive?
+        The median page loses #{share} of its views to GA.
+      - elsif median.negative?
+        GA counts #{share} more views than we do on the median page.
+      - else
+        GA counts as many views as we do on the median page.
+      A page is flagged when its gap is #{(PageGap::MARGIN * 100).round} points or more above the median's, with at least
+      #{PageGap::MIN_VIEWS} views.
       - if flagged.any?
         #{pluralize(flagged.size, "page")} flagged.
   %div{id: "page-gap-table", class: "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"}
@@ -40,7 +47,10 @@
         %tbody
           - @rows.each do |row|
             %tr{class: ["border-b border-slate-100 last:border-b-0 hover:bg-slate-50", ("bg-amber-50" if row.flagged)]}
-              %td{class: "px-3 py-2 font-medium"}= row.slug
+              -# Squeezed to what is left, so one long address can't push the figures off the side.
+              %td{class: "w-full px-3 py-2 md:max-w-0"}
+                %div{class: "w-40 md:w-auto"}
+                  = blog_page_link(row.slug, (page_view_path(row.slug) if row.first_party.positive?), truncate: true)
               %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.first_party)
               %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.analytics)
               %td{class: "px-3 py-2 text-right tabular-nums"}= number_with_delimiter(row.gap)
