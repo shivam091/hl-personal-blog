@@ -1,0 +1,28 @@
+-# Banners shown shade the map rather than the acceptance rate: most countries see a handful of banners, where one
+-# answer swings the rate from none to all, and the map's scale is built for counts.
+- parts = [["Accepted", ChartsHelper::SHARE_COLORS[0]], ["Declined", ChartsHelper::SHARE_COLORS[1]], ["No answer", ChartsHelper::SHARE_OTHER_COLOR]]
+= render layout: "shared/card", locals: {id: "banner-by-country", title: "Banner by country", icon: "globe", class: "mb-6"} do
+  - if rows.empty?
+    %p{class: empty_note_class} The banner wasn't shown in #{period}.
+  - else
+    %div{class: "grid gap-x-6 gap-y-4 px-4 py-3 lg:grid-cols-2"}
+      %div{class: "min-w-0"}
+        %p{class: "mb-1 text-xs font-medium text-slate-500"} Banners shown
+        = world_map(rows.to_h { |row| [row.country, row.shown] }, label: "Banners shown by country", unit: "banner",
+          also: [["Accepted", rows.to_h { |row| [row.country, row.granted] }], ["Declined", rows.to_h { |row| [row.country, row.denied] }]])
+      %div{class: "min-w-0"}
+        %p{class: "mb-1 text-xs font-medium text-slate-500"} What each country answered
+        = split_bars(rows.map { |row| [country_label(row.country), [row.granted, row.denied, row.no_answer]] }, parts: parts,
+          label: "Banners accepted, declined and left unanswered, by country", unit: "banner")
+    %p{class: footnote_class}
+      Only readers in the EEA, UK and Switzerland are asked, so the rest of the map stays grey. The map is shaded by banners shown, as a country seeing a handful of banners swings from no acceptances to all on one answer; its rate is in the table.
+    = report_table([report_th("Country"), report_th("Shown", :right), report_th("Accepted", :right), report_th("Declined", :right),
+      report_th("No answer", :right), report_th("Accept rate", :right)]) do
+      - rows.each do |row|
+        %tr{class: table_row_class}
+          %td{class: "px-3 py-1.5 whitespace-nowrap"}= country_label(row.country)
+          %td{class: cell_class}= number_with_delimiter(row.shown)
+          %td{class: cell_class}= number_with_delimiter(row.granted)
+          %td{class: cell_class}= number_with_delimiter(row.denied)
+          %td{class: cell_class}= number_with_delimiter(row.no_answer)
+          %td{class: cell_class}= row.acceptance_rate ? number_to_percentage(row.acceptance_rate * 100, precision: 1) : "—"

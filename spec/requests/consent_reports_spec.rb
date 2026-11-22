@@ -35,7 +35,11 @@ RSpec.describe "Consent report", type: :request do
     it "shows the funnel and the views by consent state" do
       get consent_report_path
 
-      expect(card("banner-by-country")).to include("GB", "10", "37.5%")
+      expect(card("banner-by-country")).to include("GB", "10", "37.5%", "Accept rate")
+      section = Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=banner-by-country]")
+      tips = section.css("[data-chart-tooltip-target=hit]").map { |hit| JSON.parse(hit["data-tip"]) }
+      expect(tips.find { |tip| tip["title"].include?("United Kingdom") }["rows"].map { |row| row["value"] }).to eq(%w[10 3 5])
+      expect(tips.find { |tip| tip["title"].include?("GB") && tip["rows"].size == 3 }["rows"].map { |row| row["name"] }).to eq(["Accepted", "Declined", "No answer"])
       expect(card("views-by-consent")).to include("Declined", "30", "30.0%")
       donut = Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=views-by-consent] svg[aria-label=\"Views by the reader's consent state\"]")
       expect(donut.css("path").size).to eq(3)

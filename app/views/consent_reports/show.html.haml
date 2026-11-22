@@ -132,21 +132,7 @@
                 %td{class: title_cell_class}= label
                 %td{class: cell_class}= number_with_delimiter(states[state])
                 %td{class: cell_class}= number_to_percentage(states[state] * 100.0 / consent.tracked_views, precision: 1)
-    = render layout: "shared/card", locals: {id: "banner-by-country", title: "Banner by country", icon: "globe"} do
-      - rows = consent.countries
-      - if rows.empty?
-        %p{class: empty_note_class} The banner wasn't shown in #{@period}.
-      - else
-        = report_table([report_th("Country"), report_th("Shown", :right), report_th("Accepted", :right), report_th("Declined", :right),
-          report_th("No answer", :right), report_th("Accept rate", :right)]) do
-          - rows.each do |row|
-            %tr{class: table_row_class}
-              %td{class: "px-3 py-1.5 whitespace-nowrap"}= country_label(row.country)
-              %td{class: cell_class}= number_with_delimiter(row.shown)
-              %td{class: cell_class}= number_with_delimiter(row.granted)
-              %td{class: cell_class}= number_with_delimiter(row.denied)
-              %td{class: cell_class}= number_with_delimiter(row.no_answer)
-              %td{class: cell_class}= row.acceptance_rate ? number_to_percentage(row.acceptance_rate * 100, precision: 1) : "—"
+  = render "consent_reports/banner_by_country", rows: consent.countries, period: @period
 
   - if @gap && @gap.days.any?
     = render "consent_reports/views_against_ga", gap: @gap, first_party: @first_party_views, analytics: @analytics_views,
