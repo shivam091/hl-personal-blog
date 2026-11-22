@@ -69,4 +69,24 @@ RSpec.describe SyncMailer, type: :mailer do
 
     expect(digest_message.subject).to eq("Sync digest: the 1 sync succeeded")
   end
+
+  it "says what share of our views GA saw last week against the usual week, once both are known" do
+    SyncRequest.create!(kind: "feed", status: "succeeded", created_at: now - 1.hour, finished_at: now - 1.hour)
+    {"2026-10-15" => 30, "2026-10-08" => 70, "2026-10-01" => 80, "2026-09-24" => 60}.each do |day, analytics|
+      ConsentSnapshot.create!(day: day, first_party: 100, analytics: analytics)
+    end
+
+    message = digest_message
+
+    expect(message.html_part.body.to_s).to include("GA saw 30% of our views last week (usual 70%).")
+    expect(message.text_part.body.to_s).to include("GA saw 30% of our views last week (usual 70%).")
+  end
+
+  it "leaves the share out without enough earlier weeks to call one usual" do
+    SyncRequest.create!(kind: "feed", status: "succeeded", created_at: now - 1.hour, finished_at: now - 1.hour)
+    ConsentSnapshot.create!(day: "2026-10-15", first_party: 100, analytics: 30)
+    ConsentSnapshot.create!(day: "2026-10-08", first_party: 100, analytics: 70)
+
+    expect(digest_message.text_part.body.to_s).not_to include("GA saw")
+  end
 end
