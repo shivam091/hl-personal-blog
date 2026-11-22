@@ -44,6 +44,17 @@ RSpec.describe "Consent report", type: :request do
       expect(card("views-against-ga")).to include("Oct", "100", "60", "40", "30")
     end
 
+    it "charts our views against GA's, marks what was published, and gives GA's share of our views" do
+      Google::Analytics::Stat.create!(date: Date.new(2026, 10, 10), page_path: "/post/a", views: 60)
+      FeedEntry.collection.insert_one("_id" => "a", "name" => "Post A", "published_at" => Time.zone.parse("2026-10-10 09:00"))
+
+      get consent_report_path(from: "2026-10-08", to: "2026-10-10")
+
+      section = Nokogiri::HTML5(response.body).at_css("section[aria-labelledby=views-against-ga]")
+      rows = section.css("[data-chart-tooltip-target=hit]").map { |hit| JSON.parse(hit["data-tip"])["rows"] }
+      expect(rows.flatten.map { |row| [row["name"], row["value"]] }).to include(["Our views", "100"], ["GA views", "60"], ["Published", "Post A"], ["GA's share", "60.0%"])
+    end
+
     it "exports the funnel as CSV" do
       get consent_report_path(format: :csv)
 

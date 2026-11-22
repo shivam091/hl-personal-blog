@@ -142,14 +142,7 @@
               %td{class: cell_class}= row.acceptance_rate ? number_to_percentage(row.acceptance_rate * 100, precision: 1) : "—"
 
   - if @gap && @gap.days.any?
-    = render layout: "shared/card", locals: {id: "views-against-ga", title: "Our views against GA's, by day", icon: "trending-up"} do
-      = report_table([report_th("Date"), report_th("Our views", :right), report_th("GA views", :right), report_th("Gap", :right), report_th("Declined views", :right)]) do
-        - @gap.days.first(31).each do |day|
-          %tr{class: table_row_class}
-            %td{class: "px-3 py-1.5 whitespace-nowrap"}= day_label(day.date.iso8601)
-            %td{class: cell_class}= number_with_delimiter(day.first_party)
-            %td{class: cell_class}= number_with_delimiter(day.analytics)
-            %td{class: cell_class}= number_with_delimiter(day.first_party - day.analytics)
-            %td{class: cell_class}= number_with_delimiter(day.denied)
+    = render "consent_reports/views_against_ga", gap: @gap, first_party: @first_party_views, analytics: @analytics_views,
+      published: @published, granularity: @granularity, period: @period
 - else
   = render "shared/empty_state", message: "No consent answers or consent-split views recorded in #{@period}."
