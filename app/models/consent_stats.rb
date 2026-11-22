@@ -3,7 +3,9 @@
 # What readers answered the consent banner, and how many page views that
 # leaves out of GA, for a period.
 class ConsentStats
-  STATES = %w[granted denied unset].freeze
+  # "pending" is a reader the banner was due to ask who hasn't answered, which GA can't see; "default" needs no
+  # banner and is counted; "unset" is how views were recorded before the two were told apart.
+  STATES = %w[granted denied pending default unset].freeze
 
   # Banner events for one country; "changed" counts readers flipping an
   # earlier answer, on top of the granted or denied it led to.
@@ -19,6 +21,20 @@ class ConsentStats
 
     def acceptance_rate
       granted.fdiv(answered) if answered.positive?
+    end
+  end
+
+  # Banner impressions against the views of readers it was due to ask, plus the views with no country,
+  # which the frontend used to give no banner at all.
+  BannerHealth = Struct.new(:shown, :pending_views, :views, :unknown_country_views, keyword_init: true) do
+    # Each impression is one browser session, so a reader's pending views per impression show how many pages a
+    # banner sat unanswered through; a figure that keeps climbing means the banner stopped appearing.
+    def pending_per_banner
+      pending_views.fdiv(shown) if shown.positive?
+    end
+
+    def unknown_country_share
+      unknown_country_views.fdiv(views) if views.positive?
     end
   end
 
@@ -62,6 +78,16 @@ class ConsentStats
   end
 
   attr_reader :period, :country
+
+  class << self
+    # One day worked out from the live data, snapshotted or not; GA's figure is nil on a day it hasn't synced.
+    def inputs_for(date, today: Date.current)
+      period = Period.new({from: date.iso8601, to: date.iso8601}, today: today)
+      first_party = BlogStats.new(period).daily(:views).first.to_i
+      analytics = Google::Analytics::Summary.new(period).daily_views.first
+      new(period).inputs(date, first_party, analytics)
+    end
+  end
 
   def initialize(period, country: nil)
     @period = period
@@ -119,6 +145,44 @@ class ConsentStats
     Gap.new(days: days)
   end
 
+  # Nil without GA's figures. A day already snapshotted is read from its snapshot, so GA revising its numbers later
+  # doesn't rewrite it; other days are worked out now, as the snapshot job would.
+  def decomposition(first_party, analytics)
+    return unless analytics
+
+    stored = ConsentSnapshot.stored(period)
+    snapshots = analytics.keys.sort.reverse.map do |date|
+      snapshot = stored[date.iso8601]
+      snapshot&.analytics.nil? ? ConsentSnapshot.compose(inputs(date, first_party.fetch(date, 0), analytics[date])) : snapshot
+    end
+    ConsentGap.new(snapshots)
+  end
+
+  # What one day's snapshot is worked out from.
+  def inputs(date, first_party, analytics)
+    day = date.iso8601
+    ConsentSnapshot::Inputs.new(
+      date: date, first_party: first_party, analytics: analytics, states: daily_states[day], ga: ga_daily[day],
+      suspects: suspect_daily[day], banner: banner_by_day[day]
+    )
+  end
+
+  def ga_first_day
+    PageView.ga_first_day
+  end
+
+  def suspects_first_day
+    PageView.suspect_first_day
+  end
+
+  # Every country, as the views the banner is due on aren't split by one.
+  def banner_health
+    blog = BlogStats.new(period)
+    by_country = blog.by_country(:views)
+    BannerHealth.new(shown: ConsentChoice.within(period).sum { |choice| choice.countries.values.sum { |events| events["shown"].to_i } },
+      pending_views: views_by_state["pending"], views: by_country.values.sum, unknown_country_views: by_country.fetch(BlogStats::UNKNOWN_COUNTRY, 0))
+  end
+
   def to_csv
     CSV.generate do |csv|
       csv << ["Country", "Banner shown", "Accepted", "Declined", "No answer", "Changed mind", "Acceptance rate"]
@@ -132,6 +196,22 @@ class ConsentStats
 
   def daily_states
     @daily_states ||= PageView.consent_daily(period)
+  end
+
+  def ga_daily
+    @ga_daily ||= PageView.ga_daily(period)
+  end
+
+  def suspect_daily
+    @suspect_daily ||= PageView.suspect_daily(period)
+  end
+
+  # Every country's together, by ISO day, since views aren't split by country either.
+  def banner_by_day
+    @banner_by_day ||= ConsentChoice.within(period).to_h do |choice|
+      events = choice.countries.values.each_with_object(Hash.new(0)) { |counts, sums| counts.each { |event, count| sums[event] += count.to_i } }
+      [choice.day, funnel("All", events)]
+    end
   end
 
   def totals_by_country

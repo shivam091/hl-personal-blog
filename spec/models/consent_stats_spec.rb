@@ -104,4 +104,78 @@ RSpec.describe ConsentStats, type: :model do
 
     expect(csv.map { |row| [row["Country"], row["Banner shown"], row["Acceptance rate"]] }).to eq([["GB", "15", "0.4"], ["DE", "2", "1.0"], ["All", "17", "0.5385"]])
   end
+
+  describe "#decomposition" do
+    let(:first_party) { {Date.new(2026, 10, 10) => 100, Date.new(2026, 10, 11) => 100} }
+
+    before do
+      PageView.collection.delete_many({})
+      PageView.collection.insert_one(
+        "_id" => "/a", "slug" => "/a",
+        "consentByDay" => {"2026-10-10" => {"granted" => 50, "denied" => 20, "pending" => 20, "default" => 10}, "2026-10-11" => {"unset" => 100}},
+        "gaByDay" => {"2026-10-10" => {"loaded" => 90, "blocked" => 10}},
+        "suspectByDay" => {"2026-10-10" => {"datacentre" => 10}}
+      )
+    end
+
+    it "has none without GA's figures" do
+      expect(ConsentStats.new(period).decomposition(first_party, nil)).to be_nil
+    end
+
+    it "puts each GA-synced day's gap down to its causes, newest first, leaving out days it can't split" do
+      gap = ConsentStats.new(period).decomposition(first_party, {Date.new(2026, 10, 10) => 40, Date.new(2026, 10, 11) => 40})
+
+      expect(gap.snapshots.map(&:day)).to eq(%w[2026-10-11 2026-10-10])
+      expect(gap.days.map(&:day)).to eq(["2026-10-10"])
+      expect(gap.sum(:denied_gap)).to eq(20)
+      expect(gap.sum(:pending_gap)).to eq(20)
+      expect(gap.remainder).to eq(60 - 20 - 20 - 6 - 6)
+    end
+
+    it "reads a day already snapshotted from its snapshot, whatever GA says now" do
+      ConsentSnapshot.create!(day: "2026-10-10", first_party: 100, analytics: 99, gap: 1, remainder: 1, split_recorded: true)
+
+      gap = ConsentStats.new(period).decomposition(first_party, {Date.new(2026, 10, 10) => 40})
+
+      expect(gap.gap).to eq(1)
+    end
+
+    it "works a snapshotted day out again when its snapshot never had GA's figure" do
+      ConsentSnapshot.create!(day: "2026-10-10", first_party: 100)
+
+      expect(ConsentStats.new(period).decomposition(first_party, {Date.new(2026, 10, 10) => 40}).gap).to eq(60)
+    end
+  end
+
+  describe "#banner_health" do
+    it "sets banners shown against the views from readers it was due to ask, and counts views with no country" do
+      PageView.collection.delete_many({})
+      PageView.collection.insert_one("_id" => "/a", "slug" => "/a", "countriesByDay" => {"2026-10-10" => {"GB" => 30, "UNKNOWN" => 10}},
+        "consentByDay" => {"2026-10-10" => {"pending" => 30, "granted" => 10}})
+
+      health = ConsentStats.new(period).banner_health
+
+      expect(health).to have_attributes(shown: 17, pending_views: 30, views: 40)
+      expect(health.pending_per_banner).to eq(30.0 / 17)
+    end
+
+    it "reads no ratio without banners or views" do
+      health = ConsentStats::BannerHealth.new(shown: 0, pending_views: 5, views: 0, unknown_country_views: 0)
+
+      expect([health.pending_per_banner, health.unknown_country_share]).to eq([nil, nil])
+    end
+  end
+
+  describe ".inputs_for" do
+    it "works one day out from the live data, with GA's figure nil on a day it hasn't synced" do
+      travel_to(Time.zone.parse("2026-10-13 12:00")) do
+        PageView.collection.insert_one("_id" => "/z", "slug" => "/z", "countriesByDay" => {"2026-10-10" => {"IN" => 7}})
+
+        inputs = ConsentStats.inputs_for(Date.new(2026, 10, 10))
+
+        expect(inputs).to have_attributes(first_party: 7, analytics: nil)
+        expect(inputs.banner.shown).to eq(12)
+      end
+    end
+  end
 end

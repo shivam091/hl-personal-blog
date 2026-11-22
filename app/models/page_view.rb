@@ -31,6 +31,10 @@ class PageView
   field :campaignsByDay, type: Hash, default: {}, as: :campaigns_by_day
   # Absent on pages counted before the frontend recorded consent, so it defaults to empty rather than to all unset.
   field :consentByDay, type: Hash, default: {}, as: :consent_by_day
+  # Whether gtag loaded for each view; a view in neither tally left before it could be told.
+  field :gaByDay, type: Hash, default: {}, as: :ga_by_day
+  # Likely automation: webdriver views are bots, left out of the human counts, while datacentre ones stay in them.
+  field :suspectByDay, type: Hash, default: {}, as: :suspect_by_day
   field :uniqueVisitorCount, type: Integer, default: 0, as: :unique_visitor_count
   field :visitorCount, type: Integer, default: 0, as: :visitor_count
   field :botCount, type: Integer, default: 0, as: :bot_count
@@ -108,11 +112,33 @@ class PageView
     # Every page's together, by ISO day, since GA's views are compared with them
     # day by day; days from before consent was recorded are absent.
     def consent_daily(period)
-      from, to = period.from.iso8601, period.to.iso8601
-      only(:consentByDay).each_with_object(Hash.new { |hash, day| hash[day] = Hash.new(0) }) do |page_view, days|
-        page_view.consent_by_day.each do |day, states|
-          states.each { |state, count| days[day][state] += count.to_i } if day.between?(from, to)
-        end
+      daily_totals(:consentByDay, period)
+    end
+
+    # Same shape as consent_daily; days from before gtag's loading was recorded are absent.
+    def ga_daily(period)
+      daily_totals(:gaByDay, period)
+    end
+
+    # Same shape again; days from before automation signals were recorded are absent.
+    def suspect_daily(period)
+      daily_totals(:suspectByDay, period)
+    end
+
+    # Each field began on its own day, so the report keeps them apart to say which days it can trust.
+    def ga_first_day
+      first_day_in(%w[gaByDay])
+    end
+
+    def suspect_first_day
+      first_day_in(%w[suspectByDay])
+    end
+
+    # Per page, over the days given only, since GA's views are known for some days alone; a
+    # page counted before dated totals existed comes in through views_by_day too.
+    def views_by_slug(days)
+      only(:slug, :countriesByDay, :viewsByDay).each_with_object(Hash.new(0)) do |page_view, totals|
+        page_view.views_by_day.each { |day, count| totals[page_view.slug] += count if days.include?(day) }
       end
     end
 
@@ -120,6 +146,16 @@ class PageView
     # before it covers fewer views than it seems to.
     def consent_first_day
       first_day_in(%w[consentByDay])
+    end
+
+    # Days outside the period are dropped; a page without the field adds nothing.
+    def daily_totals(field, period)
+      from, to = period.from.iso8601, period.to.iso8601
+      only(field).each_with_object(Hash.new { |hash, day| hash[day] = Hash.new(0) }) do |page_view, days|
+        page_view.public_send(field).each do |day, counts|
+          counts.each { |key, count| days[day][key] += count.to_i } if day.between?(from, to)
+        end
+      end
     end
 
     # Every page's together, as a campaign's link can land anywhere.
