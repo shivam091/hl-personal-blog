@@ -116,6 +116,7 @@
 - if consent.any? || states.any?
   = render "consent_reports/flag_measures", measures: @flag_measures, period: @period
   %div{class: split_grid_class}
+    = render "consent_reports/banner_funnel", total: total, period: @period
     = render layout: "shared/card", locals: {id: "views-by-consent", title: "Views by consent state", icon: "eye"} do
       - if consent.tracked_views.zero?
         %p{class: empty_note_class} No views split by consent in #{@period}.

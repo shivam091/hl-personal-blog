@@ -26,6 +26,12 @@ RSpec.describe "Consent report", type: :request do
       )
     end
 
+    it "draws the banner funnel from shown through answered to accepted" do
+      get consent_report_path
+
+      expect(card("banner-funnel")).to include("Banner shown", "10", "Answered", "8", "Accepted", "3", "2 left without one", "5 declined")
+    end
+
     it "shows the funnel and the views by consent state" do
       get consent_report_path
 

@@ -1,0 +1,12 @@
+- steps = ->(row) { [["Banner shown", row.shown], ["Answered", row.answered], ["Accepted", row.granted]] }
+= render layout: "shared/card", locals: {id: "banner-funnel", title: "Banner funnel", icon: "funnel"} do
+  - if total.shown.zero? && total.answered.zero?
+    %p{class: empty_note_class} The banner wasn't shown in #{period}.
+  - else
+    %div{class: "px-4 py-3"}
+      = funnel_chart(steps.(total), label: "Banners shown, answered and accepted", unit: "banner")
+    %p{class: footnote_class}
+      Lost before an answer: #{number_with_delimiter(total.no_answer)} left without one.
+      Lost before accepting: #{number_with_delimiter(total.denied)} declined.
+      - if total.answered > total.shown
+        More answers than banners, as some readers answered through the privacy policy, which shows no banner.
