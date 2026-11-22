@@ -274,6 +274,19 @@ RSpec.describe "Content report", type: :request do
       expect(cells.("reading")).to eq([["A post", "30", "1m 30s", "40.0%"]])
     end
 
+    it "marks an entry whose share seen by GA moved between the periods, so the change isn't all put down to readers" do
+      Google::Analytics::Stat.create!(date: Date.new(2026, 9, 8), page_path: "/post/a", views: 30, active_users: 10, engagement_seconds: 900)
+      PageView.collection.update_one({"_id" => "/post/a"}, {"$set" => {"countriesByDay.2026-10-08" => {"IN" => 70}, "countriesByDay.2026-09-08" => {"IN" => 40}}})
+
+      get content_report_path
+
+      note = page.at_css("#reading ~ div tbody span[title^='GA']")
+      expect(note["title"]).to eq("GA's share of this page changed from 75% to 43% — part of this change may be tracking, not readers")
+
+      get content_report_path(compare: "off")
+      expect(response.body).not_to include("GA's share of this page")
+    end
+
     it "marks entries shown in the period before but not now as dropped out, with their earlier impressions" do
       [["/post/b", Date.new(2026, 9, 1), 40], ["/post/a", Date.new(2026, 8, 1), 5]].each do |path, date, impressions|
         Google::SearchConsole::Stat.create!(date: date, page: "https://blog.example.com#{path}", page_path: path, clicks: 1, impressions: impressions, position: 5.0)

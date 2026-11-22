@@ -150,6 +150,7 @@
         per reader or #{metric_value(site_read_through, :percent)} read-through is in amber.
       - rows = content.reading
       - earlier_reading = before&.reading(limit: nil)&.index_by { |row| row.item.path }.presence
+      - gap_shifts = PageGapShift.new(@period) if earlier_reading
       - if rows.empty?
         %p{class: empty_note_class} No entry has enough Analytics views in this period.
       - else
@@ -168,6 +169,7 @@
               %td{class: cell_class}
                 = number_with_delimiter(row.views)
                 = row_change(row.views, earlier&.views, more) if earlier_reading
+                = gap_shift_note(gap_shifts[row.item.path]) if earlier_reading
               %td{class: "#{cell_class} #{below_class if site_time && row.engagement_seconds_per_reader < site_time}"}
                 = metric_value(row.engagement_seconds_per_reader, :duration)
                 = row_change(row.engagement_seconds_per_reader, earlier&.engagement_seconds_per_reader, more) if earlier

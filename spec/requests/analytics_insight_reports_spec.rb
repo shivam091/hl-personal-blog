@@ -184,4 +184,19 @@ RSpec.describe "Analytics insights report", type: :request do
 
     expect(response.body).to include("No Analytics figures yet.")
   end
+
+  it "marks a page whose share seen by GA moved, since part of its change may be tracking" do
+    PageView.collection.insert_one("_id" => "/post/up", "slug" => "/post/up", "countriesByDay" => {"2026-10-10" => {"IN" => 60}, "2026-09-10" => {"IN" => 40}})
+
+    get analytics_insight_report_path
+
+    notes = page.at_css("#rising-pages").parent.css("span[title^='GA']")
+    note = notes.first
+    expect(note["title"]).to eq("GA's share of this page changed from 25% to 83% — part of this change may be tracking, not readers")
+    expect(notes.size).to eq(1)
+    expect(note.text).to eq("GA share 25% → 83%")
+
+    get analytics_insight_report_path(compare: "off")
+    expect(response.body).not_to include("GA's share of this page")
+  end
 end
