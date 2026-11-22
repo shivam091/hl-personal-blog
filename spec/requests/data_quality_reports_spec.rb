@@ -31,6 +31,37 @@ RSpec.describe "Data quality report", type: :request do
     expect(page.css("#bots-by-page ~ div tbody td").map { it.text.strip }).to eq(%w[/post/a 5 15 25.0%])
   end
 
+  it "adds a strip for each consent tally, telling the days before it began from those it missed" do
+    PageView.collection.update_one({"_id" => "/post/a"}, {"$set" => {
+      "consentByDay" => {"2026-10-08" => {"granted" => 3}, "2026-10-10" => {"denied" => 1}},
+      "gaByDay" => {"2026-10-10" => {"loaded" => 3}}, "suspectByDay" => {"2026-10-10" => {"datacentre" => 1}}
+    }})
+
+    get data_quality_report_path(from: "2026-10-06", to: "2026-10-11")
+
+    strips = page.css("#coverage ~ div > div").to_h { |strip| [strip.at_css("p span").text.squish, strip] }
+    expect(strips.keys).to eq(["Blog views", "Search Console", "Google Analytics", "reCAPTCHA",
+      "Consent split from 8 Oct", "Tag loading from 10 Oct", "Automation from 10 Oct"])
+    tips = ->(name) { strips.fetch(name).css("[data-tip]").map { JSON.parse(it["data-tip"])["rows"].first["value"] } }
+    expect(strips["Consent split from 8 Oct"].text).to include("2 days missing")
+    expect(tips.("Consent split from 8 Oct")).to eq(["Not recorded yet", "Not recorded yet", "Has data", "Missing", "Has data", "Missing"])
+    expect(strips["Tag loading from 10 Oct"].text).to include("1 day missing")
+    expect(strips["Automation from 10 Oct"].text).to include("Every day")
+    expect(tips.("Automation from 10 Oct").last(2)).to eq(["Has data", "Nothing flagged"])
+  end
+
+  it "says a tally wasn't recorded in the period compared with, rather than that it had every day" do
+    PageView.collection.update_one({"_id" => "/post/a"}, {"$set" => {"consentByDay" => {"2026-10-10" => {"granted" => 3}}, "countriesByDay.2026-10-08" => {"IN" => 5}}})
+    Google::Analytics::Stat.create!(date: Date.new(2026, 10, 8), page_path: "/post/a", views: 4)
+
+    get data_quality_report_path(from: "2026-10-10", to: "2026-10-11")
+
+    strip = page.css("#coverage ~ div > div").find { it.at_css("p span").text.squish == "Consent split" }
+    expect(strip.at_css("p").text.squish).to end_with("1 day missing (new)")
+    tag_loading = page.css("#coverage ~ div > div").find { it.at_css("p span").text.squish == "Tag loading" }
+    expect(tag_loading.at_css("p").text.squish).to eq("Tag loading Not recorded yet (new)")
+  end
+
   it "sets each page's counts against the period before, and leaves the changes out with the comparison off" do
     PageView.collection.update_one({"_id" => "/post/a"}, {"$set" => {"countriesByDay.2026-09-01" => {"IN" => 20}}})
     Google::Analytics::Stat.create!(date: Date.new(2026, 9, 1), page_path: "/post/a", views: 15)
