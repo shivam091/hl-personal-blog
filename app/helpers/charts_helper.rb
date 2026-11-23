@@ -175,7 +175,7 @@ module ChartsHelper
   # the axis. A line gets its own scale because its figures differ in size
   # from the bars'.
   def stacked_chart(keys, series, label:, y_title:, x_title: nil, per: :day, titles: nil, unsettled: nil, previous: nil, previous_name: nil, line: nil)
-    skip = leading_empty(keys, [*[*series, *line].map(&:values), previous].compact)
+    skip = leading_empty(keys, [*[*series, line].compact.map(&:values), previous].compact)
     keys, series, titles, previous = keys.drop(skip), trimmed_series(series, skip), titles&.drop(skip), previous&.drop(skip)
     line = line.dup.tap { |copy| copy.values = line.values.drop(skip) } if line && skip.positive?
     totals = keys.each_index.map { |index| series.sum { |part| part.values[index].to_i } }
