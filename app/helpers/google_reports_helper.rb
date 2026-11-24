@@ -37,21 +37,23 @@ module GoogleReportsHelper
     ]
   end
 
-  def recaptcha_summary_metrics
+  # Without challenges for one action, since Google doesn't split them by
+  # action.
+  def recaptcha_summary_metrics(action = nil)
     low_score = Google::Recaptcha::Stat::LOW_SCORE
     [
       Google::DailyReport::Metric.new(field: :requests, label: "Requests", format: :count, icon: "activity",
-        hint: "The number of requests reCAPTCHA scored, for every action on the site."),
+        hint: "The number of requests reCAPTCHA scored, for #{action ? "the contact form" : "every action on the site"}."),
       Google::DailyReport::Metric.new(field: :low_score_share, label: "Below #{low_score}", format: :percent,
         icon: "alert-triangle", lower_is_better: true,
         hint: "The share of requests scored below #{low_score}, the threshold Google suggests by default. " \
           "1.0 is very likely a good interaction, 0.0 is very likely a bot."),
       Google::DailyReport::Metric.new(field: :average_score, label: "Average score", format: :score, icon: "shield",
         hint: "The average score of the requests. 1.0 is very likely a good interaction, 0.0 is very likely a bot."),
-      Google::DailyReport::Metric.new(field: :failed_challenges, label: "Failed challenges", format: :count, icon: "x", lower_is_better: true,
+      (Google::DailyReport::Metric.new(field: :failed_challenges, label: "Failed challenges", format: :count, icon: "x", lower_is_better: true,
         hint: "Count of submitted challenge solutions that were incorrect or otherwise deemed suspicious, " \
-          "so a subsequent challenge was triggered. Only checkbox keys show challenges.")
-    ]
+          "so a subsequent challenge was triggered. Only checkbox keys show challenges.") unless action)
+    ].compact
   end
 
   def stickiness_stats(result, previous = nil)

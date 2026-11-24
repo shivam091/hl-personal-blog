@@ -148,8 +148,10 @@ Rails.application.routes.draw do
       end
     end
 
+    # Scores at the section's root, so its logins tab sits under it and the
+    # one menu entry stays current on both.
     namespace :recaptcha do
-      resources :scores, only: :index do
+      resources :scores, only: :index, path: "" do
         post :sync, on: :collection
       end
       resources :logins, only: %i[index show]

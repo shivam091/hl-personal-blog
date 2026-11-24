@@ -41,6 +41,12 @@ module Google
         scores.sum { |bucket| bucket["score"] * bucket["count"] }.fdiv(requests)
       end
 
+      # Unsaved and without challenges, since Google doesn't split those by
+      # action.
+      def for_action(action)
+        Stat.new(date: date, scores: Array(action_scores[action]))
+      end
+
       class << self
         def to_csv(stats)
           CSV.generate do |csv|

@@ -1,0 +1,9 @@
+-# Logins get their own tab rather than Google's login scores, since each
+-# attempt is kept with why it was let through and how its password went.
+- kept = local_assigns[:period]&.query.to_h
+- tabs = Google::Recaptcha::ScoresController::TABS.map { |action, label| [label, google_recaptcha_scores_path(kept.merge(recaptcha_action: action).compact), controller_name == "scores" && @action == action] }
+- tabs << ["Logins", google_recaptcha_logins_path, controller_name == "logins"]
+%nav{class: "mb-4 flex flex-wrap gap-1 text-sm", aria: {label: "reCAPTCHA sections"}}
+  - tabs.each do |label, path, current|
+    = link_to label, path, class: ["rounded-md px-3 py-1.5", current ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"],
+      aria: {current: (current ? "page" : nil)}

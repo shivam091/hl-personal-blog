@@ -1,41 +1,37 @@
-- content_for :title, "reCAPTCHA scores"
+- content_for :title, @action ? "reCAPTCHA #{Google::Recaptcha::ScoresController::TABS[@action].downcase}" : "reCAPTCHA"
 - low_score = Google::Recaptcha::Stat::LOW_SCORE
 
 %div{class: page_header_class}
   %div
-    %h1{class: page_title_class} reCAPTCHA scores
+    %h1{class: page_title_class} reCAPTCHA
     %p{class: subtitle_class}
-      How reCAPTCHA scored the blog's visitors each day, from 1.0 (very likely human) down to 0.0 (very likely a bot).
+      - if @action
+        How reCAPTCHA scored the contact form's submissions each day, from 1.0 (very likely human) down to 0.0 (very likely a bot).
+      - else
+        How reCAPTCHA scored the blog's visitors each day, from 1.0 (very likely human) down to 0.0 (very likely a bot).
     = last_sync_status("recaptcha_metrics")
   %div{class: toolbar_class}
-    = render "google/shared/export_menu", exports: [["Daily scores", list_url(@period, @sorting, format: :csv), "One row per day, with a column per score bucket"],
-      ["Scores by action", list_url(@period, @sorting, format: :csv, export: "actions"), "One row per day and form, since each is scored on its own"]]
+    = render "google/shared/export_menu", exports: [["Daily scores", list_url(@period, @sorting, @report, format: :csv), "One row per day, with a column per score bucket"],
+      (["Scores by action", list_url(@period, @sorting, format: :csv, export: "actions"), "One row per day and form, since each is scored on its own"] unless @action)].compact
     = button_to sync_google_recaptcha_scores_path, form_class: "inline-flex",
       title: "Google returns every day it still holds, so there's no range to choose",
       class: outline_button_class do
       = icon("refresh", size: 14)
       Sync scores
 
+= render "google/recaptcha/tabs", period: @period
 = render "google/shared/period", period: @period, keep: [@sorting, @pagination, @report]
 
-= render "google/shared/totals", metrics: recaptcha_summary_metrics, totals: @summary, previous_totals: @previous_summary,
+= render "google/shared/totals", metrics: recaptcha_summary_metrics(@action), totals: @summary, previous_totals: @previous_summary,
   previous_period: @period.previous
 
 - report = @report
 - if @pagination.total_count.positive?
-  - scope = report.action ? "the #{report.action} action" : "all actions"
-  - shown = capture do
-    = label_tag "recaptcha-action", "Show", class: "text-xs font-medium text-slate-500"
-    = picker_select_tag :recaptcha_action, options_for_select(report.actions, report.action), include_blank: "Overall traffic", id: "recaptcha-action",
-      class: "h-8 rounded-md border border-slate-300 bg-white px-2.5 py-0 text-sm font-normal text-slate-900 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 focus:outline-none",
-      data: {controller: "chart-granularity", chart_granularity_param_value: "recaptcha_action", action: "chart-granularity#change"}
+  - scope = report.action ? "the contact form" : "all actions"
   - empty = capture do
     %p{class: "py-10 text-center text-sm text-slate-500"} No scores for #{scope} in #{@period}.
   %div{class: "mb-6 grid gap-4 lg:grid-cols-2"}
-    -# Only with actions to pick, since Google doesn't always split them out
-    -# and overall traffic alone is no choice.
-    = render layout: "shared/card", locals: {id: "recaptcha-requests", title: "Number of requests", icon: "bar-chart",
-      actions: (tag.div(shown, class: "flex items-center gap-2") if report.actions.any?)} do
+    = render layout: "shared/card", locals: {id: "recaptcha-requests", title: "Number of requests", icon: "bar-chart"} do
       %div{class: "px-4 py-3"}
         - if report.requests.positive?
           = stacked_chart(report.daily.map(&:first),
@@ -82,7 +78,7 @@
             previous: report.previous_daily_challenges, previous_name: Period::COMPARES[@period.compare])
 
 - if @pagination.total_count.zero?
-  = render "shared/empty_state", icon: "inbox", message: "No scores for #{@period}. Sync to fetch them from Google."
+  = render "shared/empty_state", icon: "inbox", message: (@action ? "No contact form scores for #{@period}. Google only splits them out on some days." : "No scores for #{@period}. Sync to fetch them from Google.")
 - else
   %div{class: table_card_class}
     %table{class: "w-full border-collapse text-left text-sm"}
@@ -97,7 +93,7 @@
           %th{scope: "col", class: list_heading_class} Scores
           %th{scope: "col", class: list_heading_right_class} Challenges failed
 
-      - day_metrics = recaptcha_summary_metrics.index_by(&:field)
+      - day_metrics = recaptcha_summary_metrics(@action).index_by(&:field)
       - @stats.each do |stat|
         - details_id = dom_id(stat, :details)
         -# Only days Google split actions out for open, so none opens on nothing.

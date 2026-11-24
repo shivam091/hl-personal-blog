@@ -2,8 +2,8 @@
 
 module Google
   module Recaptcha
-    # For one action as well as overall, so a spike can be traced to the
-    # form it hit and a threshold judged on whom it would turn away.
+    # Takes stats already narrowed to an action when one is picked, so the
+    # action is only carried for links and labels.
     class Report
       TOP_ACTIONS = 10
 
@@ -12,7 +12,7 @@ module Google
       def initialize(stats, period:, action: nil, previous: nil)
         @stats = stats
         @period = period
-        @action = action.presence_in(actions)
+        @action = action
         @previous = previous
       end
 
@@ -21,7 +21,7 @@ module Google
       end
 
       # Every action scored in the period, so one with no traffic since isn't
-      # offered.
+      # ranked; none once narrowed to one, since a ranking of one says nothing.
       def actions
         @actions ||= @stats.flat_map { |stat| stat.action_scores.keys }.uniq.sort
       end
@@ -31,7 +31,7 @@ module Google
       end
 
       def requests
-        @stats.sum { |stat| count(buckets(stat)) }
+        @stats.sum { |stat| count(stat.scores) }
       end
 
       # A day Google returned nothing for is a gap rather than zero, since it
@@ -42,7 +42,7 @@ module Google
           stat = by_date[date]
           next [date, nil, nil] unless stat
 
-          day = buckets(stat)
+          day = stat.scores
           low = day.sum { |bucket| bucket["score"] < Stat::LOW_SCORE ? bucket["count"] : 0 }
           [date, low, count(day) - low]
         end
@@ -56,7 +56,7 @@ module Google
         by_date = @previous.index_by(&:date)
         (period.previous.from..period.previous.to).first(daily.size).map do |date|
           stat = by_date[date]
-          count(buckets(stat)) if stat
+          count(stat.scores) if stat
         end
       end
 
@@ -113,7 +113,7 @@ module Google
 
       def histogram
         counts = Hash.new(0)
-        @stats.each { |stat| buckets(stat).each { |bucket| counts[bucket["score"].to_f.round(1)] += bucket["count"].to_i } }
+        @stats.each { |stat| stat.scores.each { |bucket| counts[bucket["score"].to_f.round(1)] += bucket["count"].to_i } }
         Summary::BUCKETS.to_h { |score| [score, counts[score]] }
       end
 
@@ -123,7 +123,7 @@ module Google
         return unless compared? && @previous.any?
 
         counts = Hash.new(0)
-        @previous.each { |stat| buckets(stat).each { |bucket| counts[bucket["score"].to_f.round(1)] += bucket["count"].to_i } }
+        @previous.each { |stat| stat.scores.each { |bucket| counts[bucket["score"].to_f.round(1)] += bucket["count"].to_i } }
         Summary::BUCKETS.map { |score| counts[score] }
       end
 
@@ -148,10 +148,6 @@ module Google
       end
 
       private
-
-      def buckets(stat)
-        action ? Array(stat.action_scores[action]) : stat.scores
-      end
 
       def count(buckets)
         buckets.sum { |bucket| bucket["count"].to_i }

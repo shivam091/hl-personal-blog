@@ -7,28 +7,34 @@ module Google
       # be sorted on in the database.
       SORT_COLUMNS = {"date" => "desc"}.freeze
 
+      # Must match the action the blog's contact form passes, since Google
+      # splits scores by it.
+      MESSAGE_ACTION = "contact_form"
+      TABS = {nil => "All traffic", MESSAGE_ACTION => "Messages"}.freeze
+
       def index
+        @action = params[:recaptcha_action].presence_in(TABS.keys)
         @period = Period.new(params)
         @sorting = Sorting.new(params, columns: SORT_COLUMNS, tiebreaker: :date)
-        stats = @sorting.apply(@period.apply(Stat.all))
+        stats = @sorting.apply(@period.apply(scope))
 
         respond_to do |format|
           format.html do
             @pagination = Pagination.new(stats, params)
-            @stats = @pagination.records
-            period_stats = @period.apply(Stat.all).to_a
+            @stats = for_action(@pagination.records)
+            period_stats = for_action(@period.apply(scope))
             @summary = summary(period_stats)
             # Only once a comparison is picked, and not with a period from
             # before the first sync, which would read as a jump from zero.
-            previous_stats = @period.previous.apply(Stat.all).to_a if @period.compare? && Stat.where(:date.lte => @period.previous.from).exists?
+            previous_stats = for_action(@period.previous.apply(scope)) if @period.compare? && scope.where(:date.lte => @period.previous.from).exists?
             @previous_summary = summary(previous_stats) if previous_stats
-            @report = Report.new(period_stats, period: @period, action: params[:recaptcha_action], previous: previous_stats)
+            @report = Report.new(period_stats, period: @period, action: @action, previous: previous_stats)
           end
           format.csv do
-            actions = params[:export] == "actions"
-            send_csv actions ? Stat.actions_csv(stats) : Stat.to_csv(stats),
-              filename: "recaptcha-scores#{"-by-action" if actions}-#{@period.from.iso8601}-to-#{@period.to.iso8601}.csv",
-              detail: "#{actions ? "Scores by action" : "Daily scores"}, #{@period}"
+            actions = params[:export] == "actions" && @action.nil?
+            send_csv actions ? Stat.actions_csv(stats) : Stat.to_csv(for_action(stats)),
+              filename: "recaptcha-scores#{"-by-action" if actions}#{"-#{@action}" if @action}-#{@period.from.iso8601}-to-#{@period.to.iso8601}.csv",
+              detail: "#{actions ? "Scores by action" : "Daily scores"}#{" for #{TABS[@action].downcase}" if @action}, #{@period}"
           end
         end
       end
@@ -42,6 +48,16 @@ module Google
       end
 
       private
+
+      # Only days Google split the action out for, so a day it didn't isn't
+      # read as one without messages.
+      def scope
+        @action ? Stat.where(:"action_scores.#{@action}".exists => true) : Stat.all
+      end
+
+      def for_action(stats)
+        @action ? stats.map { |stat| stat.for_action(@action) } : stats.to_a
+      end
 
       # Added up in Ruby, since a period holds at most a few hundred days.
       def summary(stats)

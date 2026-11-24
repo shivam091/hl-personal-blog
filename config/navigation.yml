@@ -147,13 +147,7 @@ shared:
           route: google_safe_browsing_link_checks
         - label: reCAPTCHA
           icon: shield
-          items:
-            - label: Scores
-              icon: shield
-              route: google_recaptcha_scores
-            - label: Logins
-              icon: shield-check
-              route: google_recaptcha_logins
+          route: google_recaptcha_scores
 
     - label: Monitoring
       icon: activity

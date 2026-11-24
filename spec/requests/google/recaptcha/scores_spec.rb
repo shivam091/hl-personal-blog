@@ -32,28 +32,39 @@ RSpec.describe "reCAPTCHA scores", type: :request do
     expect(page.at_css("#hint-below-0-5").text).to include("the threshold Google suggests by default")
   end
 
-  it "charts requests by risk, the spread of scores and the top actions, overall or for one action" do
+  it "charts requests by risk, the spread of scores and the top actions, overall or for contact messages" do
     stat(yesterday, {0.9 => 3, 0.1 => 1}, actions: {"login" => [{"score" => 0.9, "count" => 2}, {"score" => 0.1, "count" => 1}],
-      "contact" => [{"score" => 0.9, "count" => 1}]})
-    stat(yesterday - 2, {0.9 => 2}, actions: {"contact" => [{"score" => 0.9, "count" => 2}]})
+      "contact_form" => [{"score" => 0.9, "count" => 1}, {"score" => 0.2, "count" => 1}]}, challenges: {"failed" => 1})
+    stat(yesterday - 2, {0.9 => 2}, actions: {"contact_form" => [{"score" => 0.9, "count" => 2}]})
+    stat(yesterday - 1, {0.9 => 5})
 
     get google_recaptcha_scores_path(from: "2026-10-10", to: "2026-10-12")
 
     page = Nokogiri::HTML5(response.body)
     days = page.css("section[aria-labelledby=recaptcha-requests] [data-tip]").map { |bar| JSON.parse(bar["data-tip"]) }
     expect(days.map { |day| [day["title"], day["rows"].map { |row| row["value"] }] })
-      .to eq([["Day 1", %w[0 2]], ["Day 3", %w[1 3]]])
-    expect(page.css("section[aria-labelledby=recaptcha-top-actions] li span.truncate.font-medium").map(&:text)).to eq(%w[contact login])
-    expect(page.css("section[aria-labelledby=recaptcha-suspicious-actions] li span.truncate.font-medium").map(&:text)).to eq(%w[login])
-    expect(page.css("#recaptcha-action option").map(&:text)).to eq(["Overall traffic", "contact", "login"])
+      .to eq([["Day 1", %w[0 2]], ["Day 2", %w[0 5]], ["Day 3", %w[1 3]]])
+    expect(page.css("section[aria-labelledby=recaptcha-top-actions] li span.truncate.font-medium").map(&:text)).to eq(%w[contact_form login])
+    expect(page.css("section[aria-labelledby=recaptcha-suspicious-actions] li span.truncate.font-medium").map(&:text)).to eq(%w[contact_form login])
+    tabs = page.css("nav[aria-label='reCAPTCHA sections'] a")
+    expect(tabs.map { |tab| [tab.text.squish, tab["aria-current"]] }).to eq([["All traffic", "page"], ["Messages", nil], ["Logins", nil]])
+    expect(tabs[1]["href"]).to eq(google_recaptcha_scores_path(from: "2026-10-10", to: "2026-10-12", recaptcha_action: "contact_form"))
+    expect(tabs[2]["href"]).to eq(google_recaptcha_logins_path)
 
-    get google_recaptcha_scores_path(from: "2026-10-10", to: "2026-10-12", recaptcha_action: "login")
+    get google_recaptcha_scores_path(from: "2026-10-10", to: "2026-10-12", recaptcha_action: "contact_form")
 
     page = Nokogiri::HTML5(response.body)
     days = page.css("section[aria-labelledby=recaptcha-requests] [data-tip]").map { |bar| JSON.parse(bar["data-tip"]) }
-    expect(days.map { |day| day["rows"].map { |row| row["value"] } }).to eq([%w[1 2]])
-    expect(page.at_css("#recaptcha-action option[selected]").text).to eq("login")
-    expect(page.at_css("nav[aria-label=Pagination], a[href*='sort']")&.[]("href").to_s).to include("recaptcha_action=login")
+    expect(days.map { |day| [day["title"], day["rows"].map { |row| row["value"] }] }).to eq([["Day 1", %w[0 2]], ["Day 3", %w[1 1]]])
+    expect(page.css("dl dd.text-lg").map(&:text)).to eq(["4", "25.0%", "0.73"])
+    rows = page.css("tbody[data-controller=disclosure] > tr:first-child").map { |row| row.css("td")[1..2].map { |cell| cell.text.squish } }
+    expect(rows).to eq([["12 Oct, 2026", "2"], ["10 Oct, 2026", "2"]])
+    expect(page.at_css("#recaptcha-top-actions, #recaptcha-suspicious-actions, #recaptcha-challenges")).to be_nil
+    expect(page.at_css("nav[aria-label='reCAPTCHA sections'] a[aria-current=page]").text).to eq("Messages")
+    expect(page.at_css("nav[aria-label=Pagination], a[href*='sort']")&.[]("href").to_s).to include("recaptcha_action=contact_form")
+
+    get google_recaptcha_scores_path(format: :csv, from: "2026-10-10", to: "2026-10-12", recaptcha_action: "contact_form")
+    expect(CSV.parse(response.body, headers: true).map { |row| row.to_h.values_at("Date", "Requests") }).to eq([%w[2026-10-12 2], %w[2026-10-10 2]])
   end
 
   it "reads requests and each action against the period compared with, day for day, only once one is picked" do
@@ -90,14 +101,13 @@ RSpec.describe "reCAPTCHA scores", type: :request do
     expect(page.css("section[aria-labelledby=recaptcha-top-actions] li span.flex").map { |name| name.text.squish }).to eq(%w[login contact])
   end
 
-  it "leaves out the action picker, cards and expanders when Google split out no actions" do
+  it "leaves out the action cards and expanders when Google split out no actions" do
     stat(yesterday, {0.9 => 4}, actions: {"login" => [{"score" => 0.9, "count" => 4}]})
     stat(yesterday - 1, {0.9 => 2})
 
     get google_recaptcha_scores_path(from: "2026-10-11", to: "2026-10-11")
 
     page = Nokogiri::HTML5(response.body)
-    expect(page.at_css("#recaptcha-action")).to be_nil
     expect(page.at_css("#recaptcha-top-actions, #recaptcha-suspicious-actions")).to be_nil
     expect(page.at_css("tbody tr[hidden], tbody button[aria-controls]")).to be_nil
     expect(response.body).not_to include("Google split out no actions")
@@ -105,7 +115,6 @@ RSpec.describe "reCAPTCHA scores", type: :request do
     get google_recaptcha_scores_path(from: "2026-10-11", to: "2026-10-12")
 
     page = Nokogiri::HTML5(response.body)
-    expect(page.at_css("#recaptcha-action")).to be_present
     expect(page.css("tbody[data-controller=disclosure] button[aria-expanded]").map { |button| button["aria-label"] }).to eq(["Show actions for 12 Oct, 2026"])
   end
 
