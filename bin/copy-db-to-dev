@@ -37,6 +37,32 @@ fi
 mongosh "$target_uri" --quiet --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1 ||
   { echo "Can't reach the local mongod at $target_uri; is it running?" >&2; exit 1; }
 
+# Data and indexes, uncompressed, because that is what Atlas counts against
+# the cluster's storage limit.
+size_report='
+  const human = bytes => {
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+    return bytes.toFixed(i ? 1 : 0) + " " + units[i];
+  };
+  const names = target.getCollectionInfos({ type: "collection" }).map(c => c.name).sort();
+  const row = (name, docs, data, indexes, size) =>
+    print(name.padEnd(48), docs.padStart(10), data.padStart(10), indexes.padStart(10), size.padStart(10));
+  let docs = 0, data = 0, indexes = 0;
+  row("collection", "docs", "data", "indexes", "size");
+  names.forEach(name => {
+    const s = target.getCollection(name).aggregate([{ $collStats: { storageStats: {} } }]).next().storageStats;
+    docs += s.count; data += s.size; indexes += s.totalIndexSize;
+    row(name, String(s.count), human(s.size), human(s.totalIndexSize), human(s.size + s.totalIndexSize));
+  });
+  row("total", String(docs), human(data), human(indexes), human(data + indexes));
+'
+
+# Shown before the prompt, so the space the copy needs is known up front.
+echo "== Live $SOURCE_DB =="
+mongosh "$source_uri" --quiet --eval "const target = db.getSiblingDB('$SOURCE_DB'); $size_report"
+
 if [[ "${1:-}" != "-y" ]]; then
   read -r -p "Replace every collection in local '$TARGET_DB' with a copy of live '$SOURCE_DB'? [y/N] " answer
   [[ "$answer" =~ ^[Yy]$ ]] || { echo "Nothing copied."; exit 0; }
@@ -53,8 +79,5 @@ echo "== Copying live $SOURCE_DB to local $TARGET_DB =="
 mongodump --uri="$source_uri" --db="$SOURCE_DB" --readPreference=secondaryPreferred --archive --gzip --quiet |
   mongorestore --uri="$target_uri" --archive --gzip --nsInclude="$SOURCE_DB.*" --nsFrom="$SOURCE_DB.*" --nsTo="$TARGET_DB.*" --quiet
 
-echo "== Collections in local $TARGET_DB =="
-mongosh "$target_uri" --quiet --eval "
-  const target = db.getSiblingDB('$TARGET_DB');
-  target.getCollectionNames().sort().forEach(name => print(name.padEnd(48), target.getCollection(name).estimatedDocumentCount()));
-"
+echo "== Local $TARGET_DB =="
+mongosh "$target_uri" --quiet --eval "const target = db.getSiblingDB('$TARGET_DB'); $size_report"
