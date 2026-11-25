@@ -21,6 +21,7 @@ tasks=(
   "google:analytics:sync[$DAYS]"
   "google:recaptcha:sync"
   "google:safe_browsing:sync"
+  "mixpanel:sync"
 )
 
 echo "== Scheduled sync, ${RAILS_ENV:-development}, Analytics stats for the last $DAYS days =="

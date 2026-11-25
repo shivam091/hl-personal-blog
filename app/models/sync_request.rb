@@ -66,6 +66,13 @@ class SyncRequest
       page: :google_safe_browsing_link_checks_path,
       enqueue: ->(request) { Google::SafeBrowsing::SyncJob.perform_later(request_id: request.id.to_s) }
     ),
+    Kind.new(
+      key: "mixpanel",
+      section: "Mixpanel pages, engagement & frustration",
+      source: "Mixpanel",
+      page: :mixpanel_report_path,
+      enqueue: ->(request) { Mixpanel::SyncJob.perform_later(request.days, request.to_date.iso8601, request_id: request.id.to_s) }
+    ),
     # Not a sync from a service, but a nightly run the consent flags depend on, so it fails and goes quiet
     # where the syncs' failures are already watched.
     Kind.new(

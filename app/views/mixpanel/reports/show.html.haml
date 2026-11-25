@@ -1,0 +1,171 @@
+- content_for :title, "Mixpanel"
+- report = @report
+- before = report.previous
+- higher = DashboardHelper::HIGHER_IS_BETTER
+- lower = DashboardHelper::Kpi.new(lower_is_better: true)
+- duration = ->(seconds) { seconds ? engagement_duration(seconds) : "—" }
+
+%div{class: page_header_class}
+  %div
+    %h1{class: page_title_class} Mixpanel
+    %p{class: subtitle_class}
+      How pages are actually read: time readers were active, how far they scrolled, where they got frustrated, and how
+      many of them GA never sees. Replays and heatmaps stay in Mixpanel itself.
+    = last_sync_status("mixpanel")
+  %div{class: toolbar_class}
+    = link_to list_url(@period, format: :csv), class: outline_button_class do
+      = icon("download", size: 14)
+      Export CSV
+    = button_to sync_mixpanel_report_path(@period.query), form_class: "inline-flex", class: outline_button_class do
+      = icon("refresh", size: 14)
+      Sync
+
+= render "google/shared/period", period: @period, keep: []
+
+- if !report.any?
+  = render "shared/empty_state",
+    message: "No Mixpanel figures yet. Set NEXT_PUBLIC_MIXPANEL_TOKEN on the blog and the mixpanel credentials here, then sync."
+- else
+  - site = report.site
+  - previous_site = before&.site
+  %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
+    = render "dashboard/tile", label: "Visitors", tile_icon: "users",
+      hint: "Readers Mixpanel saw each day, added up, so a reader on two days counts twice. Only readers who accepted cookies or live where none are needed.",
+      value: number_with_delimiter(report.visitors), change: metric_change(report.visitors, before&.visitors, higher), compared_with: @period.previous
+    = render "dashboard/tile", label: "Page views", tile_icon: "eye",
+      hint: "Pages opened, sent once each new page's title is in, as for GA.",
+      value: number_with_delimiter(report.page_views), change: metric_change(report.page_views, before&.page_views, higher), compared_with: @period.previous
+    = render "dashboard/tile", label: "Engaged time per view", tile_icon: "timer",
+      hint: "Seconds the tab was visible and the reader scrolled, typed or moved within the last 30 seconds, averaged over views that had any.",
+      value: duration.(site.mean_engaged_seconds),
+      change: metric_change(site.mean_engaged_seconds, previous_site&.mean_engaged_seconds, higher, format: :duration), compared_with: @period.previous
+    = render "dashboard/tile", label: "Read through", tile_icon: "book-open",
+      hint: "Views that reached #{Mixpanel::PageStat::READ_THROUGH_PERCENT}% of the page, out of views with any time or scroll.",
+      value: metric_value(site.read_through_share, :percent),
+      change: metric_change(site.read_through_share, previous_site&.read_through_share, higher, format: :percent), compared_with: @period.previous
+    = render "dashboard/tile", label: "Mean scroll depth", tile_icon: "arrow-down",
+      hint: "How far down the page views got, on average.",
+      value: metric_value(site.mean_scroll_share, :percent),
+      change: metric_change(site.mean_scroll_share, previous_site&.mean_scroll_share, higher, format: :percent), compared_with: @period.previous
+    = render "dashboard/tile", label: "Rage clicks", tile_icon: "alert-triangle",
+      hint: "Bursts of clicks on one spot, usually something that looks clickable and isn't, or is too slow to respond.",
+      value: number_with_delimiter(site.rage_clicks), change: metric_change(site.rage_clicks, previous_site&.rage_clicks, lower), compared_with: @period.previous
+    = render "dashboard/tile", label: "Dead clicks", tile_icon: "mouse-pointer",
+      hint: "Clicks after which nothing on the page changed.",
+      value: number_with_delimiter(site.dead_clicks), change: metric_change(site.dead_clicks, previous_site&.dead_clicks, lower), compared_with: @period.previous
+    = render "dashboard/tile", label: "Script errors", tile_icon: "alert-circle",
+      hint: "Uncaught errors in readers' browsers, at most five per page load.",
+      value: number_with_delimiter(site.js_errors), change: metric_change(site.js_errors, previous_site&.js_errors, lower), compared_with: @period.previous
+
+  - dates = report.days.map(&:date)
+  - if dates.size > 1
+    = render layout: "shared/card", locals: {id: "daily", title: "By day", icon: "trending-up", class: "mb-6"} do
+      %div{class: "px-4 py-3"}
+        = line_chart(dates, [ChartsHelper::Series.new(name: "Visitors", values: report.days.map(&:visitors)),
+          ChartsHelper::Series.new(name: "Page views", values: report.days.map(&:page_views), dashed: true)],
+          y_title: "Count", label: "Mixpanel visitors and page views by day")
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "ga-coverage", title: "Readers GA can't see", icon: "eye-off"} do
+      %p{class: lead_note_class}
+        Whether gtag loaded for each reader Mixpanel counted. Blocked readers are missing from every GA report, so GA's
+        figures undercount by about that share.
+      - shares = report.ga_shares
+      - if shares.empty?
+        %p{class: empty_note_class} No readers in this period.
+      - else
+        = report_table([report_th("GA"), report_th("Visitors", :right), report_th("Share", :right)]) do
+          - shares.each do |status, count, share|
+            %tr{class: table_row_class}
+              %td{class: "#{name_cell_class} #{"text-red-700" if status == "blocked"}"}= status.humanize
+              %td{class: cell_class}= number_with_delimiter(count)
+              %td{class: cell_class}= metric_value(share, :percent)
+
+    = render layout: "shared/card", locals: {id: "themes", title: "Themes", icon: "sliders"} do
+      %p{class: lead_note_class} Which colour theme readers had picked, by visitors.
+      - shares = report.theme_shares
+      - if shares.empty?
+        %p{class: empty_note_class} No readers in this period.
+      - else
+        = report_table([report_th("Theme"), report_th("Visitors", :right), report_th("Share", :right)]) do
+          - shares.each do |theme, count, share|
+            %tr{class: table_row_class}
+              %td{class: name_cell_class}= theme.humanize
+              %td{class: cell_class}= number_with_delimiter(count)
+              %td{class: cell_class}= metric_value(share, :percent)
+
+  = render layout: "shared/card", locals: {id: "pages", title: "Pages", icon: "file-text", class: "mb-6"} do
+    - rows = report.top_pages
+    - if rows.empty?
+      %p{class: empty_note_class} No page views in this period.
+    - else
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              = report_th "Page"
+              = report_th "Views", :right
+              = report_th "Visitors", :right
+              = report_th "Engaged", :right, title: "Mean engaged time per view"
+              = report_th "Scroll", :right, title: "Mean scroll depth"
+              = report_th "Read through", :right, title: "Views reaching #{Mixpanel::PageStat::READ_THROUGH_PERCENT}% of the page"
+              = report_th "Frustration", :right, title: "Rage clicks, dead clicks and script errors"
+          %tbody
+            - rows.each do |page|
+              - earlier = before&.page(page.page_path)
+              %tr{class: table_row_class}
+                %td{class: name_cell_class}
+                  = blog_page_link(page.page_path, page_view_path(page.page_path), truncate: true)
+                  - if page.content_group.present?
+                    %span{class: "text-xs text-slate-400"}= page.content_group
+                %td{class: cell_class}
+                  = number_with_delimiter(page.page_views)
+                  - if before
+                    = row_change(page.page_views, earlier&.page_views.to_i, higher)
+                %td{class: cell_class}= number_with_delimiter(page.visitors)
+                %td{class: cell_class}= duration.(page.mean_engaged_seconds)
+                %td{class: cell_class}= metric_value(page.mean_scroll_share, :percent)
+                %td{class: cell_class}= metric_value(page.read_through_share, :percent)
+                %td{class: "#{cell_class} #{"text-amber-700" if page.frustrations.positive?}"}= number_with_delimiter(page.frustrations)
+
+  - least = report.least_read_pages
+  - if least.any?
+    = render layout: "shared/card", locals: {id: "least-read", title: "Least read through", icon: "arrow-down", class: "mb-6"} do
+      %p{class: lead_note_class}
+        Pages readers most often leave before the end, among those with ten or more engaged views: where a piece loses
+        them, a replay of one of these visits in Mixpanel usually shows why.
+      = report_table([report_th("Page"), report_th("Read through", :right), report_th("Scroll", :right), report_th("Engaged", :right)]) do
+        - least.each do |page|
+          %tr{class: table_row_class}
+            %td{class: name_cell_class}= blog_page_link(page.page_path, page_view_path(page.page_path), truncate: true)
+            %td{class: cell_class}= metric_value(page.read_through_share, :percent)
+            %td{class: cell_class}= metric_value(page.mean_scroll_share, :percent)
+            %td{class: cell_class}= duration.(page.mean_engaged_seconds)
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    - Mixpanel::IssueStat::KINDS.each do |kind, title|
+      = render layout: "shared/card", locals: {id: kind.dasherize, title: title, icon: (kind == "js_error" ? "alert-circle" : "mouse-pointer")} do
+        - rows = report.issues(kind)
+        - if rows.empty?
+          %p{class: empty_note_class} None in this period.
+        - else
+          = report_table([report_th(kind == "js_error" ? "Error" : "Element"), report_th("Page"), report_th("Count", :right), report_th("Visitors", :right)]) do
+            - rows.each do |issue|
+              %tr{class: table_row_class}
+                %td{class: "#{name_cell_class} break-all font-mono text-xs"}= issue.target
+                %td{class: name_cell_class}= issue.page_path
+                %td{class: cell_class}= number_with_delimiter(issue.count)
+                %td{class: cell_class}= number_with_delimiter(issue.visitors)
+
+    = render layout: "shared/card", locals: {id: "events", title: "Events", icon: "activity"} do
+      %p{class: lead_note_class}
+        Every event Mixpanel received, the blog's own and those it captures itself ($mp_…), with #{pluralize(report.replays, "session")} replayed.
+      - rows = report.events
+      - if rows.empty?
+        %p{class: empty_note_class} No events in this period.
+      - else
+        = report_table([report_th("Event"), report_th("Count", :right)]) do
+          - rows.each do |name, count|
+            %tr{class: table_row_class}
+              %td{class: "#{name_cell_class} font-mono text-xs"}= name
+              %td{class: cell_class}= number_with_delimiter(count)

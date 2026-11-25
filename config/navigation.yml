@@ -66,6 +66,10 @@ shared:
           icon: cookie
           route: consent_report
 
+    - label: Mixpanel
+      icon: mouse-pointer
+      route: mixpanel_report
+
     - label: Google
       icon: globe
       items:
