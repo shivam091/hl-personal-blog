@@ -24,7 +24,7 @@ RSpec.describe Mixpanel::SyncService do
   end
 
   def sync(days: 1)
-    described_class.call(days: days, to: day, client: client, retention: nil)
+    described_class.call(days: days, to: day, client: client, retention: nil, host: "blog.example.com")
   end
 
   it "adds up each page's views, engaged time, scroll depth and frustration for the day" do
@@ -84,6 +84,23 @@ RSpec.describe Mixpanel::SyncService do
     expect(Mixpanel::SiteStat.find_by(date: day).funnel).to eq(
       {"viewed" => 3, "read" => 2, "form_seen" => 1, "form_started" => 1, "subscribed" => 1}
     )
+  end
+
+  it "counts only the live blog's traffic, not a local run or a preview deploy" do
+    stubs.get("/api/2.0/export") do
+      [200, {}, export(
+        event("$mp_web_page_view", "$current_url": "https://blog.example.com/post/a"),
+        event("$mp_web_page_view", distinct_id: "dev", "$current_url": "http://localhost:3001/post/a"),
+        event("$mp_web_page_view", distinct_id: "preview", "$current_url": "https://blog-git-feat-x.vercel.app/post/a"),
+        event("newsletter_subscribe", distinct_id: "reader-1", source: "server")
+      )]
+    end
+
+    sync
+    site = Mixpanel::SiteStat.find_by(date: day)
+    expect(site).to have_attributes(visitors: 1, page_views: 1)
+    expect(site.events).to contain_exactly({"name" => "$mp_web_page_view", "count" => 1}, {"name" => "newsletter_subscribe", "count" => 1})
+    expect(Mixpanel::PageStat.find_by(date: day, page_path: "/post/a").page_views).to eq(1)
   end
 
   it "updates the day in place when it's synced again" do

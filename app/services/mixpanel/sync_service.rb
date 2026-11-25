@@ -22,11 +22,12 @@ module Mixpanel
       end
     end
 
-    def initialize(days: DEFAULT_DAYS, to: Date.current, client: Client.new, retention: RetentionService)
+    def initialize(days: DEFAULT_DAYS, to: Date.current, client: Client.new, retention: RetentionService, host: Blog.host)
       @days = days.to_i.clamp(1, MAX_DAYS)
       @to = to
       @client = client
       @retention = retention
+      @host = host
     end
 
     def call
@@ -35,7 +36,7 @@ module Mixpanel
 
       synced = SyncLock.hold("mixpanel") do
         ((@to - (@days - 1))..@to).each do |date|
-          sync_day(date, @client.export(date), result)
+          sync_day(date, @client.export(date).select { |event| on_blog?(event) }, result)
         rescue Client::Error => e
           result.errors << "Mixpanel #{date.iso8601}: #{e.message}"
           # A refused login or the hourly limit refuses every later day too.
@@ -49,6 +50,21 @@ module Mixpanel
     end
 
     private
+
+    # Only the live blog's own traffic: a local run, a preview deploy or a
+    # copy of the site elsewhere sends to the same project with the same
+    # token. Events without a page (the server's) are the blog's, as only
+    # production sends them.
+    def on_blog?(event)
+      return true unless @host
+
+      url = event.dig("properties", "$current_url").presence
+      return true unless url
+
+      URI.parse(url).host == @host
+    rescue URI::InvalidURIError
+      false
+    end
 
     def sync_day(date, events, result)
       PageStat.sync(page_rows(date, events), result)
