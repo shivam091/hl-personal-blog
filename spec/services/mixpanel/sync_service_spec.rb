@@ -95,6 +95,12 @@ RSpec.describe Mixpanel::SyncService do
     expect(Mixpanel::PageStat.find_by(date: day, page_path: "/").page_views).to eq(1)
   end
 
+  it "names the region as the likely cause when Mixpanel cuts the export short" do
+    stubs.get("/api/2.0/export") { [200, {}, "terminated early\n"] }
+
+    expect(sync.errors.first).to start_with('Mixpanel 2026-11-20: Mixpanel cut the export short ("terminated early"), which it does when data_host')
+  end
+
   it "fetches each day on its own and stops at a refused login" do
     stubs.get("/api/2.0/export") do |env|
       requests << env.params["from_date"]

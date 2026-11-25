@@ -12,7 +12,12 @@ module Mixpanel
     # Annotations, Lexicon and the Query API live on the app's own host in
     # the same region as the export.
     APP_HOSTS = {"data.mixpanel.com" => "mixpanel.com", "data-eu.mixpanel.com" => "eu.mixpanel.com", "data-in.mixpanel.com" => "in.mixpanel.com"}.freeze
-    OPEN_TIMEOUT = 5
+    # Mixpanel's US hosts have taken over 5 seconds to accept a connection
+    # from some networks.
+    OPEN_TIMEOUT = 15
+    # Mixpanel's whole reply when the export is asked of a region the
+    # project isn't kept in, sent with a 200.
+    TERMINATED = "terminated early"
     # Mixpanel streams the day as it reads it, which for a busy day takes a while.
     READ_TIMEOUT = 120
     NOT_CONFIGURED = "Mixpanel not configured (credentials mixpanel.project_id, service_account_username, service_account_secret)"
@@ -49,6 +54,11 @@ module Mixpanel
       body = retrying_connect do
         connection.get(EXPORT_PATH, project_id: @project_id, from_date: date.iso8601, to_date: date.iso8601).body
       end
+      if body.to_s.strip == TERMINATED
+        raise Error, "Mixpanel cut the export short (#{TERMINATED.inspect}), which it does when data_host is another region than the project's " \
+          "(credentials mixpanel.data_host: data.mixpanel.com for US, data-eu or data-in for EU or India)"
+      end
+
       body.to_s.each_line.filter_map { |line| JSON.parse(line) if line.strip.present? }
     rescue Faraday::Error => e
       raise Error.new(error_message(e), status: e.response_status)

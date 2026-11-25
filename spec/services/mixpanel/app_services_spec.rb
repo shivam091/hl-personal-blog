@@ -84,5 +84,13 @@ RSpec.describe "Mixpanel's app and query APIs" do
 
       expect(described_class.call(client: client, today: Date.new(2026, 11, 25)).summary).to eq("0 created, 0 updated, 2 unchanged, 0 failed")
     end
+
+    it "skips quietly on a plan without the Query API" do
+      stubs.get("/api/query/retention") do
+        [402, {}, {status: "error", error: "Your plan does not allow API calls.", error_code: "query_api.request.plan_restricted"}.to_json]
+      end
+
+      expect(described_class.call(client: client).errors).to eq([])
+    end
   end
 end

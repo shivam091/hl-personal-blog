@@ -6,6 +6,7 @@ module Mixpanel
   class RetentionService
     WEEKS = 8
     EVENT = "$mp_web_page_view"
+    PLAN_RESTRICTED = 402
 
     class << self
       def call(...)
@@ -35,7 +36,16 @@ module Mixpanel
         @result[outcome] += 1
       end
       @result
-    rescue Client::Error, Date::Error => e
+    rescue Client::Error => e
+      # The Query API is a paid plan's, so on Free every run would otherwise
+      # fail the whole sync over a card the plan can't fill.
+      if e.status == PLAN_RESTRICTED
+        Rails.logger.info("Mixpanel retention skipped: #{e.message}")
+      else
+        @result.errors << "Mixpanel retention: #{e.message}"
+      end
+      @result
+    rescue Date::Error => e
       @result.errors << "Mixpanel retention: #{e.message}"
       @result
     end

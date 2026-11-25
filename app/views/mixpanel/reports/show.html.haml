@@ -143,7 +143,8 @@
         The latest #{Mixpanel::RetentionService::WEEKS} weeks, whatever the period.
       - cohorts = report.cohorts.select { |cohort| cohort.first.positive? }
       - if cohorts.empty?
-        %p{class: empty_note_class} No cohorts yet; they arrive with the next sync.
+        %p{class: empty_note_class}
+          No cohorts yet. They come from Mixpanel's Query API, which its Free plan doesn't include; on a paid plan they arrive with the next sync.
       - else
         - weeks = Mixpanel::RetentionService::WEEKS
         - max = cohorts.flat_map { |cohort| (1...weeks).filter_map { |week| cohort.retention(week) } }.max.to_f
