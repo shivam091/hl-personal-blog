@@ -25,5 +25,19 @@ module Mixpanel
       redirect_to mixpanel_report_path(period.query),
                   notice: "Syncing Mixpanel for the last #{days} days in the background. Refresh in a moment to see the figures."
     end
+
+    def annotate
+      SyncRequest.enqueue("mixpanel_annotations")
+      redirect_to mixpanel_report_path(Period.new(params).query),
+                  notice: "Marking posts published in the last #{AnnotationService::LOOKBACK_DAYS} days on Mixpanel's charts in the background."
+    end
+
+    # Run by hand rather than on a schedule, since the plan only changes with
+    # the blog's code.
+    def describe
+      SyncRequest.enqueue("mixpanel_lexicon")
+      redirect_to mixpanel_report_path(Period.new(params).query),
+                  notice: "Sending #{TrackingPlan::EVENTS.size} event descriptions to Mixpanel's Lexicon in the background."
+    end
   end
 end

@@ -55,6 +55,21 @@ RSpec.describe "Mixpanel report", type: :request do
     expect(report.mean_engaged_seconds_by(daily)).to eq([10.0, 110.0, *Array.new(12)])
   end
 
+  it "shows the funnel and the retention cohorts" do
+    Mixpanel::SiteStat.create!(date: day, visitors: 10, funnel: {"viewed" => 10, "read" => 4, "form_seen" => 3, "form_started" => 2, "subscribed" => 1})
+    Mixpanel::RetentionCohort.create!(cohort_date: Date.current - 14, first: 10, counts: [10, 3])
+
+    get mixpanel_report_path
+
+    expect(page.css("#funnel ~ div").text).to include("Viewed a page", "Subscribed")
+    expect(page.css("#retention ~ div td div").map { |cell| cell.text.strip }.reject(&:empty?)).to eq(["30%"])
+  end
+
+  it "queues marking posts and describing events" do
+    expect { post annotate_mixpanel_report_path }.to have_enqueued_job(Mixpanel::AnnotationJob)
+    expect { post describe_mixpanel_report_path }.to have_enqueued_job(Mixpanel::LexiconJob)
+  end
+
   it "queues a sync of the days on screen" do
     expect { post sync_mixpanel_report_path }.to have_enqueued_job(Mixpanel::SyncJob)
   end

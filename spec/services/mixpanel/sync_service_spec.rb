@@ -24,7 +24,7 @@ RSpec.describe Mixpanel::SyncService do
   end
 
   def sync(days: 1)
-    described_class.call(days: days, to: day, client: client)
+    described_class.call(days: days, to: day, client: client, retention: nil)
   end
 
   it "adds up each page's views, engaged time, scroll depth and frustration for the day" do
@@ -65,6 +65,24 @@ RSpec.describe Mixpanel::SyncService do
     expect(Mixpanel::IssueStat.where(date: day).map { |issue| [issue.kind, issue.target, issue.count, issue.visitors] }).to contain_exactly(
       ["rage_click", "button#share.icon", 2, 1],
       ["js_error", "x is undefined (app.js:12)", 1, 1]
+    )
+  end
+
+  it "counts the day's visitors at each step who took every step before it" do
+    stubs.get("/api/2.0/export") do
+      [200, {}, export(
+        event("$mp_web_page_view", "$device_id": "d1"), event("article_read", "$device_id": "d1"),
+        event("newsletter_form_seen", "$device_id": "d1"), event("newsletter_form_started", "$device_id": "d1"),
+        # The server names a subscriber by their id, with the same device.
+        event("newsletter_subscribe", distinct_id: "reader_abc", "$device_id": "d1", source: "server"),
+        event("$mp_web_page_view", distinct_id: "reader-2", "$device_id": "d2"), event("newsletter_form_seen", "$device_id": "d2"),
+        event("$mp_web_page_view", distinct_id: "reader-3", "$device_id": "d3"), event("article_read", "$device_id": "d3")
+      )]
+    end
+
+    sync
+    expect(Mixpanel::SiteStat.find_by(date: day).funnel).to eq(
+      {"viewed" => 3, "read" => 2, "form_seen" => 1, "form_started" => 1, "subscribed" => 1}
     )
   end
 

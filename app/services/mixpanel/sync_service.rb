@@ -22,10 +22,11 @@ module Mixpanel
       end
     end
 
-    def initialize(days: DEFAULT_DAYS, to: Date.current, client: Client.new)
+    def initialize(days: DEFAULT_DAYS, to: Date.current, client: Client.new, retention: RetentionService)
       @days = days.to_i.clamp(1, MAX_DAYS)
       @to = to
       @client = client
+      @retention = retention
     end
 
     def call
@@ -40,6 +41,8 @@ module Mixpanel
           # A refused login or the hourly limit refuses every later day too.
           break if [401, 403, 429].include?(e.status)
         end
+        # One query a run, as each cohort's later weeks fill in as it ages.
+        @retention&.call(client: @client, result: result)
       end
       result.errors << "Mixpanel: another sync is already running, so this one was skipped" unless synced
       result
@@ -124,8 +127,23 @@ module Mixpanel
         replays: replays.size,
         ga_statuses: visitor_counts(ga_statuses),
         themes: visitor_counts(themes),
-        events: counts.sort_by { |name, count| [-count, name] }.map { |name, count| {"name" => name, "count" => count} }
+        events: counts.sort_by { |name, count| [-count, name] }.map { |name, count| {"name" => name, "count" => count} },
+        funnel: funnel_counts(events)
       }
+    end
+
+    def funnel_counts(events)
+      did = Hash.new { |hash, step| hash[step] = Set.new }
+      steps = SiteStat::FUNNEL_STEPS.transform_values(&:last)
+      events.each do |event|
+        steps.each { |step, names| did[step] << visitor_of(event["properties"] || {}) if names.include?(event["event"]) }
+      end
+
+      remaining = nil
+      steps.keys.to_h do |step|
+        remaining = remaining ? remaining & did[step] : did[step]
+        [step, remaining.size]
+      end
     end
 
     # A visitor whose early events came before the property was registered
@@ -170,7 +188,9 @@ module Mixpanel
     end
 
     def visitor_of(props)
-      props["distinct_id"].presence || props["$device_id"].presence || "(anonymous)"
+      # The device before the id, since a subscriber's events after they're
+      # identified carry a new distinct_id but the same device.
+      props["$device_id"].presence || props["distinct_id"].presence || "(anonymous)"
     end
 
     def element_target(props)

@@ -170,6 +170,19 @@ module Mixpanel
       shares_of(:themes)
     end
 
+    # Labelled steps for funnel_chart, nil before any day carried one.
+    def funnel
+      return unless days.any? { |day| day.funnel.present? }
+
+      SiteStat::FUNNEL_STEPS.map { |step, (label, _)| [label, days.sum { |day| day.funnel[step].to_i }] }
+    end
+
+    # The latest cohorts Mixpanel reported, whatever the period, since a
+    # cohort's later weeks only exist once it has aged.
+    def cohorts
+      @cohorts ||= RetentionCohort.where(:cohort_date.gte => Date.current - RetentionService::WEEKS * 7).order(cohort_date: :asc).to_a
+    end
+
     def events
       counts = Hash.new(0)
       days.each { |day| day.events.each { |row| counts[row["name"]] += row["count"].to_i } }

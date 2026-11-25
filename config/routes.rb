@@ -158,6 +158,8 @@ Rails.application.routes.draw do
   namespace :mixpanel do
     resource :report, only: :show, path: "" do
       post :sync
+      post :annotate
+      post :describe
     end
   end
 

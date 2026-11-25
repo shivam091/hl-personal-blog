@@ -11,3 +11,21 @@ namespace :mixpanel do
     exit 1 if result.failed?
   end
 end
+
+namespace :mixpanel do
+  desc "Mark posts published in the last 30 days on Mixpanel's charts, skipping those already marked (credentials mixpanel.*)"
+  task annotate: :environment do
+    result = SyncRequest.track("mixpanel_annotations", trigger: "rake") { Mixpanel::AnnotationService.call }
+    puts "Mixpanel annotations: #{result.summary}"
+    result.errors.each { |error| warn "  #{error}" }
+    exit 1 if result.failed?
+  end
+
+  desc "Send the blog's event and property descriptions to Mixpanel's Lexicon (credentials mixpanel.*)"
+  task describe: :environment do
+    result = SyncRequest.track("mixpanel_lexicon", trigger: "rake") { Mixpanel::LexiconService.call }
+    puts "Mixpanel Lexicon: #{result.summary}"
+    result.errors.each { |error| warn "  #{error}" }
+    exit 1 if result.failed?
+  end
+end
