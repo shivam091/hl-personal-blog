@@ -32,7 +32,7 @@
 
 - if !report.any?
   = render "shared/empty_state",
-    message: "No Mixpanel figures yet. Set NEXT_PUBLIC_MIXPANEL_TOKEN on the blog and the mixpanel credentials here, then sync."
+    message: "No Mixpanel figures yet. Set MIXPANEL_TOKEN on the blog and the mixpanel credentials here, then sync."
 - else
   - site = report.site
   - previous_site = before&.site
