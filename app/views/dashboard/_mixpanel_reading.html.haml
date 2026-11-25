@@ -1,0 +1,16 @@
+= render layout: "shared/card", locals: {id: "mixpanel-reading", title: "How pages are read", icon: "book-open"} do
+  - if !report.any?
+    %p{class: empty_note_class} Nothing synced from Mixpanel yet.
+  - else
+    %div{class: "px-4 pt-3"}
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} Engaged time per view, per #{granularity.by}
+      = mixpanel_engaged_chart(report, granularity, label: "Mean seconds readers were active per page view, per #{granularity.by}")
+    %div{class: "px-4 pt-3"}
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} Read through and scroll depth, per #{granularity.by}
+      = line_chart(granularity.dates(report.dates), mixpanel_reading_series(report, granularity), y_title: "% of views", unit: "%",
+        label: "Share of views read to the end, and mean scroll depth, per #{granularity.by}", per: granularity.per)
+    %div{class: "px-4 py-3"}
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} Frustration per #{granularity.by}
+      = stacked_chart(granularity.dates(report.dates), mixpanel_frustration_series(report, granularity), per: granularity.per, total_name: "All",
+        y_title: "Count", label: "Rage clicks, dead clicks and script errors per #{granularity.by}")
+  = render "dashboard/mixpanel_footer"

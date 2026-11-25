@@ -1,0 +1,35 @@
+- before = report.previous
+- higher = DashboardHelper::HIGHER_IS_BETTER
+- lower = DashboardHelper::Kpi.new(lower_is_better: true)
+- site = report.site
+- previous_site = before&.site
+= render layout: "shared/card", locals: {id: "mixpanel", title: "Mixpanel readers", icon: "mouse-pointer",
+  actions: (chart_granularity_picker(granularity, "Readers", "mixpanel-by") if report.any?)} do
+  - if !report.any?
+    %p{class: empty_note_class}
+      No Mixpanel figures yet.
+      = link_to "Sync them", mixpanel_report_path, class: "font-medium text-slate-700 underline hover:text-slate-900"
+  - else
+    - blocked = report.ga_shares.find { |status, _, _| status == "blocked" }&.last
+    - blocked_before = before&.ga_shares&.find { |status, _, _| status == "blocked" }&.last
+    %dl{class: "grid grid-cols-2 gap-3 px-4 pt-3"}
+      = render "dashboard/tile", label: "Visitors", tile_icon: "users", value: number_with_delimiter(report.visitors),
+        spark: report.site_daily(:visitors), hint: "Readers Mixpanel saw each day, added up. Every country: Mixpanel's figures aren't split by one.",
+        change: metric_change(report.visitors, before&.visitors, higher), compared_with: report.period.previous
+      = render "dashboard/tile", label: "GA blocked", tile_icon: "eye-off", value: metric_value(blocked, :percent),
+        spark: report.site_daily { |day| (day.ga_statuses["blocked"].to_i * 100.0 / day.visitors).round(1) if day.visitors.positive? },
+        hint: "Mixpanel's readers whose browser blocked gtag, so they're missing from every Google Analytics figure.",
+        change: metric_change(blocked, blocked_before, lower, format: :percent), compared_with: report.period.previous
+      = render "dashboard/tile", label: "Engaged time per view", tile_icon: "timer", value: (engagement_duration(site.mean_engaged_seconds) if site.mean_engaged_seconds) || "—",
+        spark: report.daily_ratio(:engaged_seconds, :engaged_views),
+        hint: "Seconds readers were active on a page, averaged over views with any time or scroll.",
+        change: metric_change(site.mean_engaged_seconds, previous_site&.mean_engaged_seconds, higher, format: :duration), compared_with: report.period.previous
+      = render "dashboard/tile", label: "Read through", tile_icon: "book-open", value: metric_value(site.read_through_share, :percent),
+        spark: report.daily_ratio(:read_through_views, :engaged_views, scale: 100),
+        hint: "Views that reached #{Mixpanel::PageStat::READ_THROUGH_PERCENT}% of the page.",
+        change: metric_change(site.read_through_share, previous_site&.read_through_share, higher, format: :percent), compared_with: report.period.previous
+    %div{class: "px-4 py-3"}
+      %p{class: "mb-1 text-xs font-medium text-slate-500"} Readers by GA status per #{granularity.by}
+      = stacked_chart(granularity.dates(report.dates), mixpanel_ga_status_series(report, granularity), per: granularity.per, total_name: "Visitors",
+        y_title: "Visitors", label: "Mixpanel's readers per #{granularity.by}, by whether Google Analytics loaded for them")
+  = render "dashboard/mixpanel_footer"

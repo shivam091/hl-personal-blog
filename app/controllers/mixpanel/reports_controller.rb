@@ -5,6 +5,7 @@ module Mixpanel
     def show
       @period = Period.new(params)
       @report = Report.new(@period)
+      @granularity = ChartGranularity.new(params, period: @period)
 
       respond_to do |format|
         format.html

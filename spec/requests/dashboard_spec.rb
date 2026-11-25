@@ -434,4 +434,26 @@ RSpec.describe "Dashboard", type: :request do
     tips = page.css("#page-country-heatmap ~ div [data-tip]").map { |cell| JSON.parse(cell["data-tip"]) }
     expect(tips.flat_map { |tip| tip["rows"] }).not_to include(a_hash_including("dotted" => true))
   end
+
+  it "charts Mixpanel's readers by GA status, engagement and frustration beside GA" do
+    seed
+    Mixpanel::SiteStat.create!(date: Date.new(2026, 10, 10), visitors: 10, page_views: 14, ga_statuses: {"loaded" => 6, "blocked" => 4})
+    Mixpanel::SiteStat.create!(date: Date.new(2026, 10, 11), visitors: 10, page_views: 12, ga_statuses: {"loaded" => 8, "blocked" => 2})
+    Mixpanel::PageStat.create!(date: Date.new(2026, 10, 10), page_path: "/post/busy", page_views: 14, engaged_views: 10,
+      engaged_seconds: 1200, scroll_percent_sum: 700, read_through_views: 4, rage_clicks: 3)
+
+    get root_path
+
+    card = page.at_css("#mixpanel").ancestors("section").first
+    figures = card.css("dl > div").to_h { |tile| [tile.at_css("dt").xpath("text()").text.squish, tile.at_css("dd span").text.strip] }
+    expect(figures).to include("Visitors" => "20", "GA blocked" => "30.0%", "Engaged time per view" => "2m 00s", "Read through" => "40.0%")
+    expect(response.body).to include("Readers by GA status per day", "Engaged time per view, per day", "Frustration per day")
+  end
+
+  it "says Mixpanel has nothing yet before it's synced" do
+    seed
+    get root_path
+
+    expect(page.text).to include("No Mixpanel figures yet.")
+  end
 end

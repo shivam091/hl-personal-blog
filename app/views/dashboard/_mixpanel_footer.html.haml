@@ -1,0 +1,5 @@
+%p{class: "#{card_footer_class} text-xs"}
+  = link_to mixpanel_report_path(**@period.query),
+    class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do
+    Mixpanel report
+    = icon("chevron-right", size: 14)

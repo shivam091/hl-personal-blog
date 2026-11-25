@@ -20,6 +20,8 @@
 = render "page_views/scorecard", page_view: page_view, page_like: @page_like, period: @period, granularity: @granularity, search: @search, ai: @ai,
   analytics: @analytics, feed_entry: @feed_entry, crawled_page: @crawled_page
 
+= render "page_views/mixpanel", page_view: page_view, report: @mixpanel, granularity: @granularity
+
 = render "page_views/speed", results: @page_speed
 
 - if @launch_curve

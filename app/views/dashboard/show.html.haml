@@ -25,6 +25,10 @@
   = render "dashboard/analytics", analytics: @analytics, granularity: @granularity
 
 %div{class: split_grid_class}
+  = render "dashboard/mixpanel", report: @mixpanel, granularity: @granularity
+  = render "dashboard/mixpanel_reading", report: @mixpanel, granularity: @granularity
+
+%div{class: split_grid_class}
   = render "dashboard/top_pages", stats: @stats
   %div{class: "grid gap-6"}
     = render "dashboard/page_changes", stats: @stats

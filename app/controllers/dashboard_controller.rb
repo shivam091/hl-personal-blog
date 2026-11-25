@@ -19,6 +19,7 @@ class DashboardController < ApplicationController
     @previous = BlogStats::METRICS.index_with { |metric| @stats.compared_by_country(metric) } if @period.compare?
     @country_metric = CountryMetric.new(params[:by].presence_in(COUNTRY_METRICS) || COUNTRY_METRICS.first)
     @granularity = ChartGranularity.new(params, period: @period)
+    @mixpanel = Mixpanel::Report.new(@period)
     @lifetime_hits = PageView.hit_totals
     # Lifetime figures are all there is for devices and referrers until they
     # are dated.

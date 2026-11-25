@@ -33,9 +33,26 @@ RSpec.describe "Mixpanel report", type: :request do
     pages = page.css("#pages ~ div tbody tr").map { |row| row.css("td").map { |td| td.text.squish } }
     expect(pages.first.drop(1)).to eq(["14", "10", "1m 00s", "75.0%", "50.0%", "2"])
     expect(page.css("#rage-click ~ div tbody tr td").first.text.strip).to eq("button#share")
+    expect(page.css("#daily, #ga-status-trend, #engagement-trend, #frustration-trend").size).to eq(4)
+    expect(response.body).to include("Share GA can't see")
 
     get mixpanel_report_path(format: :csv)
     expect(response.body.lines.second).to start_with("/post/css/grid,post,14,10,12,60.0,0.75,0.5,2,0,0")
+  end
+
+  it "divides each bucket's sums rather than averaging its days" do
+    period = Period.new({from: "2026-11-02", to: "2026-11-15"})
+    Mixpanel::SiteStat.create!(date: Date.new(2026, 11, 2), ga_statuses: {"loaded" => 9, "blocked" => 1})
+    Mixpanel::SiteStat.create!(date: Date.new(2026, 11, 3), ga_statuses: {"blocked" => 1})
+    Mixpanel::PageStat.create!(date: Date.new(2026, 11, 2), page_path: "/a", engaged_views: 9, engaged_seconds: 90)
+    Mixpanel::PageStat.create!(date: Date.new(2026, 11, 3), page_path: "/a", engaged_views: 1, engaged_seconds: 110)
+    report = Mixpanel::Report.new(period)
+
+    weekly = ChartGranularity.new({by: "week"}, period: period)
+    expect(report.mean_engaged_seconds_by(weekly)).to eq([20.0, nil])
+    expect(report.blocked_percent_by(weekly)).to eq([18.2, nil])
+    daily = ChartGranularity.new({}, period: period)
+    expect(report.mean_engaged_seconds_by(daily)).to eq([10.0, 110.0, *Array.new(12)])
   end
 
   it "queues a sync of the days on screen" do

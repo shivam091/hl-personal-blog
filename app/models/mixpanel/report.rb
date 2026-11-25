@@ -43,7 +43,67 @@ module Mixpanel
     def previous
       return @previous if defined?(@previous)
 
-      @previous = (Report.new(period.previous) if period.compare? && SiteStat.where(:date.lte => period.previous.to).exists?)
+      # Mixpanel's figures aren't split by country, so another country's
+      # would be these same figures.
+      @previous = (Report.new(period.previous) if period.compare? && !period.compare_countries? && SiteStat.where(:date.lte => period.previous.to).exists?)
+    end
+
+    def dates
+      @dates ||= (period.from..period.to).to_a
+    end
+
+    # A figure for each day of the period, nil on a day never synced so it
+    # isn't drawn as a real zero.
+    def site_daily(field = nil, &block)
+      block ||= ->(day) { day.public_send(field) }
+      by_date = days.index_by(&:date)
+      dates.map { |date| (day = by_date[date]) && block.(day) }
+    end
+
+    def ga_daily(status)
+      site_daily { |day| day.ga_statuses[status].to_i }
+    end
+
+    # A synced day with no row for the page is a day nobody read it.
+    def page_daily(field, path: nil)
+      rows = path ? page_rows.select { |row| row.page_path == path } : page_rows
+      sums = rows.group_by(&:date).transform_values { |group| group.sum(&field) }
+      synced = days.to_set(&:date)
+      dates.map { |date| sums.fetch(date, 0) if synced.include?(date) }
+    end
+
+    # Divided per bucket rather than averaged per day, so a quiet day weighs
+    # no more than a busy one.
+    def ratios(granularity, numerator, denominator, scale: 1)
+      numerators, denominators = yield(numerator), yield(denominator)
+      granularity.sums(dates, numerators).zip(granularity.sums(dates, denominators)).map do |top, bottom|
+        (top.to_f * scale / bottom).round(1) if top && bottom&.positive?
+      end
+    end
+
+    def mean_engaged_seconds_by(granularity, path: nil)
+      ratios(granularity, :engaged_seconds, :engaged_views) { |field| page_daily(field, path: path) }
+    end
+
+    def read_through_percent_by(granularity, path: nil)
+      ratios(granularity, :read_through_views, :engaged_views, scale: 100) { |field| page_daily(field, path: path) }
+    end
+
+    def mean_scroll_percent_by(granularity, path: nil)
+      ratios(granularity, :scroll_percent_sum, :engaged_views) { |field| page_daily(field, path: path) }
+    end
+
+    def blocked_percent_by(granularity)
+      ratios(granularity, "blocked", :all, scale: 100) do |status|
+        status == :all ? site_daily { |day| day.ga_statuses.values.sum(&:to_i) } : ga_daily(status)
+      end
+    end
+
+    # Daily, for a sparkline: nil on unsynced days and days without a base.
+    def daily_ratio(numerator, denominator, scale: 1, path: nil)
+      page_daily(numerator, path: path).zip(page_daily(denominator, path: path)).map do |top, bottom|
+        (top.to_f * scale / bottom).round(1) if top && bottom&.positive?
+      end
     end
 
     def days
@@ -68,8 +128,12 @@ module Mixpanel
       @site ||= Page.new(page_path: "(all)", **SUMMED.index_with { |field| pages.sum(&field) })
     end
 
+    def page_rows
+      @page_rows ||= period.apply(PageStat.all).to_a
+    end
+
     def pages
-      @pages ||= period.apply(PageStat.all).to_a.group_by(&:page_path).map do |path, rows|
+      @pages ||= page_rows.group_by(&:page_path).map do |path, rows|
         Page.new(page_path: path, content_group: rows.filter_map(&:content_group).last, **SUMMED.index_with { |field| rows.sum(&field) })
       end
     end

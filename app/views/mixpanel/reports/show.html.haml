@@ -20,7 +20,7 @@
       = icon("refresh", size: 14)
       Sync
 
-= render "google/shared/period", period: @period, keep: []
+= render "google/shared/period", period: @period, keep: [@granularity]
 
 - if !report.any?
   = render "shared/empty_state",
@@ -57,13 +57,36 @@
       hint: "Uncaught errors in readers' browsers, at most five per page load.",
       value: number_with_delimiter(site.js_errors), change: metric_change(site.js_errors, previous_site&.js_errors, lower), compared_with: @period.previous
 
-  - dates = report.days.map(&:date)
-  - if dates.size > 1
-    = render layout: "shared/card", locals: {id: "daily", title: "By day", icon: "trending-up", class: "mb-6"} do
+  - granularity = @granularity
+  - keys = granularity.dates(report.dates)
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "daily", title: "Visitors and page views", icon: "trending-up",
+      actions: chart_granularity_picker(granularity, "Figures", "mixpanel-by")} do
       %div{class: "px-4 py-3"}
-        = line_chart(dates, [ChartsHelper::Series.new(name: "Visitors", values: report.days.map(&:visitors)),
-          ChartsHelper::Series.new(name: "Page views", values: report.days.map(&:page_views), dashed: true)],
-          y_title: "Count", label: "Mixpanel visitors and page views by day")
+        = line_chart(keys, [ChartsHelper::Series.new(name: "Visitors", values: granularity.sums(report.dates, report.site_daily(:visitors))),
+          ChartsHelper::Series.new(name: "Page views", values: granularity.sums(report.dates, report.site_daily(:page_views)), dashed: true)],
+          y_title: "Count", label: "Mixpanel visitors and page views per #{granularity.by}", per: granularity.per)
+
+    = render layout: "shared/card", locals: {id: "ga-status-trend", title: "Readers by GA status", icon: "eye-off"} do
+      %div{class: "px-4 pt-3"}
+        = stacked_chart(keys, mixpanel_ga_status_series(report, granularity), per: granularity.per, total_name: "Visitors",
+          y_title: "Visitors", label: "Mixpanel's readers per #{granularity.by}, by whether Google Analytics loaded for them")
+      %div{class: "px-4 py-3"}
+        %p{class: "mb-1 text-xs font-medium text-slate-500"} Share GA can't see
+        = line_chart(keys, [ChartsHelper::Series.new(name: "GA blocked", values: report.blocked_percent_by(granularity), color: MixpanelHelper::GA_STATUS_SERIES["blocked"].last)],
+          y_title: "% of visitors", unit: "%", label: "Share of Mixpanel's readers with gtag blocked, per #{granularity.by}", per: granularity.per)
+
+    = render layout: "shared/card", locals: {id: "engagement-trend", title: "Engagement", icon: "timer"} do
+      %div{class: "px-4 pt-3"}
+        = mixpanel_engaged_chart(report, granularity, label: "Mean seconds readers were active per page view, per #{granularity.by}")
+      %div{class: "px-4 py-3"}
+        = line_chart(keys, mixpanel_reading_series(report, granularity), y_title: "% of views", unit: "%",
+          label: "Share of views read to the end, and mean scroll depth, per #{granularity.by}", per: granularity.per)
+
+    = render layout: "shared/card", locals: {id: "frustration-trend", title: "Frustration", icon: "alert-triangle"} do
+      %div{class: "px-4 py-3"}
+        = stacked_chart(keys, mixpanel_frustration_series(report, granularity), per: granularity.per, total_name: "All",
+          y_title: "Count", label: "Rage clicks, dead clicks and script errors per #{granularity.by}")
 
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "ga-coverage", title: "Readers GA can't see", icon: "eye-off"} do
