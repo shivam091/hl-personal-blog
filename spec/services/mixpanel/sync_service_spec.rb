@@ -86,6 +86,105 @@ RSpec.describe Mixpanel::SyncService do
     )
   end
 
+  it "splits each page's readers by GA status, views by scroll reached and time active, and keeps its longest replays" do
+    url = "https://blog.example.com/post/a"
+    stubs.get("/api/2.0/export") do
+      [200, {}, export(
+        # The first view goes out before the GA check has answered.
+        event("$mp_web_page_view", "$device_id": "d1", "$current_url": url),
+        event("$mp_click", "$device_id": "d1", "$current_url": url, ga_status: "blocked"),
+        event("$mp_web_page_view", distinct_id: "r2", "$device_id": "d2", "$current_url": url, ga_status: "loaded"),
+        event("$mp_web_page_view", distinct_id: "r3", "$device_id": "d3", "$current_url": url, ga_status: "off"),
+        event("$mp_web_page_view", distinct_id: "r4", "$device_id": "d4", "$current_url": url),
+        event("page_leave", "$device_id": "d1", path: "/post/a", view_id: "v1", engaged_seconds: 200, max_scroll_percent: 100, "$mp_replay_id": "rp1", time: 1_763_600_000),
+        event("page_leave", distinct_id: "r2", path: "/post/a", view_id: "v2", engaged_seconds: 30, max_scroll_percent: 60, "$mp_replay_id": "rp2"),
+        event("page_leave", distinct_id: "r3", path: "/post/a", view_id: "v3", engaged_seconds: 5, max_scroll_percent: 20)
+      )]
+    end
+
+    sync
+    page = Mixpanel::PageStat.find_by(date: day, page_path: "/post/a")
+    expect(page.ga_statuses).to eq({"blocked" => 1, "loaded" => 1, "off" => 1, "unknown" => 1})
+    expect(page.scroll_reached).to eq({"25" => 2, "50" => 2, "75" => 1, "100" => 1})
+    expect(page.reading_times).to eq({"over_180" => 1, "15_60" => 1, "under_15" => 1})
+    expect(page.replays).to eq([
+      {"replay_id" => "rp1", "distinct_id" => "reader-1", "time" => 1_763_600_000, "seconds" => 200},
+      {"replay_id" => "rp2", "distinct_id" => "r2", "time" => nil, "seconds" => 30}
+    ])
+
+    report = Mixpanel::Report.new(Period.new({from: day.iso8601, to: day.iso8601}))
+    summed = report.page("/post/a")
+    expect(summed.ga_unseen_share).to be_within(0.001).of(2.0 / 3)
+    expect(summed.ga_correction).to be_within(0.001).of(3.0)
+    expect(summed.scroll_reached_share(25)).to eq(0.5)
+    # The view with no page_leave joins the shortest bucket.
+    expect(summed.reading_time_counts).to eq([2, 1, 0, 1])
+  end
+
+  it "keeps the top clicked elements of pages with enough views, and drops ones that fall out on a resync" do
+    url = "https://blog.example.com/post/a"
+    views = Array.new(10) { |index| event("$mp_web_page_view", "$device_id": "d#{index}", "$current_url": url) }
+    clicks = [
+      *Array.new(3) { event("$mp_click", "$current_url": url, "$el_tag_name": "a", "$el_classes": ["toc"], "$el_attr__href": "#grid") },
+      *Array.new(2) { |index| event("$mp_click", "$device_id": "d#{index}", "$current_url": url, "$el_tag_name": "button", "$el_classes": ["copy"]) },
+      *%w[a b c d].map { |id| event("$mp_click", "$current_url": url, "$el_tag_name": "span", "$el_id": id) },
+      event("$mp_click", "$current_url": "https://blog.example.com/quiet", "$el_tag_name": "a")
+    ]
+    stubs.get("/api/2.0/export") { [200, {}, export(*views, *clicks)] }
+
+    sync
+    rows = Mixpanel::ClickStat.where(date: day).order(count: :desc, target: :asc).map { |row| [row.page_path, row.target, row.count, row.visitors] }
+    expect(rows).to eq([
+      ["/post/a", "a.toc → #grid", 3, 1], ["/post/a", "button.copy", 2, 2],
+      ["/post/a", "span#a", 1, 1], ["/post/a", "span#b", 1, 1], ["/post/a", "span#c", 1, 1]
+    ])
+
+    stubs.get("/api/2.0/export") { [200, {}, export(*views, *clicks.first(3))] }
+    sync
+    expect(Mixpanel::ClickStat.where(date: day).pluck(:target)).to eq(["a.toc → #grid"])
+  end
+
+  it "counts system preferences, newsletter form steps and errors, and follows subscribers" do
+    url = "https://blog.example.com/post/a"
+    stubs.get("/api/2.0/export") do
+      [200, {}, export(
+        event("$mp_web_page_view", "$device_id": "d1", "$current_url": url, prefers_reduced_motion: true, prefers_dark: true, time: 1_763_600_100),
+        event("$mp_web_page_view", "$device_id": "d1", "$current_url": "https://blog.example.com/about", time: 1_763_600_150),
+        event("newsletter_form_seen", "$device_id": "d1"), event("newsletter_form_focused", "$device_id": "d1"),
+        event("newsletter_form_started", "$device_id": "d1"), event("newsletter_form_submitted", "$device_id": "d1"),
+        event("newsletter_form_error", "$device_id": "d1", error_message: "Invalid email."),
+        event("newsletter_form_submitted", "$device_id": "d1"),
+        # Milliseconds from the server, after both page views.
+        event("newsletter_subscribe", distinct_id: "reader_new", "$user_id": "reader_new", "$device_id": "d1", source: "server", time: 1_763_600_200_000),
+        # After subscribing: the same visit, not a return.
+        event("$mp_web_page_view", distinct_id: "reader_new", "$device_id": "d1", "$current_url": "https://blog.example.com/", time: 1_763_600_300),
+        event("$mp_web_page_view", distinct_id: "reader_old", "$user_id": "reader_old", "$device_id": "d2", "$current_url": url,
+          prefers_reduced_motion: false, prefers_dark: true),
+        event("$mp_web_page_view", distinct_id: "reader_old", "$device_id": "d2", "$current_url": "https://blog.example.com/")
+      )]
+    end
+
+    sync
+    site = Mixpanel::SiteStat.find_by(date: day)
+    expect(site.reduced_motion).to eq({"reduce" => 1, "no_preference" => 1})
+    expect(site.color_schemes).to eq({"dark" => 2})
+    expect(site.form_steps).to eq({"seen" => 1, "focused" => 1, "started" => 1, "submitted" => 1, "error" => 1, "subscribed" => 1})
+    expect(site.form_errors).to eq([{"message" => "Invalid email.", "count" => 1}])
+    expect(site.new_subscribers).to eq(["reader_new"])
+    expect(site.subscriber_reads).to eq([{"path" => "/about", "count" => 1}, {"path" => "/post/a", "count" => 1}])
+    expect(site.returning_subscribers).to eq([{"id" => "reader_old", "page_views" => 2}])
+  end
+
+  it "keeps a few replays of each frustration" do
+    url = "https://blog.example.com/post/a"
+    stubs.get("/api/2.0/export") do
+      [200, {}, export(*%w[r1 r1 r2 r3 r4].map { |id| event("$mp_dead_click", "$current_url": url, "$el_tag_name": "img", "$mp_replay_id": id) })]
+    end
+
+    sync
+    expect(Mixpanel::IssueStat.find_by(date: day).replays.map { |replay| replay["replay_id"] }).to eq(%w[r1 r2 r3])
+  end
+
   it "counts only the live blog's traffic, not a local run or a preview deploy" do
     stubs.get("/api/2.0/export") do
       [200, {}, export(

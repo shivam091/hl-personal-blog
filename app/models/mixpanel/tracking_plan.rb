@@ -96,6 +96,16 @@ module Mixpanel
       "newsletter_form_started" => ["A reader began typing into a newsletter form, once per page.", {
         **LABEL, "form_source" => Property.new("string", "Which form: footer, article_end or article_inline.")
       }],
+      "newsletter_form_focused" => ["A reader focused a newsletter form's email field, once per page.", {
+        **LABEL, "form_source" => Property.new("string", "Which form: footer, article_end or article_inline.")
+      }],
+      "newsletter_form_submitted" => ["A reader submitted a newsletter form, each attempt.", {
+        **LABEL, "form_source" => Property.new("string", "Which form: footer, article_end or article_inline.")
+      }],
+      "newsletter_form_error" => ["A newsletter form submit that failed, with the message shown.", {
+        **LABEL, "form_source" => Property.new("string", "Which form: footer, article_end or article_inline."),
+        "error_message" => Property.new("string", "The message the reader saw, cut at 100 characters.")
+      }],
       "newsletter_subscribe" => ["A newsletter subscription, sent by the server once it's stored.", {
         "source" => Property.new("string", "server")
       }],

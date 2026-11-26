@@ -21,6 +21,9 @@ module Mixpanel
     field :target, type: String
     field :count, type: Integer, default: 0
     field :visitors, type: Integer, default: 0
+    # A few sessions where it happened, so the moment can be watched rather
+    # than guessed at from the element's name.
+    field :replays, type: Array, default: []
 
     key_fields :kind, :page_path, :target
 

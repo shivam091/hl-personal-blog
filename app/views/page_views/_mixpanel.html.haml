@@ -42,6 +42,43 @@
             %p{class: "mb-1 text-xs font-medium text-slate-500"} Frustration per #{granularity.by}
             = stacked_chart(granularity.dates(report.dates), mixpanel_frustration_series(report, granularity, path: path), per: granularity.per,
               total_name: "All", y_title: "Count", label: "Rage clicks, dead clicks and script errors on this page, per #{granularity.by}")
+      %div{class: "grid gap-6 px-4 py-3 lg:grid-cols-2"}
+        %div{id: "mixpanel-drop-off", class: "min-w-0"}
+          %p{class: "mb-1 text-xs font-medium text-slate-500"} How far down views got
+          %ul{class: "grid grid-cols-4 gap-2 text-sm"}
+            - Mixpanel::PageStat::SCROLL_MILESTONES.each do |percent|
+              %li
+                %span{class: "block text-xs text-slate-500"}= "#{percent}%"
+                %span{class: "block font-medium tabular-nums"}= metric_value(page.scroll_reached_share(percent), :percent)
+          %p{class: "mt-3 mb-1 text-xs font-medium text-slate-500"} Time active per view
+          = split_bars([["All views", page.reading_time_counts]], parts: mixpanel_reading_time_parts,
+            label: "This page's views by how long readers were active", unit: "view")
+        %div{class: "min-w-0 space-y-3"}
+          - unseen = page.ga_unseen_share
+          %div{id: "mixpanel-ga-coverage"}
+            %p{class: "mb-1 text-xs font-medium text-slate-500"} Readers GA can't see
+            - if unseen
+              %p{class: "text-sm"}
+                %span{class: "font-medium"}= metric_value(unseen, :percent)
+                of this page's readers had GA blocked or never started, so GA's figures for it are
+                = page.ga_correction ? "×#{number_with_precision(page.ga_correction, precision: 2)}" : "far"
+                short.
+            - else
+              %p{class: "text-sm text-slate-500"} No reader's GA status is known yet.
+          - clicks = report.clicks(path)
+          - if clicks.any?
+            %div{id: "mixpanel-clicks"}
+              %p{class: "mb-1 text-xs font-medium text-slate-500"} Most clicked
+              %ol{class: "space-y-0.5 text-sm"}
+                - clicks.each do |click|
+                  %li{class: "flex justify-between gap-3"}
+                    %span{class: "min-w-0 break-all font-mono text-xs"}= click.target
+                    %span{class: "tabular-nums"}= number_with_delimiter(click.count)
+          - replays = mixpanel_replay_links(page.replays)
+          - if replays
+            %div{id: "mixpanel-replays"}
+              %p{class: "mb-1 text-xs font-medium text-slate-500"} Longest readings recorded
+              %p{class: "flex flex-wrap gap-3 text-sm"}= replays
     %p{class: "#{card_footer_class} text-xs"}
       = link_to mixpanel_report_path(**@period.query),
         class: "inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 hover:underline" do

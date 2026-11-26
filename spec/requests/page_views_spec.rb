@@ -380,5 +380,25 @@ RSpec.describe "Page views", type: :request do
         expect(card.text).to include("Engaged time per view, per day", "Frustration per day")
       end
     end
+
+    it "shows the page's scroll drop-off, GA coverage, top clicks and replays" do
+      travel_to(Time.zone.parse("2026-10-12 12:00")) do
+        PageView.collection.insert_one("_id" => "/post/a", "slug" => "/post/a", "url" => "https://blog.example.com/post/a")
+        Mixpanel::SiteStat.create!(date: Date.new(2026, 10, 10), visitors: 10, page_views: 10)
+        Mixpanel::PageStat.create!(date: Date.new(2026, 10, 10), page_path: "/post/a", page_views: 10, engaged_views: 8,
+          ga_statuses: {"loaded" => 6, "off" => 2, "unknown" => 2}, scroll_reached: {"25" => 8, "50" => 5, "75" => 3, "100" => 1},
+          reading_times: {"15_60" => 8}, replays: [{"replay_id" => "rp1", "distinct_id" => "d1", "time" => 1_760_000_000, "seconds" => 90}])
+        Mixpanel::ClickStat.create!(date: Date.new(2026, 10, 10), page_path: "/post/a", target: "button.copy", count: 4, visitors: 3)
+        allow(Rails.application.credentials).to receive(:mixpanel).and_return({project_id: "42"})
+
+        get page_view_path("/post/a")
+
+        html = Nokogiri::HTML5(response.body)
+        expect(html.css("#mixpanel-drop-off > ul > li").map { |item| item.text.squish }).to eq(["25% 80.0%", "50% 50.0%", "75% 30.0%", "100% 10.0%"])
+        expect(html.at_css("#mixpanel-ga-coverage").text.squish).to include("25.0% of this page's readers", "×1.33 short")
+        expect(html.at_css("#mixpanel-clicks").text.squish).to eq("Most clicked button.copy 4")
+        expect(html.at_css("#mixpanel-replays a")["href"]).to include("replay_id=rp1")
+      end
+    end
   end
 end

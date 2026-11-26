@@ -25,6 +25,9 @@ module Mixpanel
     TERMINATED = "terminated early"
     # Mixpanel streams the day as it reads it, which for a busy day takes a while.
     READ_TIMEOUT = 120
+    # Mixpanel documents no link to a single replay, so the layout its app
+    # uses can be put in credentials mixpanel.replay_url if it moves.
+    REPLAY_URL = "https://%{app_host}/project/%{project_id}/app/session-replay#replay_id=%{replay_id}&distinct_id=%{distinct_id}&time=%{time}"
     NOT_CONFIGURED = "Mixpanel not configured (credentials mixpanel.project_id, service_account_username, service_account_secret)"
 
     class Error < StandardError
@@ -37,12 +40,13 @@ module Mixpanel
     end
 
     def initialize(options = {})
-      options.assert_valid_keys(:project_id, :username, :secret, :host, :connection, :app_connection)
+      options.assert_valid_keys(:project_id, :username, :secret, :host, :replay_url, :connection, :app_connection)
       credentials = Rails.application.credentials.mixpanel || {}
       @project_id = options.fetch(:project_id) { credentials[:project_id] }
       @username = options.fetch(:username) { credentials[:service_account_username] }
       @secret = options.fetch(:secret) { credentials[:service_account_secret] }
       @host = options.fetch(:host) { credentials[:data_host].presence || DEFAULT_HOST }
+      @replay_url = options.fetch(:replay_url) { credentials[:replay_url].presence || REPLAY_URL }
       @connection = options[:connection]
       @app_connection = options[:app_connection]
     end
@@ -69,6 +73,15 @@ module Mixpanel
       raise Error.new(error_message(e), status: e.response_status)
     rescue JSON::ParserError => e
       raise Error, "Mixpanel sent an unreadable export: #{e.message}"
+    end
+
+    # Nil without a project id, since a link without one opens nothing.
+    def replay_url(replay)
+      return if @project_id.blank? || replay["replay_id"].blank?
+
+      format(@replay_url, app_host: APP_HOSTS.fetch(@host, "mixpanel.com"), project_id: ERB::Util.url_encode(@project_id),
+        replay_id: ERB::Util.url_encode(replay["replay_id"]), distinct_id: ERB::Util.url_encode(replay["distinct_id"].to_s),
+        time: replay["time"].to_i)
     end
 
     # The app API (annotations, Lexicon), under the project's own path.

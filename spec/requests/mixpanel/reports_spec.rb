@@ -65,6 +65,51 @@ RSpec.describe "Mixpanel report", type: :request do
     expect(page.css("#retention ~ div td div").map { |cell| cell.text.strip }.reject(&:empty?)).to eq(["30%"])
   end
 
+  it "shows GA coverage, drop-off, clicks and replays per page" do
+    Mixpanel::SiteStat.create!(date: day, visitors: 20, page_views: 20)
+    Mixpanel::PageStat.create!(date: day, page_path: "/post/a", content_group: "post", page_views: 20, visitors: 20, engaged_views: 16,
+      engaged_seconds: 1600, scroll_percent_sum: 1000, read_through_views: 4, ga_statuses: {"loaded" => 15, "blocked" => 5},
+      scroll_reached: {"25" => 15, "50" => 10, "75" => 6, "100" => 4}, reading_times: {"under_15" => 4, "15_60" => 6, "over_180" => 6},
+      replays: [{"replay_id" => "rp1", "distinct_id" => "d1", "time" => 1_763_600_000, "seconds" => 300}])
+    Mixpanel::ClickStat.create!(date: day, page_path: "/post/a", target: "a.toc → #grid", count: 7, visitors: 5)
+    Mixpanel::IssueStat.create!(date: day, kind: "dead_click", page_path: "/post/a", target: "img", count: 2, visitors: 2,
+      replays: [{"replay_id" => "rp9", "distinct_id" => "d9", "time" => 1_763_600_000}])
+    allow(Rails.application.credentials).to receive(:mixpanel).and_return({project_id: "42"})
+
+    get mixpanel_report_path
+
+    rows = ->(id) { page.css("##{id} ~ div tbody tr").map { |row| row.css("td, th").map { |cell| cell.text.squish } } }
+    expect(rows.("ga-coverage-pages")).to eq([["/post/a post", "20", "25.0%", "×1.33"]])
+    expect(rows.("drop-off").first).to eq(["/post/a", "20", "75.0%", "50.0%", "30.0%", "20.0%"])
+    expect(rows.("clicks")).to eq([["/post/a"], ["a.toc → #grid", "7", "5"]])
+    expect(page.css("#least-read ~ div a[href*='replay_id=rp1']").size).to eq(1)
+    watch = page.at_css("#dead-click ~ div a[href*='replay_id=rp9']")
+    expect(watch["href"]).to eq("https://mixpanel.com/project/42/app/session-replay#replay_id=rp9&distinct_id=d9&time=1763600000")
+  end
+
+  it "shows reader preferences, the newsletter form and the subscriber journey" do
+    Mixpanel::SiteStat.create!(date: day - 1, visitors: 10, themes: {"dark" => 6, "light" => 4}, color_schemes: {"dark" => 7, "light" => 3},
+      reduced_motion: {"reduce" => 1, "no_preference" => 9},
+      form_steps: {"seen" => 10, "focused" => 5, "started" => 4, "submitted" => 3, "error" => 1, "subscribed" => 2},
+      form_errors: [{"message" => "Invalid email.", "count" => 1}],
+      new_subscribers: %w[reader_a reader_b], subscriber_reads: [{"path" => "/post/a", "count" => 2}])
+    Mixpanel::SiteStat.create!(date: day, visitors: 3, returning_subscribers: [{"id" => "reader_a", "page_views" => 3}])
+
+    get mixpanel_report_path
+
+    expect(page.css("#system-preferences tbody tr").map { |row| row.css("td").map { |cell| cell.text.squish } }).to eq([
+      ["System colour scheme: Dark", "7", "70.0%"], ["System colour scheme: Light", "3", "30.0%"],
+      ["Motion: No preference", "9", "90.0%"], ["Motion: Reduced motion", "1", "10.0%"]
+    ])
+    form = page.at_css("#newsletter-form").parent.text.squish
+    expect(form).to include("Focused the email field", "1 visitor got an error (33.3% of those who submitted).", "Invalid email.")
+    journey = page.at_css("#subscriber-journey").parent
+    tiles = journey.css("dl > div").to_h { |tile| [tile.at_css("dt").xpath("text()").text.squish, tile.at_css("dd span").text.strip] }
+    expect(tiles).to eq("New subscribers" => "2", "Came back" => "50.0%", "Days back" => "1.0")
+    expect(journey.text.squish).to include("1 subscriber visited in the period after the day they subscribed, opening 3 pages.")
+    expect(journey.css("tbody tr td").map { |cell| cell.text.squish }).to eq(["/post/a", "2"])
+  end
+
   it "queues marking posts and describing events" do
     expect { post annotate_mixpanel_report_path }.to have_enqueued_job(Mixpanel::AnnotationJob)
     expect { post describe_mixpanel_report_path }.to have_enqueued_job(Mixpanel::LexiconJob)

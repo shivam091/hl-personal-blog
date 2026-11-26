@@ -112,8 +112,10 @@
               %td{class: cell_class}= number_with_delimiter(count)
               %td{class: cell_class}= metric_value(share, :percent)
 
-    = render layout: "shared/card", locals: {id: "themes", title: "Themes", icon: "sliders"} do
-      %p{class: lead_note_class} Which colour theme readers had picked, by visitors.
+    = render layout: "shared/card", locals: {id: "themes", title: "Reader preferences", icon: "sliders"} do
+      %p{class: lead_note_class}
+        Which colour theme readers had picked, beside what their system asks for, by visitors. A system set to dark
+        with the blog left on light, or reduced motion turned on, is worth designing for.
       - shares = report.theme_shares
       - if shares.empty?
         %p{class: empty_note_class} No readers in this period.
@@ -124,6 +126,18 @@
               %td{class: name_cell_class}= theme.humanize
               %td{class: cell_class}= number_with_delimiter(count)
               %td{class: cell_class}= metric_value(share, :percent)
+        - preferences = {"System colour scheme" => report.color_scheme_shares, "Motion" => report.reduced_motion_shares}.reject { |_, rows| rows.empty? }
+        - if preferences.any?
+          %div{id: "system-preferences"}
+            = report_table([report_th("System setting"), report_th("Visitors", :right), report_th("Share", :right)]) do
+              - preferences.each do |setting, rows|
+                - rows.each do |value, count, share|
+                  %tr{class: table_row_class}
+                    %td{class: name_cell_class}
+                      %span{class: "text-slate-400"}= "#{setting}:"
+                      = value == "reduce" ? "Reduced motion" : value.humanize
+                    %td{class: cell_class}= number_with_delimiter(count)
+                    %td{class: cell_class}= metric_value(share, :percent)
 
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     = render layout: "shared/card", locals: {id: "funnel", title: "From reading to subscribing", icon: "funnel"} do
@@ -172,6 +186,58 @@
                             tip: chart_tip("Week of #{l(cohort.cohort_date, format: "%-d %b, %Y")}, week #{week}", [{value: number_with_delimiter(cohort.counts[week]), name: "Came back, of #{number_with_delimiter(cohort.first)}"}]))
         %p{class: footnote_class} Blank weeks haven't happened yet for that cohort.
 
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "newsletter-form", title: "Newsletter form", icon: "mail"} do
+      %p{class: lead_note_class}
+        Visitors at each step with the form, each counted on its own, added up over the period's days. Where the
+        bars shrink is where readers give up; errors are submits that failed.
+      - steps = report.form_steps
+      - if steps.nil?
+        %p{class: empty_note_class} No form figures in this period; they start with the first sync after the blog sends the form events.
+      - else
+        - errors = steps.find { |step, _, _| step == "error" }
+        - submitted = steps.find { |step, _, _| step == "submitted" }.last
+        %div{class: "px-4 py-3"}
+          = funnel_chart(steps.reject { |step, _, _| step == "error" }.map { |_, label, count| [label, count] },
+            label: "Visitors at each step from seeing the newsletter form to subscribing", unit: "visitor")
+          %p{class: "mt-3 text-sm #{"text-red-700" if errors.last.positive?}"}
+            = "#{pluralize(number_with_delimiter(errors.last), "visitor")} got an error"
+            - if submitted.positive?
+              = "(#{metric_value(errors.last.fdiv(submitted), :percent)} of those who submitted)."
+        - messages = report.form_errors
+        - if messages.any?
+          = report_table([report_th("Error shown"), report_th("Times", :right)]) do
+            - messages.first(5).each do |message, count|
+              %tr{class: table_row_class}
+                %td{class: name_cell_class}= message
+                %td{class: cell_class}= number_with_delimiter(count)
+
+    = render layout: "shared/card", locals: {id: "subscriber-journey", title: "Subscriber journey", icon: "users"} do
+      %p{class: lead_note_class}
+        What new subscribers had read earlier the same day, and how many came back on a later day, followed up to
+        today. Only subscribers Mixpanel was already tracking can be followed; GA can't follow one reader at all.
+      - journey = report.subscriber_journey
+      - if journey.nil?
+        %p{class: empty_note_class} No subscribers followed in this period yet.
+      - else
+        %dl{class: "grid grid-cols-2 gap-3 px-4 pt-3 lg:grid-cols-3"}
+          = render "dashboard/tile", label: "New subscribers", tile_icon: "mail", value: number_with_delimiter(journey.subscribers),
+            hint: "Readers who subscribed in the period while Mixpanel tracked them.", change: nil
+          = render "dashboard/tile", label: "Came back", tile_icon: "refresh",
+            value: journey.came_back_share ? metric_value(journey.came_back_share, :percent) : "—",
+            hint: "New subscribers who opened a page on any later day, up to today. #{journey.came_back} of #{journey.subscribers}.", change: nil
+          = render "dashboard/tile", label: "Days back", tile_icon: "calendar",
+            value: journey.mean_return_days ? number_with_precision(journey.mean_return_days, precision: 1) : "—",
+            hint: "Later days with a visit, on average, for those who came back.", change: nil
+        %p{class: "px-4 pt-3 text-sm text-slate-600"}
+          = "#{pluralize(number_with_delimiter(journey.returning), "subscriber")} visited in the period after the day they subscribed, opening #{pluralize(number_with_delimiter(journey.return_page_views), "page")}."
+        - if journey.reads.any?
+          = report_table([report_th("Read before subscribing"), report_th("Views", :right)]) do
+            - journey.reads.each do |path, count|
+              %tr{class: table_row_class}
+                %td{class: name_cell_class}= blog_page_link(path, page_view_path(path), truncate: true)
+                %td{class: cell_class}= number_with_delimiter(count)
+
   = render layout: "shared/card", locals: {id: "pages", title: "Pages", icon: "file-text", class: "mb-6"} do
     - rows = report.top_pages
     - if rows.empty?
@@ -206,19 +272,86 @@
                 %td{class: cell_class}= metric_value(page.read_through_share, :percent)
                 %td{class: "#{cell_class} #{"text-amber-700" if page.frustrations.positive?}"}= number_with_delimiter(page.frustrations)
 
+  - read_pages = report.top_pages(limit: 15).select { |page| page.engaged_views.positive? }
+  - if read_pages.any?
+    = render layout: "shared/card", locals: {id: "drop-off", title: "Where readers drop off", icon: "arrow-down", class: "mb-6"} do
+      %p{class: lead_note_class}
+        Share of each page's views that got at least a quarter, half, three quarters and all the way down, with a view
+        that left at once counted as reaching none. The bar splits the same views by how long readers were active, so
+        skimmers and readers can be told apart.
+      %div{class: "overflow-x-auto"}
+        %table{class: table_class}
+          %thead{class: "text-slate-500"}
+            %tr
+              = report_th "Page"
+              = report_th "Views", :right
+              - Mixpanel::PageStat::SCROLL_MILESTONES.each do |percent|
+                = report_th "#{percent}%", :right, title: "Views that reached #{percent}% of the page"
+          %tbody
+            - read_pages.each do |page|
+              %tr{class: table_row_class}
+                %td{class: name_cell_class}= blog_page_link(page.page_path, page_view_path(page.page_path), truncate: true)
+                %td{class: cell_class}= number_with_delimiter(page.page_views)
+                - Mixpanel::PageStat::SCROLL_MILESTONES.each do |percent|
+                  %td{class: cell_class}= metric_value(page.scroll_reached_share(percent), :percent)
+      %div{class: "px-4 py-3"}
+        = split_bars(read_pages.map { |page| [page.page_path, page.reading_time_counts] }, parts: mixpanel_reading_time_parts,
+          label: "Each page's views by how long readers were active", unit: "view")
+
+  %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
+    = render layout: "shared/card", locals: {id: "ga-coverage-pages", title: "GA coverage by page", icon: "eye-off"} do
+      %p{class: lead_note_class}
+        The share of each page's readers GA never saw, blocked or never started, among pages with ten or more readers
+        whose status is known. Multiply GA's own figure for the page by the correction to cover them.
+      - rows = report.ga_coverage_pages
+      - if rows.empty?
+        %p{class: empty_note_class} No page has enough readers with a known GA status in this period.
+      - else
+        = report_table([report_th("Page"), report_th("Readers", :right), report_th("GA can't see", :right), report_th("Correct GA by", :right)]) do
+          - rows.each do |page|
+            %tr{class: table_row_class}
+              %td{class: name_cell_class}
+                = blog_page_link(page.page_path, page_view_path(page.page_path), truncate: true)
+                - if page.content_group.present?
+                  %span{class: "text-xs text-slate-400"}= page.content_group
+              %td{class: cell_class}= number_with_delimiter(page.ga_statuses.except("unknown").values.sum)
+              %td{class: cell_class}= metric_value(page.ga_unseen_share, :percent)
+              %td{class: cell_class}= page.ga_correction ? "×#{number_with_precision(page.ga_correction, precision: 2)}" : "—"
+
+    = render layout: "shared/card", locals: {id: "clicks", title: "Most clicked", icon: "mouse-pointer"} do
+      %p{class: lead_note_class}
+        The #{Mixpanel::ClickStat::TOP} elements clicked most on each page, from Mixpanel's own click capture, on days
+        a page had #{Mixpanel::ClickStat::MIN_PAGE_VIEWS} or more views.
+      - pages = report.clicked_pages
+      - if pages.empty?
+        %p{class: empty_note_class} No page was busy enough in this period.
+      - else
+        = report_table([report_th("Element"), report_th("Clicks", :right), report_th("Visitors", :right)]) do
+          - pages.each do |page|
+            %tr{class: "bg-slate-50"}
+              %th{scope: "rowgroup", colspan: 3, class: "#{name_cell_class} text-left"}
+                = blog_page_link(page.page_path, page_view_path(page.page_path), truncate: true)
+            - report.clicks(page.page_path).each do |click|
+              %tr{class: table_row_class}
+                %td{class: "#{name_cell_class} break-all font-mono text-xs"}= click.target
+                %td{class: cell_class}= number_with_delimiter(click.count)
+                %td{class: cell_class}= number_with_delimiter(click.visitors)
+
   - least = report.least_read_pages
   - if least.any?
     = render layout: "shared/card", locals: {id: "least-read", title: "Least read through", icon: "arrow-down", class: "mb-6"} do
       %p{class: lead_note_class}
         Pages readers most often leave before the end, among those with ten or more engaged views: where a piece loses
-        them, a replay of one of these visits in Mixpanel usually shows why.
-      = report_table([report_th("Page"), report_th("Read through", :right), report_th("Scroll", :right), report_th("Engaged", :right)]) do
+        them, a replay of one of these visits usually shows why.
+      = report_table([report_th("Page"), report_th("Read through", :right), report_th("Scroll", :right), report_th("Engaged", :right),
+        report_th("Replays", :right)]) do
         - least.each do |page|
           %tr{class: table_row_class}
             %td{class: name_cell_class}= blog_page_link(page.page_path, page_view_path(page.page_path), truncate: true)
             %td{class: cell_class}= metric_value(page.read_through_share, :percent)
             %td{class: cell_class}= metric_value(page.mean_scroll_share, :percent)
             %td{class: cell_class}= duration.(page.mean_engaged_seconds)
+            %td{class: cell_class}= mixpanel_replay_links(page.replays) || "—"
 
   %div{class: "mb-6 grid items-start gap-6 lg:grid-cols-2"}
     - Mixpanel::IssueStat::KINDS.each do |kind, title|
@@ -227,13 +360,15 @@
         - if rows.empty?
           %p{class: empty_note_class} None in this period.
         - else
-          = report_table([report_th(kind == "js_error" ? "Error" : "Element"), report_th("Page"), report_th("Count", :right), report_th("Visitors", :right)]) do
+          = report_table([report_th(kind == "js_error" ? "Error" : "Element"), report_th("Page"), report_th("Count", :right), report_th("Visitors", :right),
+            report_th("Replays", :right)]) do
             - rows.each do |issue|
               %tr{class: table_row_class}
                 %td{class: "#{name_cell_class} break-all font-mono text-xs"}= issue.target
                 %td{class: name_cell_class}= issue.page_path
                 %td{class: cell_class}= number_with_delimiter(issue.count)
                 %td{class: cell_class}= number_with_delimiter(issue.visitors)
+                %td{class: cell_class}= mixpanel_replay_links(issue.replays) || "—"
 
     = render layout: "shared/card", locals: {id: "events", title: "Events", icon: "activity"} do
       %p{class: lead_note_class}

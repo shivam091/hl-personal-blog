@@ -158,11 +158,19 @@ Property access management).
 Analytics: how long readers were active on each page and how far they
 scrolled, rage clicks, dead clicks and script errors, a day's funnel from
 viewing a page to subscribing, and the share of readers whose browser
-blocked Google Analytics. Session replays and heatmaps stay in Mixpanel.
+blocked Google Analytics. Per page it adds what GA can't: the share of
+readers GA missed (and the factor to correct GA's figure by), how many views
+reached each quarter of the page and how long they stayed, the elements
+clicked most, and links to replays of the longest readings and of each rage
+click, dead click and script error. Site-wide it shows readers' system
+colour scheme and reduced-motion settings beside their theme, where readers
+drop off the newsletter form, and what subscribers read before subscribing
+and whether they come back. Replays and heatmaps themselves stay in Mixpanel.
 
 [`Mixpanel::SyncService`](app/services/mixpanel/sync_service.rb) copies each
 day from Mixpanel's raw export, one query per day against the project's 60
-an hour, into daily page, site and issue stats. Only events from the blog's
+an hour, into daily page, site, issue and click stats (clicks only for pages
+with 10 or more views that day, top 5 each). Only events from the blog's
 own host (`blog.url`) count, so a local run or a preview deploy sending to
 the same project is left out. Recent days are fetched again, since Mixpanel
 accepts events sent days late.
@@ -414,6 +422,10 @@ mixpanel:
   service_account_username: ...
   service_account_secret: ...
   data_host: data.mixpanel.com
+  # Optional. Mixpanel documents no link to one replay, so if its app moves
+  # replays, paste the new layout with %{app_host}, %{project_id},
+  # %{replay_id}, %{distinct_id} and %{time} in place of the values.
+  # replay_url: "https://%{app_host}/project/%{project_id}/app/session-replay#replay_id=%{replay_id}&distinct_id=%{distinct_id}&time=%{time}"
 ```
 
 On Render, set the `RAILS_MASTER_KEY` environment variable to the contents of
