@@ -52,9 +52,16 @@ module Google
         outbound_clicks: "outbound link clicks (Engagement's Outbound links, and Link safety)"
       }.freeze
       # Events the blog already sends itself, so GA sending them too counts
-      # each one twice.
+      # each one twice: what GA sends, and the switch that stops it.
       UNWANTED_ENHANCED_MEASUREMENT = {
-        page_changes: "a page view on browser history changes, which the blog already sends itself, so back and forward count twice"
+        page_changes: [
+          "a page view on browser history changes, which the blog already sends itself, so back and forward count twice",
+          "Untick “Page changes based on browser history events” under Page views → Show advanced settings"
+        ],
+        form_interactions: [
+          "form_start and form_submit, which the blog's newsletter_form_*, newsletter_subscribe and contact_submit already count",
+          "Switch off Form interactions"
+        ]
       }.freeze
       EnhancedMeasurement = Struct.new(
         :stream_enabled, :scrolls, :outbound_clicks, :site_search, :video_engagement, :file_downloads,

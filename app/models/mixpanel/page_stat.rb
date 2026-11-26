@@ -29,6 +29,9 @@ module Mixpanel
     field :content_group, type: String
     field :page_views, type: Integer, default: 0
     field :visitors, type: Integer, default: 0
+    # Hashed, one per visitor, so a period's distinct visitors can be counted
+    # rather than each day's added up; empty on rows synced before.
+    field :visitor_ids, type: Array, default: []
     # Views the blog reported a page_leave for; a bounce with no time and no
     # scroll sends none, so these are the averages' base.
     field :engaged_views, type: Integer, default: 0

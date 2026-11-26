@@ -14,7 +14,7 @@
     - blocked_before = before&.ga_shares&.find { |status, _, _| status == "blocked" }&.last
     %dl{class: "grid grid-cols-2 gap-3 px-4 pt-3"}
       = render "dashboard/tile", label: "Visitors", tile_icon: "users", value: number_with_delimiter(report.visitors),
-        spark: report.site_daily(:visitors), hint: "Readers Mixpanel saw each day, added up. Every country: Mixpanel's figures aren't split by one.",
+        spark: report.site_daily(:visitors), hint: "Distinct readers Mixpanel saw over the period; the line is each day's. Every country: Mixpanel's figures aren't split by one.",
         change: metric_change(report.visitors, before&.visitors, higher), compared_with: report.period.previous
       = render "dashboard/tile", label: "GA blocked", tile_icon: "eye-off", value: metric_value(blocked, :percent),
         spark: report.site_daily { |day| (day.ga_statuses["blocked"].to_i * 100.0 / day.visitors).round(1) if day.visitors.positive? },

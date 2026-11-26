@@ -58,6 +58,8 @@ RSpec.describe Mixpanel::SyncService do
 
     site = Mixpanel::SiteStat.find_by(date: day)
     expect(site).to have_attributes(visitors: 2, page_views: 2, replays: 1)
+    expect(site.visitor_ids).to eq(%w[reader-1 reader-2].map { |id| Digest::SHA256.hexdigest(id)[0, 16] }.sort)
+    expect(page.visitor_ids).to eq(site.visitor_ids)
     expect(site.ga_statuses).to eq({"blocked" => 1, "loaded" => 1})
     expect(site.themes).to eq({"dark" => 1, "light" => 1})
     expect(site.events.first).to eq({"name" => "page_leave", "count" => 3})

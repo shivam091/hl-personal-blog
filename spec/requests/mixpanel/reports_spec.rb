@@ -55,6 +55,25 @@ RSpec.describe "Mixpanel report", type: :request do
     expect(report.mean_engaged_seconds_by(daily)).to eq([10.0, 110.0, *Array.new(12)])
   end
 
+  it "counts a reader once across days, pages and elements, and rows synced before ids by their count" do
+    period = Period.new({from: "2026-11-02", to: "2026-11-15"})
+    Mixpanel::SiteStat.create!(date: Date.new(2026, 11, 2), visitors: 2, visitor_ids: %w[a b])
+    Mixpanel::SiteStat.create!(date: Date.new(2026, 11, 3), visitors: 2, visitor_ids: %w[b c])
+    Mixpanel::SiteStat.create!(date: Date.new(2026, 11, 9), visitors: 3)
+    Mixpanel::PageStat.create!(date: Date.new(2026, 11, 2), page_path: "/a", page_views: 2, visitors: 2, visitor_ids: %w[a b])
+    Mixpanel::PageStat.create!(date: Date.new(2026, 11, 3), page_path: "/a", page_views: 1, visitors: 1, visitor_ids: %w[b])
+    Mixpanel::PageStat.create!(date: Date.new(2026, 11, 3), page_path: "/b", page_views: 1, visitors: 1, visitor_ids: %w[c])
+    Mixpanel::IssueStat.create!(date: Date.new(2026, 11, 2), kind: "rage_click", page_path: "/a", target: "button", count: 2, visitors: 1, visitor_ids: %w[a])
+    Mixpanel::IssueStat.create!(date: Date.new(2026, 11, 3), kind: "rage_click", page_path: "/a", target: "button", count: 1, visitors: 1, visitor_ids: %w[a])
+    report = Mixpanel::Report.new(period)
+
+    expect(report.visitors).to eq(6)
+    expect(report.visitors_by(ChartGranularity.new({by: "week"}, period: period))).to eq([3, 3])
+    expect(report.page("/a").visitors).to eq(2)
+    expect(report.site.visitors).to eq(6)
+    expect(report.issues("rage_click").first.visitors).to eq(1)
+  end
+
   it "shows the funnel and the retention cohorts" do
     Mixpanel::SiteStat.create!(date: day, visitors: 10, funnel: {"viewed" => 10, "read" => 4, "form_seen" => 3, "form_started" => 2, "subscribed" => 1})
     Mixpanel::RetentionCohort.create!(cohort_date: Date.current - 14, first: 10, counts: [10, 3])

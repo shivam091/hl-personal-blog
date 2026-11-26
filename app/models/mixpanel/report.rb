@@ -65,7 +65,7 @@ module Mixpanel
       end
     end
 
-    SUMMED = %i[page_views visitors engaged_views engaged_seconds scroll_percent_sum read_through_views rage_clicks dead_clicks js_errors].freeze
+    SUMMED = %i[page_views engaged_views engaged_seconds scroll_percent_sum read_through_views rage_clicks dead_clicks js_errors].freeze
     TALLIED = %i[ga_statuses scroll_reached reading_times].freeze
 
     attr_reader :period
@@ -150,10 +150,20 @@ module Mixpanel
       @days ||= period.apply(SiteStat.all).order(date: :asc).to_a
     end
 
-    # Summed day by day, so a reader on two days counts twice, as GA's daily
-    # user figures add up.
+    # Distinct over the period, so a reader on two days counts once, as GA
+    # counts its users.
     def visitors
-      days.sum(&:visitors)
+      distinct_visitors(days)
+    end
+
+    # Distinct within each bucket, so a week's figure isn't its days added
+    # up; nil for a bucket nothing was synced for, as granularity.sums gives.
+    def visitors_by(granularity)
+      by_date = days.index_by(&:date)
+      dates.group_by(&ChartGranularity::BUCKETS.fetch(granularity.by)).values.map do |bucket|
+        synced = bucket.filter_map { |date| by_date[date] }
+        distinct_visitors(synced) if synced.any?
+      end
     end
 
     def page_views
@@ -166,7 +176,7 @@ module Mixpanel
 
     def site
       @site ||= Page.new(page_path: "(all)", **SUMMED.index_with { |field| pages.sum(&field) }, **TALLIED.index_with { |field| tally(pages, field) },
-        replays: [])
+        visitors: visitors, replays: [])
     end
 
     def page_rows
@@ -176,7 +186,7 @@ module Mixpanel
     def pages
       @pages ||= page_rows.group_by(&:page_path).map do |path, rows|
         Page.new(page_path: path, content_group: rows.filter_map(&:content_group).last, **SUMMED.index_with { |field| rows.sum(&field) },
-          **TALLIED.index_with { |field| tally(rows, field) }, replays: longest_replays(rows.flat_map(&:replays)))
+          **TALLIED.index_with { |field| tally(rows, field) }, visitors: distinct_visitors(rows), replays: longest_replays(rows.flat_map(&:replays)))
       end
     end
 
@@ -199,7 +209,7 @@ module Mixpanel
       rows = period.apply(IssueStat.where(kind: kind)).to_a.group_by { |row| [row.page_path, row.target] }.map do |(path, target), group|
         # The latest first, since Mixpanel deletes replays after a while.
         replays = group.sort_by(&:date).reverse.flat_map(&:replays).uniq { |replay| replay["replay_id"] }.first(SyncService::MAX_REPLAYS)
-        Issue.new(kind: kind, page_path: path, target: target, count: group.sum(&:count), visitors: group.sum(&:visitors), replays: replays)
+        Issue.new(kind: kind, page_path: path, target: target, count: group.sum(&:count), visitors: distinct_visitors(group), replays: replays)
       end
       rows.sort_by { |issue| [-issue.count, issue.page_path, issue.target] }.first(limit)
     end
@@ -218,7 +228,7 @@ module Mixpanel
     def clicks(path, limit: ClickStat::TOP)
       @clicks ||= click_rows.group_by(&:page_path).transform_values do |rows|
         rows.group_by(&:target).map do |target, group|
-          Click.new(page_path: group.first.page_path, target: target, count: group.sum(&:count), visitors: group.sum(&:visitors))
+          Click.new(page_path: group.first.page_path, target: target, count: group.sum(&:count), visitors: distinct_visitors(group))
         end.sort_by { |click| [-click.count, click.target] }
       end
       @clicks.fetch(path, []).first(limit)
@@ -321,6 +331,15 @@ module Mixpanel
     end
 
     private
+
+    # A row synced before visitor ids were kept adds its own count, which may
+    # count a reader again but never drops one.
+    def distinct_visitors(rows)
+      ids = Set.new
+      older = 0
+      rows.each { |row| row.visitor_ids.present? ? ids.merge(row.visitor_ids) : older += row.visitors.to_i }
+      ids.size + older
+    end
 
     def tally(rows, field)
       rows.each_with_object(Hash.new(0)) { |row, sums| row.public_send(field).each { |key, count| sums[key] += count.to_i } }

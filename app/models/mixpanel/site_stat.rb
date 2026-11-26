@@ -36,6 +36,9 @@ module Mixpanel
     READER_PREFIX = "reader_"
 
     field :visitors, type: Integer, default: 0
+    # Hashed, one per visitor, so a period's distinct visitors can be counted
+    # rather than each day's added up; empty on rows synced before.
+    field :visitor_ids, type: Array, default: []
     field :page_views, type: Integer, default: 0
     # Sessions with a replay recorded, to see how much of the plan's replay
     # allowance is being used.

@@ -19,6 +19,9 @@ module Mixpanel
     field :target, type: String
     field :count, type: Integer, default: 0
     field :visitors, type: Integer, default: 0
+    # Hashed, one per visitor, so a period's distinct visitors can be counted
+    # rather than each day's added up; empty on rows synced before.
+    field :visitor_ids, type: Array, default: []
 
     key_fields :page_path, :target
 

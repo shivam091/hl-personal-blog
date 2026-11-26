@@ -29,7 +29,8 @@
     - if missing.any?
       - warnings << "Enhanced measurement on #{stream.display_name} doesn't send #{missing.map { |event| service::EXPECTED_ENHANCED_MEASUREMENT[event] }.to_sentence}, so those reports stay empty. Switch #{missing.one? ? "it" : "them"} on in GA → Admin → Data streams → #{stream.display_name} → Enhanced measurement."
     - stream.unwanted_enhanced_measurement.each do |event|
-      - warnings << "Enhanced measurement on #{stream.display_name} sends #{service::UNWANTED_ENHANCED_MEASUREMENT[event]}. Untick “Page changes based on browser history events” in GA → Admin → Data streams → #{stream.display_name} → Enhanced measurement → Page views → Show advanced settings."
+      - sends, fix = service::UNWANTED_ENHANCED_MEASUREMENT.fetch(event)
+      - warnings << "Enhanced measurement on #{stream.display_name} sends #{sends}. #{fix} in GA → Admin → Data streams → #{stream.display_name} → Enhanced measurement."
   - if warnings.any?
     %div{class: "mb-6 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "alert"}
       = icon("alert-triangle", size: 18, class: "text-amber-500")

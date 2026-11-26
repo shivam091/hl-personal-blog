@@ -38,7 +38,7 @@
   - previous_site = before&.site
   %dl{class: "mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"}
     = render "dashboard/tile", label: "Visitors", tile_icon: "users",
-      hint: "Readers Mixpanel saw each day, added up, so a reader on two days counts twice. Only readers who accepted cookies or live where none are needed.",
+      hint: "Distinct readers Mixpanel saw over the period, each counted once however many days they came. Only readers who accepted cookies or live where none are needed.",
       value: number_with_delimiter(report.visitors), change: metric_change(report.visitors, before&.visitors, higher), compared_with: @period.previous
     = render "dashboard/tile", label: "Page views", tile_icon: "eye",
       hint: "Pages opened, sent once each new page's title is in, as for GA.",
@@ -71,7 +71,7 @@
     = render layout: "shared/card", locals: {id: "daily", title: "Visitors and page views", icon: "trending-up",
       actions: chart_granularity_picker(granularity, "Figures", "mixpanel-by")} do
       %div{class: "px-4 py-3"}
-        = line_chart(keys, [ChartsHelper::Series.new(name: "Visitors", values: granularity.sums(report.dates, report.site_daily(:visitors))),
+        = line_chart(keys, [ChartsHelper::Series.new(name: "Visitors", values: report.visitors_by(granularity)),
           ChartsHelper::Series.new(name: "Page views", values: granularity.sums(report.dates, report.site_daily(:page_views)), dashed: true)],
           y_title: "Count", label: "Mixpanel visitors and page views per #{granularity.by}", per: granularity.per)
 

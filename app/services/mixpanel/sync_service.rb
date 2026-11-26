@@ -20,6 +20,8 @@ module Mixpanel
     # Enough to watch a moment or a reading without the stored row growing
     # with every session recorded.
     MAX_REPLAYS = 3
+    # Enough hex that two of a blog's readers practically never share one.
+    VISITOR_ID_LENGTH = 16
 
     class << self
       def call(...)
@@ -141,6 +143,7 @@ module Mixpanel
           engaged_seconds: views.sum { |view| view[:seconds] },
           scroll_percent_sum: views.sum { |view| view[:scroll] },
           read_through_views: views.count { |view| view[:scroll] >= PageStat::READ_THROUGH_PERCENT },
+          visitor_ids: visitor_ids(visitors),
           ga_statuses: visitors.map { |visitor| traits.dig(visitor, :ga_status) || "unknown" }.tally,
           scroll_reached: PageStat::SCROLL_MILESTONES.to_h { |percent| [percent.to_s, views.count { |view| view[:scroll] >= percent }] },
           reading_times: views.map { |view| PageStat.reading_time(view[:seconds]) }.tally,
@@ -171,7 +174,7 @@ module Mixpanel
 
       clicks.group_by { |(path, _), _| path }.flat_map do |path, rows|
         rows.sort_by { |(_, target), click| [-click[:count], target] }.first(ClickStat::TOP).map do |(_, target), click|
-          {date: date, page_path: path, target: target, count: click[:count], visitors: click[:visitors].size}
+          {date: date, page_path: path, target: target, count: click[:count], visitors: click[:visitors].size, visitor_ids: visitor_ids(click[:visitors])}
         end
       end
     end
@@ -208,6 +211,7 @@ module Mixpanel
       {
         date: date,
         visitors: visitors.size,
+        visitor_ids: visitor_ids(visitors),
         page_views: counts[PAGE_VIEW],
         replays: replays.size,
         ga_statuses: visitor_counts(ga_statuses),
@@ -337,7 +341,8 @@ module Mixpanel
       end
 
       issues.map do |(kind, path, target), issue|
-        {date: date, kind: kind, page_path: path, target: target, count: issue[:count], visitors: issue[:visitors].size, replays: issue[:replays]}
+        {date: date, kind: kind, page_path: path, target: target, count: issue[:count], visitors: issue[:visitors].size,
+          visitor_ids: visitor_ids(issue[:visitors]), replays: issue[:replays]}
       end
     end
 
@@ -358,6 +363,14 @@ module Mixpanel
       # The device before the id, since a subscriber's events after they're
       # identified carry a new distinct_id but the same device.
       props["$device_id"].presence || props["distinct_id"].presence || "(anonymous)"
+    end
+
+    # Shortened hashes rather than the ids, so a period's distinct readers
+    # can be counted across days, pages and elements without the rows
+    # holding Mixpanel's own ids; sorted so a resync leaves an unchanged row
+    # unchanged.
+    def visitor_ids(visitors)
+      visitors.map { |visitor| Digest::SHA256.hexdigest(visitor)[0, VISITOR_ID_LENGTH] }.sort
     end
 
     def element_target(props)
