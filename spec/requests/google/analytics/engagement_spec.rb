@@ -125,13 +125,14 @@ RSpec.describe "Analytics engagement", type: :request do
     Google::Analytics::Stat.create!(date: yesterday, page_path: "/post/a", views: 1)
     Google::Analytics::PageTitleStat.create!(date: yesterday, page_path: "/post/a", page_title: "A", views: 1)
     Google::Analytics::OutboundLinkStat.create!(date: yesterday, page_path: "/post/a", link_url: "https://github.com/x", event_count: 1)
+    Google::Analytics::LinkGroupStat.create!(date: yesterday, page_path: "/post/a", link_url: "https://github.com/x", link_group: "social", event_count: 1)
     Google::Analytics::EventLabelStat.create!(date: yesterday, page_path: "/post/a", event_name: "share", event_label: "x", event_count: 1)
     Google::Analytics::EventMethodStat.create!(date: yesterday, page_path: "/post/a", event_name: "cover_image_open", event_method: "click", event_count: 1)
     Google::Analytics::LandingPageStat.create!(date: yesterday, page_path: "/post/a", sessions: 1)
     allow(Google::Analytics::LiveFigures).to receive(:call).and_raise(Google::Analytics::LiveFigures::Unavailable, "not asked in specs")
     {
       "events" => ["By page"], "key-events" => ["By page"],
-      "pages-and-screens" => ["By event"], "page-titles" => ["By page path"], "outbound-links" => ["By page"], "event-labels" => ["By page"],
+      "pages-and-screens" => ["By event"], "page-titles" => ["By page path"], "outbound-links" => ["By page"], "link-groups" => ["By link"], "event-labels" => ["By page"],
       "event-methods" => ["By page"], "landing-pages" => ["By source"]
     }.each do |tab, splits|
       get google_analytics_engagement_breakdown_path(tab)
@@ -141,7 +142,7 @@ RSpec.describe "Analytics engagement", type: :request do
     get google_analytics_engagement_breakdown_path("scroll-depth")
     expect(page.at_css("thead select#breakdown-split")).to be_nil
     expect(page.css("nav[aria-label=Breakdown] a").map { |tab| tab.text.squish }).to eq(
-      ["Events", "Key events", "Pages and screens", "Page titles", "Outbound links", "Event labels", "Event methods", "Landing page", "Scroll depth",
+      ["Events", "Key events", "Pages and screens", "Page titles", "Outbound links", "Tagged links", "Event labels", "Event methods", "Landing page", "Scroll depth",
        "Internal navigation", "Missing pages"]
     )
 
@@ -490,6 +491,29 @@ RSpec.describe "Analytics engagement", type: :request do
     expect(bar.text.squish).to eq("Copied code (2.0)")
     expect(bar.at_css("a")["href"]).to start_with(google_analytics_event_path("copy_code"))
     expect(JSON.parse(bar.at_css("[data-tip]")["data-tip"])["rows"].first["value"]).to eq("4")
+  end
+
+  it "counts GA's clicks on tagged article links beside the blog's own article_link_click" do
+    Google::Analytics::EventStat.create!(date: yesterday, page_path: "/post/a", event_name: "article_link_click", event_count: 2)
+    Google::Analytics::LinkGroupStat.create!(date: yesterday, page_path: "/post/a", link_url: "https://react.dev/", link_group: "article-link", event_count: 4)
+    Google::Analytics::LinkGroupStat.create!(date: yesterday, page_path: "/", link_url: "https://github.com/x", link_group: "social", event_count: 9)
+    Google::Analytics::Stat.create!(date: yesterday, page_path: "/post/a", views: 200)
+
+    get google_analytics_engagement_path
+
+    expect(page.at_css("section[aria-labelledby=reader-interactions] li:has([data-tip])").text.squish).to eq("Followed a link in an entry (3.0)")
+  end
+
+  it "lists tagged outbound links by group from stored clicks, without asking GA for users it can't split that way" do
+    Google::Analytics::LinkGroupStat.create!(date: yesterday, page_path: "/", link_url: "https://github.com/x", link_group: "social", event_count: 3)
+    Google::Analytics::LinkGroupStat.create!(date: yesterday, page_path: "/post/a", link_url: "https://github.com/x", link_group: "social", event_count: 2)
+    Google::Analytics::LinkGroupStat.create!(date: yesterday, page_path: "/stack", link_url: "https://react.dev/", link_group: "core-stack", event_count: 1)
+    allow(Google::Analytics::LiveFigures).to receive(:call)
+
+    get google_analytics_engagement_breakdown_path("link-groups")
+
+    expect(table_rows.map { |row| row.first(3) }).to eq([["1", "social", "5 (83.33%)"], ["2", "core-stack", "1 (16.67%)"]])
+    expect(Google::Analytics::LiveFigures).not_to have_received(:call)
   end
 
     it "draws the charted rows' lines and bars against the period compared with, only once one is picked" do

@@ -54,6 +54,10 @@ module Google
         # Every other event has no link, so they'd fill one "(not set)" row.
         {model: OutboundLinkStat, dimensions: {page_path: "pagePath", link_url: "linkUrl"}, metrics: EVENT_METRICS,
           filters: [["eventName", "EXACT", "click"]]},
+        # Only links the blog tags with a ga-* class, which GA reports in the
+        # click's link classes; the model sums them under that class.
+        {model: LinkGroupStat, dimensions: {page_path: "pagePath", link_url: "linkUrl", link_classes: "linkClasses"},
+          metrics: {event_count: "eventCount"}, filters: [["eventName", "EXACT", "click"], ["linkClasses", "CONTAINS", "ga-"]]},
         # Only events that carry a label, or every page view and scroll would
         # fill a "(not set)" row; the click tracking sends an empty one when
         # an element has none. GA refuses this report until event_label is

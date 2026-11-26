@@ -117,6 +117,24 @@ RSpec.describe Google::Analytics::SyncService do
       .to eq({"fieldName" => "eventName", "stringFilter" => {"matchType" => "EXACT", "value" => "click", "caseSensitive" => false}})
   end
 
+  it "groups tagged outbound clicks by their ga-* class, summing a link across its other classes" do
+    stub_reports(%w[pagePath linkUrl linkClasses] => [
+      row(["20261010", "/post", "https://react.dev/", "ga-article-link x1a2"], [2]),
+      row(["20261010", "/post", "https://react.dev/", "ga-article-link b3c4"], [1]),
+      row(["20261010", "/", "https://github.com/x", "f5 ga-social"], [4]),
+      row(["20261010", "/post", "https://example.com/", "not-ga-social"], [7])
+    ])
+
+    sync
+    expect(Google::Analytics::LinkGroupStat.pluck(:page_path, :link_url, :link_group, :event_count)).to contain_exactly(
+      ["/post", "https://react.dev/", "article-link", 3], ["/", "https://github.com/x", "social", 4]
+    )
+    tagged = requests.find { |body| body["dimensions"].last == {"name" => "linkClasses"} }
+    expect(tagged["metrics"]).to eq([{"name" => "eventCount"}])
+    expect(tagged.dig("dimensionFilter", "andGroup", "expressions", 2, "filter"))
+      .to eq({"fieldName" => "linkClasses", "stringFilter" => {"matchType" => "CONTAINS", "value" => "ga-", "caseSensitive" => false}})
+  end
+
   it "stores labelled events by their label, leaving out events with none" do
     stub_reports(%w[pagePath eventName customEvent:event_label] => [row(%w[20261010 /post share x], [3, 2, 0, 2])])
 

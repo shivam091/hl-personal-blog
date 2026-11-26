@@ -48,6 +48,13 @@ module Google
         DailyReport::Metric.new(field: :active_users, label: "Active users", format: :count, icon: "users", hint: AcquisitionController::USERS_HINT)
       ].freeze
 
+      # Clicks alone, since users can't be added up across the rows a link's
+      # changing classes split it into.
+      LINK_GROUP_METRICS = [OUTBOUND_LINK_METRICS.first].freeze
+      # The blog's own article_link_click for links within the site, beside
+      # GA's outbound clicks on its tagged links, so the two are one figure.
+      TAGGED_INTERACTIONS = {"article_link_click" => "article-link"}.freeze
+
       # Shared by a tab and its splits, so a search means the same in each.
       EVENT_SEARCH = Filtering::Contains.new(:event, field: :event_name, label: "Event contains", placeholder: "e.g. scroll")
       KEY_EVENT_SEARCH = Filtering::Contains.new(:event, field: :event_name, label: "Event contains", placeholder: "e.g. sign_up")
@@ -121,6 +128,12 @@ module Google
           headings: ["Link URL", "Page"], criteria: -> { OutboundLinkStat.all }, metrics: OUTBOUND_LINK_METRICS, chart_metric: :event_count,
           live_metrics: USER_LIVE_METRICS, parent: "outbound-links", split_label: "By page",
           search: [LINK_SEARCH]),
+        "link-groups" => DailyReport::Breakdown.new(key: "link-groups", label: "Tagged links", keys: [:link_group],
+          headings: ["Link group"], criteria: -> { LinkGroupStat.all }, metrics: LINK_GROUP_METRICS, chart_metric: :event_count,
+          note: "GA's outbound clicks on links the blog tags as core stack, links in an entry or social profiles, grouped by that tag."),
+        "link-group-urls" => DailyReport::Breakdown.new(key: "link-group-urls", label: "Tagged links + URLs", keys: %i[link_group link_url],
+          headings: ["Link group", "Link URL"], criteria: -> { LinkGroupStat.all }, metrics: LINK_GROUP_METRICS, chart_metric: :event_count,
+          parent: "link-groups", split_label: "By link", search: [LINK_SEARCH]),
         # By event too, since a label like "posts" means one thing on Show
         # more and another on Share.
         "event-labels" => DailyReport::Breakdown.new(key: "event-labels", label: "Event labels", keys: %i[event_name event_label],
@@ -211,19 +224,37 @@ module Google
 
       private
 
+      # A grouped tab isn't a GA dimension, so GA can't be asked for its
+      # users; its clicks are the stored ones.
+      def live_metrics
+        super unless @breakdown.model == LinkGroupStat
+      end
+
+      # By page only, since the event search names the blog's events, which
+      # tagged links don't have.
+      def add_tagged_clicks(counts, period)
+        paths = Filtering.new(params, fields: shared_search_fields)
+        TAGGED_INTERACTIONS.each do |event, group|
+          clicks = paths.apply(period.apply(LinkGroupStat.where(link_group: group))).sum(:event_count)
+          counts[event] = counts.fetch(event, 0) + clicks if clicks.positive?
+        end
+        counts
+      end
+
       # Only on the events tab, whose rows they're a summary of.
       def load_page
         super
         return unless @breakdown.key == "events"
 
         criteria = @filtering.apply(@period.apply(EventStat.where(:event_name.in => READER_INTERACTIONS.keys)))
-        @interactions = EventStat.grouped(criteria, by: [:event_name]).to_h { |row| [row[:event_name], row.event_count] }
+        @interactions = add_tagged_clicks(EventStat.grouped(criteria, by: [:event_name]).to_h { |row| [row[:event_name], row.event_count] }, @period)
         @interaction_views = Stat.grouped(@filtering.apply(@period.apply(Stat.all)), by: []).totals.views
         # Only when the earlier period was synced, as for the report's own
         # figures, so a first period doesn't read as a jump from nothing.
         if @previous_totals
           before = @filtering.apply(@period.previous.apply(EventStat.where(:event_name.in => READER_INTERACTIONS.keys)))
-          @previous_interactions = EventStat.grouped(before, by: [:event_name]).to_h { |row| [row[:event_name], row.event_count] }
+          @previous_interactions = add_tagged_clicks(EventStat.grouped(before, by: [:event_name]).to_h { |row| [row[:event_name], row.event_count] },
+            @period.previous)
         end
       end
     end
